@@ -40,11 +40,17 @@ const MainLayout = ({
   const [isChatOpen, setIsChatOpen] = useState(true);
   const [unreadMessages, setUnreadMessages] = useState(1);
 
+  useEffect(() => {
+    if (typeof window !== "undefined" && !user) {
+      router.push("/auth");
+    }
+  }, [user]);
+
   // ✅ Prevent hook mismatch error during logout
-  if (typeof window !== "undefined" && !user) {
-    router.push("/auth");
-    return null;
-  }
+  // if (typeof window !== "undefined" && !user) {
+  //   router.push("/auth");
+  //   return null;
+  // }
 
   useEffect(() => {
     setIsMobileMenuOpen(false);

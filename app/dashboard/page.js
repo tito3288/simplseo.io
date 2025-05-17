@@ -7,6 +7,8 @@ import { db } from "../lib/firebaseConfig";
 import MainLayout from "../components/MainLayout";
 import { useRouter } from "next/navigation";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
+import Link from "next/link";
+
 import {
   Card,
   CardContent,
@@ -193,6 +195,7 @@ export default function Dashboard() {
     const match = potentialMatches.find((url) => verifiedSites.includes(url));
 
     if (match) {
+      localStorage.setItem("gscSiteUrl", match); // ✅ move it here
       fetchSearchAnalyticsData(match, token, dateRange);
     }
   };
@@ -417,15 +420,25 @@ export default function Dashboard() {
           </div>
         </CardContent>
       </Card>
-      <div className="grid grid-cols-1 md:grid-cols-1 gap-6 mb-6">
+
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Top Performing Keywords Card */}
         <Card className="col-span-full md:col-span-1 h-full">
           <CardHeader>
-            <CardTitle>Top Performing Keywords</CardTitle>
-            <CardDescription>Your most clicked search terms</CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Top Performing Keywords</CardTitle>
+                <CardDescription>
+                  Your most clicked search terms
+                </CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/top-keywords">See More</Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {isGscConnected ? (
-              // Top Performing Keywords card
               <KeywordTable keywords={gscKeywords} title="Top Keywords" />
             ) : (
               <div className="text-center py-6">
@@ -445,16 +458,23 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
+        {/* Easy Win Opportunities Card */}
         <Card className="col-span-full md:col-span-1 h-full">
           <CardHeader>
-            <CardTitle>Easy Win Opportunities</CardTitle>
-            <CardDescription>
-              Keywords close to ranking on Page 1
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Easy Win Opportunities</CardTitle>
+                <CardDescription>
+                  Keywords close to ranking on Page 1
+                </CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/easy-wins">See More</Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {isGscConnected ? (
-              // Low hanging fruit card
               <KeywordTable
                 keywords={easyWins}
                 title="Low Hanging Fruit"
@@ -481,13 +501,21 @@ export default function Dashboard() {
       </div>
       {/* Top Pages Card */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Top Pages This Month Card */}
         <Card className="col-span-full md:col-span-1 h-full">
           <CardHeader>
-            <CardTitle>Top Pages This Month</CardTitle>
-            <CardDescription>
-              Pages that appeared in search results this month (may include
-              0-click pages)
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Top Pages This Month</CardTitle>
+                <CardDescription>
+                  Pages that appeared in search results this month (may include
+                  0-click pages)
+                </CardDescription>
+              </div>
+              {/* <Button variant="outline" size="sm">
+                See More
+              </Button> */}
+            </div>
           </CardHeader>
           <CardContent>
             {topPages.length === 0 ? (
@@ -513,15 +541,23 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+
         {/* Low CTR Fixes Card */}
         <Card className="col-span-full md:col-span-1 h-full">
           <CardHeader>
-            <CardTitle>Low CTR Fixes</CardTitle>
-            <CardDescription>
-              These pages show up in searches but aren't getting many clicks.
-              Consider rewriting their titles and meta descriptions to improve
-              click-through rate.
-            </CardDescription>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Low CTR Fixes</CardTitle>
+                <CardDescription>
+                  These pages show up in searches but aren't getting many
+                  clicks. Consider rewriting their titles and meta descriptions
+                  to improve click-through rate.
+                </CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/low-ctr">See More</Link>
+              </Button>
+            </div>
           </CardHeader>
           <CardContent>
             {lowCtrPages.length === 0 ? (
@@ -554,7 +590,7 @@ export default function Dashboard() {
       </div>
 
       {/* SEO Recommendations Section */}
-      <Card className="mb-6">
+      {/* <Card className="mb-6">
         <CardHeader>
           <CardTitle>SEO Recommendations</CardTitle>
           <CardDescription>
@@ -584,9 +620,9 @@ export default function Dashboard() {
             );
           })}
         </CardContent>
-      </Card>
+      </Card> */}
 
-      <Alert className="mb-6 border-primary/20 bg-primary/5">
+      {/* <Alert className="mb-6 border-primary/20 bg-primary/5">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Quick SEO Tip</AlertTitle>
         <AlertDescription>
@@ -596,9 +632,9 @@ export default function Dashboard() {
                 data.businessLocation || "your area"
               }.`}
         </AlertDescription>
-      </Alert>
+      </Alert> */}
       {/* Getting Started Card */}
-      <Card>
+      {/* <Card>
         <CardHeader>
           <CardTitle>Your Next Steps</CardTitle>
           <CardDescription>
@@ -660,7 +696,7 @@ export default function Dashboard() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
     </MainLayout>
   );
 }

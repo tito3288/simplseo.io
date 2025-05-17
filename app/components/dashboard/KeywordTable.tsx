@@ -28,6 +28,7 @@ interface KeywordTableProps {
   keywords: Keyword[];
   title: string;
   description?: string;
+  renderActions?: (keyword: Keyword) => React.ReactNode; // ✅ new prop
 }
 
 const KeywordTable = ({ keywords, title, description }: KeywordTableProps) => {
