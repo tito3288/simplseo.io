@@ -108,7 +108,7 @@ const MainLayout = ({
               <img
                 src="./1.png"
                 alt="SimplSEO.io Logo"
-                className="w-18\9 h-auto rounded-md"
+                className="rounded-md my-logo w-[160px] md:w-[250px]"
               />
             </Link>
           </div>
@@ -225,4 +225,17 @@ const MainLayout = ({
   );
 };
 
+{
+  /* <style>
+  .my-logo {
+    width: 60px;
+    height: auto;
+  }
+  @media (max-width: 768px) {
+    .my-logo {
+      width: 50px;
+    }
+  }
+</style> */
+}
 export default MainLayout;

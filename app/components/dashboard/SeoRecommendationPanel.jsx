@@ -1,3 +1,5 @@
+"use client";
+
 import { Copy } from "lucide-react";
 import {
   Collapsible,
@@ -11,14 +13,19 @@ import { Label } from "@/components/ui/label";
 import { useState, useEffect } from "react";
 import { toast } from "sonner";
 import { db } from "../../lib/firebaseConfig";
-import { doc, setDoc, getDoc } from "firebase/firestore";
+import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
+import {
+  Tooltip,
+  TooltipTrigger,
+  TooltipContent,
+} from "@/components/ui/tooltip";
 
 const SeoRecommendationPanel = ({
   title,
   pageUrl,
-  metaTitleTip = "Make the title specific to user intent",
-  metaDescriptionTip = "Include your main keyword and a clear call to action",
+  metaTitleTip = "",
+  metaDescriptionTip = "",
   suggestedTitle = "",
   suggestedDescription = "",
 }) => {
@@ -29,9 +36,11 @@ const SeoRecommendationPanel = ({
   const [checking, setChecking] = useState(false);
   const [postStats, setPostStats] = useState(null);
   const [delta, setDelta] = useState(null);
-
   const [showConfirmModal, setShowConfirmModal] = useState(false);
   const [pendingCheckboxValue, setPendingCheckboxValue] = useState(false);
+  const [showRefreshButton, setShowRefreshButton] = useState(false);
+  const [daysSinceImplementation, setDaysSinceImplementation] = useState(null);
+  const [thirtyDayProgress, setThirtyDayProgress] = useState(null);
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -88,56 +97,28 @@ const SeoRecommendationPanel = ({
     }
   };
 
-  const handleCheckPostStats = async () => {
-    setChecking(true);
+  const handleRefreshSuggestions = async () => {
     try {
-      if (!user?.id || !pageUrl) return;
-
-      const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
-      const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
-      const data = snapshot.data();
-      if (!data) return;
-
-      const daysSince =
-        (Date.now() - new Date(data.implementedAt).getTime()) /
-        (1000 * 60 * 60 * 24);
-      if (daysSince < 7) {
-        toast.info("📆 Wait 7–14 days for meaningful results.");
-        return;
-      }
-
-      const token = localStorage.getItem("gscAccessToken");
-      const siteUrl = localStorage.getItem("gscSiteUrl");
-      if (!token || !siteUrl) {
-        toast.error("Missing GSC credentials.");
-        return;
-      }
-
-      const res = await fetch("/api/gsc/page-metrics", {
+      const titleRes = await fetch("/api/seo-assistant/meta-title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ token, siteUrl, pageUrl }),
+        body: JSON.stringify({ pageUrl }),
+      });
+      const descRes = await fetch("/api/seo-assistant/meta-description", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageUrl }),
       });
 
-      const newPostStats = await res.json();
-      setPostStats(newPostStats);
+      await deleteDoc(doc(db, "seoMetaTitles", encodeURIComponent(pageUrl)));
+      await deleteDoc(
+        doc(db, "seoMetaDescriptions", encodeURIComponent(pageUrl))
+      );
 
-      if (data.preStats) {
-        setDelta({
-          impressions: newPostStats.impressions - data.preStats.impressions,
-          clicks: newPostStats.clicks - data.preStats.clicks,
-          ctr: (newPostStats.ctr - data.preStats.ctr).toFixed(4),
-          position: (newPostStats.position - data.preStats.position).toFixed(2),
-        });
-      }
-
-      await setDoc(docRef, { postStats: newPostStats }, { merge: true });
-      toast.success("✅ Post-implementation stats updated!");
+      toast.success("✨ New AI suggestions will appear on next refresh.");
     } catch (err) {
-      console.error(err);
-      toast.error("❌ Failed to check results.");
-    } finally {
-      setChecking(false);
+      console.error("Error refreshing suggestions:", err);
+      toast.error("❌ Failed to refresh suggestions.");
     }
   };
 
@@ -157,8 +138,44 @@ const SeoRecommendationPanel = ({
       const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
       const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
       const data = snapshot.data();
-      if (data?.status === "implemented") setIsImplemented(true);
+      if (!data?.status || data.status !== "implemented") return;
+
+      setIsImplemented(true);
+
+      const implementedDate = new Date(data.implementedAt);
+      const today = new Date();
+      const days = Math.floor(
+        (today - implementedDate) / (1000 * 60 * 60 * 24)
+      );
+      setDaysSinceImplementation(Math.min(days, 7)); // cap at 7 days
+
+      const totalDays = Math.floor(
+        (today - implementedDate) / (1000 * 60 * 60 * 24)
+      );
+      setDaysSinceImplementation(Math.min(totalDays, 7)); // already exists
+      setThirtyDayProgress(Math.min(totalDays, 30)); // 👈 new state to track 30-day progress
+
+      if (data.preStats && data.postStats) {
+        setDelta({
+          impressions: data.postStats.impressions - data.preStats.impressions,
+          clicks: data.postStats.clicks - data.preStats.clicks,
+          ctr: (data.postStats.ctr - data.preStats.ctr).toFixed(2),
+          position: (data.postStats.position - data.preStats.position).toFixed(
+            2
+          ),
+        });
+      }
+
+      const daysSince =
+        (Date.now() - new Date(data.implementedAt).getTime()) /
+        (1000 * 60 * 60 * 24);
+      const zeroClicks = data?.postStats?.clicks === 0;
+
+      if (daysSince >= 30 && zeroClicks) {
+        setShowRefreshButton(true);
+      }
     };
+
     fetchExisting();
   }, [user, pageUrl]);
 
@@ -176,7 +193,14 @@ const SeoRecommendationPanel = ({
                 isImplemented ? "bg-green-500" : "bg-yellow-500"
               }`}
             />
-            <span>{title}</span>
+            <a
+              href={pageUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="underline text-primary hover:text-primary/80 truncate"
+            >
+              {title.replace(/^Fix:\s*/, "")}
+            </a>
           </div>
           <div className="text-muted-foreground">
             {isOpen ? "Hide details" : "Show details"}
@@ -188,7 +212,7 @@ const SeoRecommendationPanel = ({
 
           <div className="space-y-4">
             <div>
-              <Label>Suggested Meta Title</Label>
+              <Label className="mb-2">Suggested Meta Title</Label>
               <div className="flex items-center justify-between">
                 <Textarea
                   value={suggestedTitle}
@@ -207,7 +231,7 @@ const SeoRecommendationPanel = ({
             </div>
 
             <div>
-              <Label>Suggested Meta Description</Label>
+              <Label className="mb-2">Suggested Meta Description</Label>
               <div className="flex items-center justify-between">
                 <Textarea
                   value={suggestedDescription}
@@ -240,14 +264,6 @@ const SeoRecommendationPanel = ({
                   <Label htmlFor="implemented">
                     I've updated this on my site
                   </Label>
-                  {/* <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleCheckPostStats}
-                    disabled={!isImplemented || checking}
-                  >
-                    {checking ? "Checking..." : "Check Results"}
-                  </Button> */}
                 </>
               ) : (
                 <div className="flex items-center gap-2 text-green-600 font-medium">
@@ -255,6 +271,69 @@ const SeoRecommendationPanel = ({
                 </div>
               )}
             </div>
+
+            {isImplemented && daysSinceImplementation !== null && (
+              <div className="space-y-4 mt-3 w-full">
+                {/* 7-Day Progress */}
+                <div>
+                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <span>Waiting for Results (7 Days)</span>
+                    <span>{daysSinceImplementation}/7 days</span>
+                  </div>
+                  <div className="w-full h-2 bg-gray-200 rounded">
+                    <div
+                      className="h-2 bg-green-500 rounded transition-all duration-500"
+                      style={{
+                        width: `${(daysSinceImplementation / 7) * 100}%`,
+                      }}
+                    />
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Your changes are being tracked! Google recommends waiting 7
+                    days to let your SEO changes take effect. We’ll track
+                    performance and show results in the SEO Progress section
+                    once enough data is available.
+                  </p>
+                </div>
+
+                {/* 30-Day Progress */}
+                {thirtyDayProgress !== null && (
+                  <div>
+                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                      <span>Check Back for New Ideas (30 Days)</span>
+                      <span>{thirtyDayProgress}/30 days</span>
+                    </div>
+                    <div className="w-full h-2 bg-gray-200 rounded">
+                      <div
+                        className="h-2 bg-blue-500 rounded transition-all duration-500"
+                        style={{
+                          width: `${(thirtyDayProgress / 30) * 100}%`,
+                        }}
+                      />
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      No clicks after 30 days? You’ll be able to refresh this
+                      recommendation and get updated suggestions tailored to
+                      your page
+                    </p>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {showRefreshButton && (
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="outline" onClick={handleRefreshSuggestions}>
+                    🔁 Try New Suggestions
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent>
+                  No clicks after 30 days. Click to get fresh AI title and
+                  description.
+                </TooltipContent>
+              </Tooltip>
+            )}
 
             {delta && (
               <div className="text-sm text-muted-foreground mt-2">

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
@@ -8,7 +8,9 @@ import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPan
 import MainLayout from "../components/MainLayout";
 import SeoPerformanceCard from "../components/dashboard/SeoPerformanceCard";
 import SeoImpactLeaderboard from "../components/dashboard/SeoImpactLeaderboard";
-
+import { Button } from "@/components/ui/button";
+import InternalLinkSuggestion from "../components/dashboard/InternalLinkSuggestion";
+import { fetchWpPages } from "../lib/fetchWpPages";
 import {
   Card,
   CardContent,
@@ -17,11 +19,37 @@ import {
   CardDescription,
 } from "@/components/ui/card";
 import { AlertTriangle } from "lucide-react";
+import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
+import { AlertCircle } from "lucide-react";
+
+// ✅ Add filtering function at top
+const isRelevantPage = (url) =>
+  url.includes("bryandevelops.com/") &&
+  !url.includes("/tag/") &&
+  !url.includes("/category/") &&
+  !url.includes("/event") &&
+  !url.includes("/faq") &&
+  !url.includes("/author/") &&
+  !url.includes("/topics/") &&
+  !url.includes("/rvm") &&
+  !url.includes("wordpress-maintenance-support") &&
+  !url.includes("post-format") &&
+  !url.includes("sample") &&
+  !url.includes("chat") &&
+  !url.includes("blockquote") &&
+  !url.includes("?") &&
+  !url.includes("carousel") &&
+  !url.includes("video") &&
+  !url.includes("status") &&
+  !url.includes("/wp-json") &&
+  !url.includes("/feed") &&
+  !url.match(/\/\d{4}\/\d{2}\/\d{2}/); // ✅ fixed
 
 export default function LowCtrPage() {
   const { user, isLoading } = useAuth();
   const [lowCtrPages, setLowCtrPages] = useState([]);
   const [aiMeta, setAiMeta] = useState([]);
+  const [sitemapUrls, setSitemapUrls] = useState([]);
 
   useEffect(() => {
     const savedToken = localStorage.getItem("gscAccessToken");
@@ -31,6 +59,27 @@ export default function LowCtrPage() {
 
     fetchLowCtrPages(siteUrl, savedToken);
   }, [user]);
+
+  useEffect(() => {
+    const loadWpPages = async () => {
+      const domain = "bryandevelops.com";
+      const pages = await fetchWpPages(domain);
+      setSitemapUrls(pages);
+    };
+
+    loadWpPages();
+  }, []);
+
+  // ✅ Memoized filtered sitemap pages
+  const relevantPages = useMemo(
+    () => sitemapUrls.filter(isRelevantPage),
+    [sitemapUrls]
+  );
+
+  const lowCtrUrls = useMemo(
+    () => new Set(lowCtrPages.map((p) => p.page)),
+    [lowCtrPages]
+  );
 
   const fetchLowCtrPages = async (siteUrl, token) => {
     const today = new Date();
@@ -61,7 +110,6 @@ export default function LowCtrPage() {
     );
 
     const json = await res.json();
-
     if (!json.rows) return;
 
     const grouped = Object.values(
@@ -223,7 +271,7 @@ export default function LowCtrPage() {
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>SEO Recommendations</CardTitle>
+          <CardTitle>AI-Powered SEO Suggestions</CardTitle>
           <CardDescription>
             AI-generated title and meta description suggestions
           </CardDescription>
@@ -246,14 +294,40 @@ export default function LowCtrPage() {
         </CardContent>
       </Card>
 
-      {/* SEO Performance Comparison Card */}
+      <Alert className="mb-6 border-primary/20 bg-primary/5">
+        <AlertCircle className="h-4 w-4" />
+        <AlertTitle>Still No Clicks After 30 Days?</AlertTitle>
+        <AlertDescription>
+          That’s okay — it’s totally normal. SEO takes time and a bit of trial
+          and error. To improve your chances, try these additional tips
+          alongside your AI-generated title and description.
+        </AlertDescription>
+      </Alert>
+
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Suggested Internal Links</CardTitle>
+          <CardDescription>
+            These pages haven’t gotten any clicks after 30 days. Try linking to
+            them from other pages on your site.
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {lowCtrPages.map((page) => (
+            <InternalLinkSuggestion
+              key={page.page}
+              userId={user.id}
+              page={page.page}
+              targetPage={page.page}
+              lowCtrUrls={lowCtrUrls}
+              sitemapUrls={relevantPages} // ✅ send filtered list
+            />
+          ))}
+        </CardContent>
+      </Card>
+
       <div className="mb-6">
-        <SeoPerformanceCard totalRecommendations={aiMeta.length} />{" "}
-      </div>
-      
-      {/* SEO impact leaderboard */}
-      <div className="mb-6">
-        <SeoImpactLeaderboard />
+        <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
       </div>
     </MainLayout>
   );

@@ -4,15 +4,22 @@ import { useEffect, useState } from "react";
 import { db } from "../../lib/firebaseConfig";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card";
 import { ArrowDown, ArrowUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
-const SeoImpactLeaderboard = () => {
+const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [leaderboardData, setLeaderboardData] = useState([]);
+  const [implementedCount, setImplementedCount] = useState(0);
 
   useEffect(() => {
     if (!user?.id) return;
@@ -28,6 +35,7 @@ const SeoImpactLeaderboard = () => {
 
       const snapshot = await getDocs(q);
       const docs = snapshot.docs.map((doc) => doc.data());
+      setImplementedCount(docs.length);
 
       const deltas = docs
         .filter((doc) => doc.preStats && doc.postStats)
@@ -75,12 +83,14 @@ const SeoImpactLeaderboard = () => {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>SEO Impact Leaderboard</CardTitle>
+          <CardTitle>SEO Progress</CardTitle>
+          <CardDescription>Results from Your Updates</CardDescription>
         </CardHeader>
         <CardContent>
           <p className="text-muted-foreground">
-            No SEO improvements tracked yet. Implement recommendations to see
-            results here.
+            Your SEO results will appear here 7 days after you apply an AI
+            suggestion. We’ll show changes in impressions, clicks, and
+            ranking—check back soon!
           </p>
         </CardContent>
       </Card>
@@ -93,6 +103,35 @@ const SeoImpactLeaderboard = () => {
         <CardTitle>SEO Impact Leaderboard</CardTitle>
       </CardHeader>
       <CardContent>
+        {/* Progress Bar */}
+        <div className="mb-4">
+          <div className="flex justify-between items-center text-sm mb-1">
+            <span>
+              Implemented {implementedCount} of {totalRecommendations} SEO
+              recommendations
+            </span>
+            <span>
+              {totalRecommendations === 0
+                ? "0%"
+                : Math.min(
+                    (implementedCount / totalRecommendations) * 100,
+                    100
+                  ).toFixed(0) + "%"}
+            </span>
+          </div>
+          <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
+            <div
+              className="h-full bg-green-500"
+              style={{
+                width: `${Math.min(
+                  (implementedCount / totalRecommendations) * 100,
+                  100
+                ).toFixed(0)}%`,
+              }}
+            ></div>
+          </div>
+        </div>
+
         <div className="space-y-4">
           {leaderboardData.map((item, idx) => {
             const cleanUrl = item.pageUrl

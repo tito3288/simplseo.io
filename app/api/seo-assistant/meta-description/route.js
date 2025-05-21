@@ -6,8 +6,12 @@ import { db } from "../../../lib/firebaseAdmin";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req) {
-  const { pageUrl, onboarding, context } = await req.json();
-
+  const {
+    pageUrl,
+    onboarding = {},
+    context = {},
+    focusKeywords = "",
+  } = await req.json();
   // 🔁 Use admin.firestore() syntax
   const docRef = db
     .collection("seoMetaDescriptions")
