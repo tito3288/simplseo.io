@@ -4,26 +4,25 @@ const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req) {
   try {
-    const { fromUrl, toUrl, pageTitle } = await req.json();
+    const { fromUrl, toUrl, targetSlug } = await req.json();
+
+    console.log("📥 Received targetSlug:", targetSlug);
+
+    const readableSlug = targetSlug
+      .replace(/[-_]/g, " ")
+      .replace(/\b\w/g, (c) => c.toUpperCase());
 
     const prompt = `
-    You are an SEO expert. Suggest a short, natural-sounding anchor text for an internal link.
-    
-    You're linking FROM this page:
-    → ${fromUrl}
-    
-    You're linking TO this destination page:
-    → ${toUrl}
-    
-    Use the title of the destination page: "${pageTitle || ""}"
-    
-    Rules:
-    - The anchor text must accurately reflect the destination.
-    - It should feel natural and be no more than 6 words.
-    - Do not describe the source page.
-    - Do not use generic terms like "click here".
-    - Just return the anchor text only — no quotes or markdown.
-    `;
+You are an SEO expert.
+
+Your job is to create a short, natural-sounding anchor text that links TO a page titled: **${readableSlug}**.
+
+Rules:
+- Use the phrase above as your only source of context
+- Make the anchor readable and no more than 6 words
+- Do not mention the source page or use vague phrases like "click here" or "home page"
+- Only return the anchor text (no quotes, no markdown, no explanation)
+`.trim();
 
     const response = await openai.chat.completions.create({
       model: "gpt-4",

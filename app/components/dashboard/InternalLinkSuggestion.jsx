@@ -12,6 +12,17 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 
+// 🔧 Helper to extract slug from a URL
+function extractSlug(url) {
+  try {
+    const path = new URL(url).pathname;
+    const slug = path.split("/").filter(Boolean).pop(); // last part of the URL
+    return slug || "/";
+  } catch {
+    return "invalid-url";
+  }
+}
+
 export default function InternalLinkSuggestion({
   userId,
   page,
@@ -43,6 +54,15 @@ export default function InternalLinkSuggestion({
   }, [page, userId]);
 
   useEffect(() => {
+    const extractSlug = (url) => {
+      try {
+        const path = new URL(url).pathname;
+        return path.split("/").filter(Boolean).pop() || "/";
+      } catch {
+        return "invalid-url";
+      }
+    };
+
     const fetchAnchorTextSuggestions = async () => {
       if (!Array.isArray(sitemapUrls)) return;
 
@@ -51,8 +71,14 @@ export default function InternalLinkSuggestion({
         .sort(() => 0.5 - Math.random())
         .slice(0, 2);
 
+      const targetSlug = extractSlug(targetPage);
+      console.log("🧩 targetPage:", targetPage, "→ slug:", targetSlug);
+
       const results = await Promise.all(
         filtered.map(async (fromUrl) => {
+          const fromSlug = extractSlug(fromUrl);
+          console.log("🔗 fromUrl:", fromUrl, "→ slug:", fromSlug);
+
           try {
             const res = await fetch("/api/seo-assistant/anchor-text", {
               method: "POST",
@@ -60,6 +86,7 @@ export default function InternalLinkSuggestion({
               body: JSON.stringify({
                 fromUrl,
                 toUrl: targetPage,
+                targetSlug, // ✅ send the extracted slug
               }),
             });
 
