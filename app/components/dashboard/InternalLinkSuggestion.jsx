@@ -63,13 +63,16 @@ export default function InternalLinkSuggestion({
       }
     };
 
+    const usedUrls = new Set(); // Track used fromUrls
+
     const fetchAnchorTextSuggestions = async () => {
       if (!Array.isArray(sitemapUrls)) return;
 
-      const filtered = sitemapUrls
-        .filter((url) => url !== page && !lowCtrUrls.has(url))
-        .sort(() => 0.5 - Math.random())
-        .slice(0, 2);
+      const available = sitemapUrls.filter(
+        (url) => url !== page && !lowCtrUrls.has(url) && !usedUrls.has(url)
+      );
+
+      const filtered = available.sort(() => 0.5 - Math.random()).slice(0, 1);
 
       const targetSlug = extractSlug(targetPage);
       console.log("🧩 targetPage:", targetPage, "→ slug:", targetSlug);
@@ -86,11 +89,12 @@ export default function InternalLinkSuggestion({
               body: JSON.stringify({
                 fromUrl,
                 toUrl: targetPage,
-                targetSlug, // ✅ send the extracted slug
+                targetSlug,
               }),
             });
 
             const json = await res.json();
+            usedUrls.add(fromUrl); // ✅ Mark this fromUrl as used
             return {
               page: fromUrl,
               anchorText: json.anchorText || "Learn more",
