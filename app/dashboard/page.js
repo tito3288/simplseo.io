@@ -384,7 +384,7 @@ export default function Dashboard() {
           Welcome to your SEO Dashboard
         </h1>
         <p className="text-muted-foreground">
-          Get insights and recommendations for improving your website's search
+          Get insights and recommendations for improving your website&apos;s search
           performance
         </p>
       </div>
@@ -489,7 +489,7 @@ export default function Dashboard() {
                   Connect to see opportunities
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  Find keywords you're close to ranking for on page 1
+                  Find keywords you&apos;re close to ranking for on page 1
                 </p>
                 <Button onClick={requestGSCAuthToken}>
                   Connect GSC
@@ -549,7 +549,7 @@ export default function Dashboard() {
               <div>
                 <CardTitle>Low CTR Fixes</CardTitle>
                 <CardDescription>
-                  These pages show up in searches but aren't getting many
+                  These pages show up in searches but aren&apos;t getting many
                   clicks. Consider rewriting their titles and meta descriptions
                   to improve click-through rate.
                 </CardDescription>

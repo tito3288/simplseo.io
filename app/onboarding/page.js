@@ -99,8 +99,7 @@ const OnboardingWizard = () => {
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold">Set Up Your SEO Coach</h1>
           <p className="text-muted-foreground mt-2">
-            Let's get to know your business so we can provide tailored SEO
-            advice
+            Let&apos;s get started with your onboarding process.
           </p>
         </div>
 
@@ -246,8 +245,7 @@ const OnboardingWizard = () => {
                 {!data.hasGSC && (
                   <div className="bg-muted p-3 rounded-md mt-4">
                     <p className="text-sm">
-                      Don't worry! We'll help you verify your site after
-                      onboarding.
+                      Don&apos;t worry! We&apos;ll help you verify your site after onboarding.
                     </p>
                   </div>
                 )}
@@ -269,8 +267,8 @@ const OnboardingWizard = () => {
                     Ready to boost your SEO
                   </h3>
                   <p className="text-muted-foreground">
-                    We've gathered everything we need to help optimize your
-                    website's performance.
+                    We&apos;ve gathered everything we need to help optimize your
+                    website&apos;s performance.
                   </p>
                 </div>
               </div>
