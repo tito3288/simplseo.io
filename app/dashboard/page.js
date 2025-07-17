@@ -491,7 +491,7 @@ export default function Dashboard() {
                 <p className="text-muted-foreground text-sm mb-4">
                   Find keywords you're close to ranking for on page 1
                 </p>
-                <Button onClick={() => setIsGscConnected(true)}>
+                <Button onClick={requestGSCAuthToken}>
                   Connect GSC
                 </Button>
               </div>

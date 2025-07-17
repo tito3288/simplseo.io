@@ -11,8 +11,8 @@ import {
   CardContent,
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input"; // Assumes you have a UI input
 
-// 🔧 Helper to extract slug from a URL
 function extractSlug(url) {
   try {
     const path = new URL(url).pathname;
@@ -32,6 +32,7 @@ export default function InternalLinkSuggestion({
 }) {
   const [show, setShow] = useState(true);
   const [suggestions, setSuggestions] = useState([]);
+  const [editingStates, setEditingStates] = useState([]);
 
   useEffect(() => {
     const checkEligibility = async () => {
@@ -45,7 +46,7 @@ export default function InternalLinkSuggestion({
         (Date.now() - new Date(data.implementedAt).getTime()) /
         (1000 * 60 * 60 * 24);
 
-      if (data.postStats.clicks === 0 /* && daysSince >= 30 */) {
+      if (data.postStats.clicks === 0) {
         setShow(true);
       }
     };
@@ -54,68 +55,56 @@ export default function InternalLinkSuggestion({
   }, [page, userId]);
 
   useEffect(() => {
-    const extractSlug = (url) => {
-      try {
-        const path = new URL(url).pathname;
-        return path.split("/").filter(Boolean).pop() || "/";
-      } catch {
-        return "invalid-url";
-      }
-    };
-
-    const usedUrls = new Set(); // Track used fromUrls
-
     const fetchAnchorTextSuggestions = async () => {
       if (!Array.isArray(sitemapUrls)) return;
 
       const available = sitemapUrls.filter(
-        (url) => url !== page && !lowCtrUrls.has(url) && !usedUrls.has(url)
+        (url) => url !== page && !lowCtrUrls.has(url)
       );
 
-      const filtered = available.sort(() => 0.5 - Math.random()).slice(0, 1);
+      const fromUrl = available.sort(() => 0.5 - Math.random())[0];
+      if (!fromUrl) return;
 
       const targetSlug = extractSlug(targetPage);
-      console.log("🧩 targetPage:", targetPage, "→ slug:", targetSlug);
+      const fromSlug = extractSlug(fromUrl);
 
-      const results = await Promise.all(
-        filtered.map(async (fromUrl) => {
-          const fromSlug = extractSlug(fromUrl);
-          console.log("🔗 fromUrl:", fromUrl, "→ slug:", fromSlug);
+      try {
+        const res = await fetch("/api/seo-assistant/anchor-text", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            fromUrl,
+            toUrl: targetPage,
+            targetSlug,
+          }),
+        });
 
-          try {
-            const res = await fetch("/api/seo-assistant/anchor-text", {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({
-                fromUrl,
-                toUrl: targetPage,
-                targetSlug,
-              }),
-            });
+        const json = await res.json();
+        const anchorText = json.anchorText || "Learn more";
 
-            const json = await res.json();
-            usedUrls.add(fromUrl); // ✅ Mark this fromUrl as used
-            return {
-              page: fromUrl,
-              anchorText: json.anchorText || "Learn more",
-            };
-          } catch (err) {
-            console.error("❌ Failed to fetch anchor text:", err.message);
-            return {
-              page: fromUrl,
-              anchorText: "Learn more",
-            };
-          }
-        })
-      );
-
-      setSuggestions(results);
+        setSuggestions([{ page: fromUrl, anchorText }]);
+        setEditingStates([{ isEditing: false, text: anchorText }]);
+      } catch (err) {
+        console.error("❌ Failed to fetch anchor text:", err.message);
+      }
     };
 
     fetchAnchorTextSuggestions();
   }, [sitemapUrls, page, lowCtrUrls, targetPage]);
 
-  if (!show) return null;
+  if (!show || suggestions.length === 0) return null;
+
+  const toggleEditing = (index) => {
+    setEditingStates((prev) =>
+      prev.map((s, i) => (i === index ? { ...s, isEditing: !s.isEditing } : s))
+    );
+  };
+
+  const updateText = (index, newText) => {
+    setEditingStates((prev) =>
+      prev.map((s, i) => (i === index ? { ...s, text: newText } : s))
+    );
+  };
 
   return (
     <Card className="mb-4">
@@ -126,17 +115,59 @@ export default function InternalLinkSuggestion({
         </CardDescription>
       </CardHeader>
       <CardContent className="space-y-2">
-        {suggestions.map((s, i) => (
-          <div key={i} className="bg-muted p-2 rounded text-sm">
-            <p className="text-muted-foreground mb-1">Suggested link:</p>
-            <code>{`<a href="${s.page}">${s.anchorText}</a>`}</code>
-            <div className="mt-2">
-              <Button variant="secondary" size="sm">
-                Copy Link Snippet
-              </Button>
+        {suggestions.map((s, i) => {
+          const { isEditing, text } = editingStates[i] || {};
+
+          return (
+            <div key={i} className="bg-muted p-2 rounded text-sm">
+              <p className="text-muted-foreground mb-1">Suggested link:</p>
+              {isEditing ? (
+                <>
+                  <Input
+                    value={text}
+                    onChange={(e) => updateText(i, e.target.value)}
+                    className="mb-2"
+                  />
+                  <div className="flex gap-2">
+                    <Button
+                      size="sm"
+                      onClick={() => toggleEditing(i)}
+                      variant="default"
+                    >
+                      Save
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => {
+                        updateText(i, suggestions[i].anchorText); // revert text
+                        toggleEditing(i); // exit edit mode
+                      }}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <code>{`<a href="${s.page}">${text}</a>`}</code>
+                  <div className="mt-2 flex gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => toggleEditing(i)}
+                    >
+                      Edit
+                    </Button>
+                    <Button variant="secondary" size="sm">
+                      Copy Link Snippet
+                    </Button>
+                  </div>
+                </>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
