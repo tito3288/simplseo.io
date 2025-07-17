@@ -298,7 +298,7 @@ export default function LowCtrPage() {
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Still No Clicks After 30 Days?</AlertTitle>
         <AlertDescription>
-          That’s okay — it’s totally normal. SEO takes time and a bit of trial
+          That&apos;s okay — it&apos;s totally normal. SEO takes time and a bit of trial
           and error. To improve your chances, try these additional tips
           alongside your AI-generated title and description.
         </AlertDescription>
@@ -308,7 +308,7 @@ export default function LowCtrPage() {
         <CardHeader>
           <CardTitle>Suggested Internal Links</CardTitle>
           <CardDescription>
-            These pages haven’t gotten any clicks after 30 days. Try linking to
+            These pages haven&apos;t gotten any clicks after 30 days. Try linking to
             them from other pages on your site.
           </CardDescription>
         </CardHeader>
