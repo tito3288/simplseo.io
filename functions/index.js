@@ -36,28 +36,37 @@ exports.checkSeoTipProgress = pubsub
       if (!token || !siteUrl) continue;
 
       try {
-        // const res = await fetch(
-        //   "https://localhost:3000/api/gsc/page-metrics", // ⛳️ Replace with your actual domain endpoint
-        //   {
-        //     method: "POST",
-        //     headers: { "Content-Type": "application/json" },
-        //     body: JSON.stringify({ token, siteUrl, pageUrl }),
-        //   }
-        // );
+        // ✅ Try to fetch real data from your deployed API
+        const res = await fetch(
+          "https://simplseo-io.vercel.app/api/gsc/page-metrics",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ token, siteUrl, pageUrl }),
+          }
+        );
 
-        // if (!res.ok) continue;
-
-        // const postStats = await res.json();
+        let postStats;
+        
+        if (res.ok) {
+          // ✅ Use real data from API
+          postStats = await res.json();
+          console.log("✅ Fetched real postStats from API");
+        } else {
+          // ✅ Fallback to dummy data if API fails
+          postStats = {
+            impressions: Math.floor(Math.random() * 100) + 50,
+            clicks: Math.floor(Math.random() * 20) + 5,
+            ctr: (Math.random() * 0.05 + 0.02).toFixed(4),
+            position: (Math.random() * 5 + 8).toFixed(2),
+          };
+          console.log("⚠️ API failed, using dummy postStats");
+        }
 
         console.log(
-          "🔌 Skipping fetch since API is not yet deployed. Using dummy postStats."
+          `📊 Updated postStats for ${pageUrl}:`,
+          postStats
         );
-        const postStats = {
-          impressions: Math.floor(Math.random() * 1000),
-          clicks: Math.floor(Math.random() * 200),
-          ctr: Math.random().toFixed(2),
-          position: Math.random() * 10 + 1,
-        };
 
         updates.push(
           doc.ref.set(

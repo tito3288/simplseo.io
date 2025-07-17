@@ -46,13 +46,13 @@ const Auth = () => {
           docSnap.exists() && docSnap.data()?.isComplete;
 
         if (hasCompletedOnboarding) {
-          navigate("/dashboard");
+          router.push("/dashboard");
         } else {
-          navigate("/onboarding");
+          router.push("/onboarding");
         }
       } else {
         await signup(email, password);
-        navigate("/onboarding"); // brand new user, go to onboarding
+        router.push("/onboarding"); // brand new user, go to onboarding
       }
     } catch (error) {
       toast({
@@ -65,7 +65,9 @@ const Auth = () => {
 
   const handleGoogleLogin = async () => {
     try {
+      console.log("🔐 Starting Google login...");
       await signInWithGoogle();
+      console.log("✅ Google login successful");
 
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error("No authenticated user found");
@@ -82,6 +84,7 @@ const Auth = () => {
         router.push("/onboarding");
       }
     } catch (error) {
+      console.error("❌ Google login error:", error);
       toast({
         title: "Google Login Failed",
         description: error.message || "Something went wrong",
