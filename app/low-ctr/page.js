@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
 import MainLayout from "../components/MainLayout";
 import SeoPerformanceCard from "../components/dashboard/SeoPerformanceCard";
@@ -50,6 +50,7 @@ export default function LowCtrPage() {
   const [lowCtrPages, setLowCtrPages] = useState([]);
   const [aiMeta, setAiMeta] = useState([]);
   const [sitemapUrls, setSitemapUrls] = useState([]);
+  const [implementedPages, setImplementedPages] = useState([]);
 
   useEffect(() => {
     const savedToken = localStorage.getItem("gscAccessToken");
@@ -69,6 +70,37 @@ export default function LowCtrPage() {
 
     loadWpPages();
   }, []);
+
+  // ✅ Fetch implemented pages that have 0 clicks after 30 days
+  useEffect(() => {
+    const fetchImplementedPages = async () => {
+      if (!user?.id) return;
+
+      const q = query(
+        collection(db, "implementedSeoTips"),
+        where("userId", "==", user.id),
+        where("status", "==", "implemented")
+      );
+
+      const snapshot = await getDocs(q);
+      const now = Date.now();
+      const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+
+      const eligiblePages = snapshot.docs
+        .map(doc => doc.data())
+        .filter(data => {
+          if (!data.postStats || !data.implementedAt) return false;
+          
+          const daysSince = (now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24);
+          return daysSince >= 30 && data.postStats.clicks === 0;
+        })
+        .map(data => data.pageUrl);
+
+      setImplementedPages(eligiblePages);
+    };
+
+    fetchImplementedPages();
+  }, [user]);
 
   // ✅ Memoized filtered sitemap pages
   const relevantPages = useMemo(
@@ -294,6 +326,11 @@ export default function LowCtrPage() {
         </CardContent>
       </Card>
 
+
+      <div className="mb-6">
+        <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
+      </div>
+
       <Alert className="mb-6 border-primary/20 bg-primary/5">
         <AlertCircle className="h-4 w-4" />
         <AlertTitle>Still No Clicks After 30 Days?</AlertTitle>
@@ -320,15 +357,13 @@ export default function LowCtrPage() {
               page={page.page}
               targetPage={page.page}
               lowCtrUrls={lowCtrUrls}
-              sitemapUrls={relevantPages} // ✅ send filtered list
+              sitemapUrls={relevantPages}
+              implementedPages={implementedPages}
             />
           ))}
         </CardContent>
       </Card>
 
-      <div className="mb-6">
-        <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
-      </div>
     </MainLayout>
   );
 }

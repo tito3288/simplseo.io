@@ -335,7 +335,7 @@ const SeoRecommendationPanel = ({
               </Tooltip>
             )}
 
-            {delta && (
+            {/* {delta && (
               <div className="text-sm text-muted-foreground mt-2">
                 <strong>📈 Performance Change (vs. before):</strong>
                 <ul className="list-disc pl-4">
@@ -345,7 +345,7 @@ const SeoRecommendationPanel = ({
                   <li>Position: {delta.position}</li>
                 </ul>
               </div>
-            )}
+            )} */}
           </div>
         </CollapsibleContent>
       </Collapsible>

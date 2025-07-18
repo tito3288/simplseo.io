@@ -12,6 +12,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input"; // Assumes you have a UI input
+import { getInternalLinkSuggestion, setInternalLinkSuggestion } from "../../lib/firestoreHelpers";
 
 function extractSlug(url) {
   try {
@@ -29,34 +30,55 @@ export default function InternalLinkSuggestion({
   targetPage,
   sitemapUrls,
   lowCtrUrls = new Set(),
+  implementedPages = [],
 }) {
-  const [show, setShow] = useState(true);
+  const [show, setShow] = useState(false); // ✅ Start with false
   const [suggestions, setSuggestions] = useState([]);
   const [editingStates, setEditingStates] = useState([]);
 
   useEffect(() => {
     const checkEligibility = async () => {
+      // ✅ Only show if page is in implementedPages array
+      if (!implementedPages.includes(page)) {
+        setShow(false);
+        return;
+      }
+
       const docId = `${userId}_${encodeURIComponent(page)}`;
       const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
       const data = snapshot.data();
 
-      if (!data?.postStats || !data?.implementedAt) return;
+      if (!data?.postStats || !data?.implementedAt) {
+        setShow(false);
+        return;
+      }
 
       const daysSince =
         (Date.now() - new Date(data.implementedAt).getTime()) /
         (1000 * 60 * 60 * 24);
 
-      if (data.postStats.clicks === 0) {
+      // ✅ Show if 30+ days have passed and still 0 clicks
+      if (daysSince >= 30 && data.postStats.clicks === 0) {
         setShow(true);
+      } else {
+        setShow(false);
       }
     };
 
     checkEligibility();
-  }, [page, userId]);
+  }, [page, userId, implementedPages]);
 
   useEffect(() => {
     const fetchAnchorTextSuggestions = async () => {
       if (!Array.isArray(sitemapUrls)) return;
+
+      // Check Firestore for cached suggestion
+      const cached = await getInternalLinkSuggestion(userId, page);
+      if (cached && cached.page && cached.anchorText) {
+        setSuggestions([{ page: cached.page, anchorText: cached.anchorText }]);
+        setEditingStates([{ isEditing: false, text: cached.anchorText }]);
+        return;
+      }
 
       const available = sitemapUrls.filter(
         (url) => url !== page && !lowCtrUrls.has(url)
@@ -82,6 +104,9 @@ export default function InternalLinkSuggestion({
         const json = await res.json();
         const anchorText = json.anchorText || "Learn more";
 
+        // Save to Firestore for caching
+        await setInternalLinkSuggestion(userId, page, { page: fromUrl, anchorText });
+
         setSuggestions([{ page: fromUrl, anchorText }]);
         setEditingStates([{ isEditing: false, text: anchorText }]);
       } catch (err) {
@@ -90,7 +115,7 @@ export default function InternalLinkSuggestion({
     };
 
     fetchAnchorTextSuggestions();
-  }, [sitemapUrls, page, lowCtrUrls, targetPage]);
+  }, [sitemapUrls, page, lowCtrUrls, targetPage, userId]);
 
   if (!show || suggestions.length === 0) return null;
 
