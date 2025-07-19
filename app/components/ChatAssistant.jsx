@@ -21,7 +21,7 @@ const ChatAssistant = ({
     id: "welcome",
     role: "assistant",
     content:
-      `**Hey${firstName ? ` ${firstName}` : ""}! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started 🚀`,
+      `**Hey${firstName ? ` ${firstName}` : ""}! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started`,
     timestamp: new Date(),
   };
   const [messages, setMessages] = useState(() => {
@@ -252,7 +252,7 @@ const ChatAssistant = ({
           />
 
           <div>
-            <input
+            {/* <input
               id="upload-image"
               type="file"
               accept="image/*"
@@ -260,7 +260,7 @@ const ChatAssistant = ({
               onChange={handleUploadImage}
               disabled={isThinking}
               className="hidden"
-            />
+            /> */}
 
             <Button
               type="button"
