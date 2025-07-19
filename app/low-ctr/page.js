@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { createGSCTokenManager } from "../lib/gscTokenManager";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
 import MainLayout from "../components/MainLayout";
 import SeoPerformanceCard from "../components/dashboard/SeoPerformanceCard";
@@ -53,12 +54,50 @@ export default function LowCtrPage() {
   const [implementedPages, setImplementedPages] = useState([]);
 
   useEffect(() => {
-    const savedToken = localStorage.getItem("gscAccessToken");
-    const siteUrl = localStorage.getItem("gscSiteUrl");
+    const fetchGSCData = async () => {
+      if (!user?.id) {
+        console.log("❌ No user ID");
+        return;
+      }
 
-    if (!savedToken || !siteUrl || !user?.id) return;
+      try {
+        console.log("🔍 Fetching GSC data for user:", user.id);
+        const tokenManager = createGSCTokenManager(user.id);
+        
+        // Add a small delay to ensure tokens are stored
+        await new Promise(resolve => setTimeout(resolve, 1000));
+        
+        const gscData = await tokenManager.getStoredGSCData();
+        
+        console.log("🔍 Stored GSC data:", gscData);
+        console.log("🔍 GSC data details:", {
+          hasAccessToken: !!gscData?.accessToken,
+          hasRefreshToken: !!gscData?.refreshToken,
+          hasSiteUrl: !!gscData?.siteUrl,
+          accessTokenLength: gscData?.accessToken?.length,
+          refreshTokenLength: gscData?.refreshToken?.length
+        });
+        
+        if (!gscData?.accessToken || !gscData?.siteUrl) {
+          console.log("❌ Missing GSC access token or site URL");
+          return;
+        }
 
-    fetchLowCtrPages(siteUrl, savedToken);
+        // Get valid access token (refresh if needed)
+        const validToken = await tokenManager.getValidAccessToken();
+        if (!validToken) {
+          console.log("❌ Could not get valid access token");
+          return;
+        }
+
+        console.log("✅ Got valid token, fetching low CTR pages...");
+        fetchLowCtrPages(gscData.siteUrl, validToken);
+      } catch (error) {
+        console.error("❌ Error fetching GSC data:", error);
+      }
+    };
+
+    fetchGSCData();
   }, [user]);
 
   useEffect(() => {
@@ -142,14 +181,26 @@ export default function LowCtrPage() {
     );
 
     const json = await res.json();
-    if (!json.rows) return;
+    console.log("🔍 GSC Raw Data:", json);
+    if (!json.rows) {
+      console.log("❌ No rows returned from GSC");
+      return;
+    }
+    console.log("✅ GSC returned", json.rows.length, "rows");
 
+    // Debug: Log all rows before filtering
+    console.log("🔍 All GSC rows before filtering:", json.rows.slice(0, 5));
+    
+    const filteredRows = json.rows.filter(
+      (r) =>
+        parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
+    );
+    
+    console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
+    console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
+    
     const grouped = Object.values(
-      json.rows
-        .filter(
-          (r) =>
-            parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
-        )
+      filteredRows
         .reduce((acc, row) => {
           const page = row.keys[1];
           if (!acc[page]) {
@@ -331,38 +382,42 @@ export default function LowCtrPage() {
         <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
       </div>
 
-      <Alert className="mb-6 border-primary/20 bg-primary/5">
-        <AlertCircle className="h-4 w-4" />
-        <AlertTitle>Still No Clicks After 30 Days?</AlertTitle>
-        <AlertDescription>
-          That&apos;s okay — it&apos;s totally normal. SEO takes time and a bit of trial
-          and error. To improve your chances, try these additional tips
-          alongside your AI-generated title and description.
-        </AlertDescription>
-      </Alert>
+      {implementedPages.length > 0 && (
+        <>
+          <Alert className="mb-6 border-primary/20 bg-primary/5">
+            <AlertCircle className="h-4 w-4" />
+            <AlertTitle>Still No Clicks After 30 Days?</AlertTitle>
+            <AlertDescription>
+              That&apos;s okay — it&apos;s totally normal. SEO takes time and a bit of trial
+              and error. To improve your chances, try these additional tips
+              alongside your AI-generated title and description.
+            </AlertDescription>
+          </Alert>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <CardTitle>Suggested Internal Links</CardTitle>
-          <CardDescription>
-            These pages haven&apos;t gotten any clicks after 30 days. Try linking to
-            them from other pages on your site.
-          </CardDescription>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {lowCtrPages.map((page) => (
-            <InternalLinkSuggestion
-              key={page.page}
-              userId={user.id}
-              page={page.page}
-              targetPage={page.page}
-              lowCtrUrls={lowCtrUrls}
-              sitemapUrls={relevantPages}
-              implementedPages={implementedPages}
-            />
-          ))}
-        </CardContent>
-      </Card>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Suggested Internal Links</CardTitle>
+              <CardDescription>
+                These pages haven&apos;t gotten any clicks after 30 days. Try linking to
+                them from other pages on your site.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {lowCtrPages.map((page) => (
+                <InternalLinkSuggestion
+                  key={page.page}
+                  userId={user.id}
+                  page={page.page}
+                  targetPage={page.page}
+                  lowCtrUrls={lowCtrUrls}
+                  sitemapUrls={relevantPages}
+                  implementedPages={implementedPages}
+                />
+              ))}
+            </CardContent>
+          </Card>
+        </>
+      )}
 
     </MainLayout>
   );

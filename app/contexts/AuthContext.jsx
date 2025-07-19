@@ -34,6 +34,9 @@ export const AuthProvider = ({ children }) => {
         });
       } else {
         setUser(null);
+        // Clear GSC data when user logs out
+        localStorage.removeItem("gscAccessToken");
+        localStorage.removeItem("gscSiteUrl");
       }
       setIsLoading(false);
     });
@@ -98,6 +101,9 @@ export const AuthProvider = ({ children }) => {
 
   const logout = async () => {
     setIsLoading(true);
+    // Clear GSC data before logout
+    localStorage.removeItem("gscAccessToken");
+    localStorage.removeItem("gscSiteUrl");
     await signOut(auth);
     setUser(null);
     setIsLoading(false);

@@ -15,11 +15,13 @@ const ChatAssistant = ({
   lowCtrPages = [],
   impressionTrends = [],
 }) => {
+  const { data } = useOnboarding();
+  const firstName = data?.name ? data.name.split(" ")[0] : "";
   const defaultWelcome = {
     id: "welcome",
     role: "assistant",
     content:
-      "**Welcome! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started 🚀",
+      `**Hey${firstName ? ` ${firstName}` : ""}! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started 🚀`,
     timestamp: new Date(),
   };
   const [messages, setMessages] = useState(() => {
@@ -36,7 +38,6 @@ const ChatAssistant = ({
   const [isThinking, setIsThinking] = useState(false);
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
-  const { data } = useOnboarding();
   const fileInputRef = useRef(null);
 
   // Load saved conversation (if within 1 hour)
@@ -163,7 +164,7 @@ const ChatAssistant = ({
         id: "welcome",
         role: "assistant",
         content:
-          "**Welcome! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started 🚀",
+          `**Welcome${firstName ? ` ${firstName}` : ""}! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started 🚀`,
         timestamp: new Date(),
       },
     ]);

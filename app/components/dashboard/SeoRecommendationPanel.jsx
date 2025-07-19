@@ -135,44 +135,63 @@ const SeoRecommendationPanel = ({
     const fetchExisting = async () => {
       if (!user?.id || !pageUrl) return;
 
-      const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
-      const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
-      const data = snapshot.data();
-      if (!data?.status || data.status !== "implemented") return;
+      try {
+        const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
+        console.log("🔍 Fetching implementedSeoTips document:", docId);
+        const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
+        const data = snapshot.data();
+        console.log("🔍 Document data:", data);
+        
+        // Check if document exists and has the right status
+        if (!data || !data.status || data.status !== "implemented") {
+          console.log("🔍 Document doesn't exist or status is not 'implemented'");
+          return;
+        }
+        
+        console.log("✅ Document found and status is 'implemented'");
 
-      setIsImplemented(true);
+        setIsImplemented(true);
 
-      const implementedDate = new Date(data.implementedAt);
-      const today = new Date();
-      const days = Math.floor(
-        (today - implementedDate) / (1000 * 60 * 60 * 24)
-      );
-      setDaysSinceImplementation(Math.min(days, 7)); // cap at 7 days
+        const implementedDate = new Date(data.implementedAt);
+        const today = new Date();
+        const days = Math.floor(
+          (today - implementedDate) / (1000 * 60 * 60 * 24)
+        );
+        setDaysSinceImplementation(Math.min(days, 7)); // cap at 7 days
 
-      const totalDays = Math.floor(
-        (today - implementedDate) / (1000 * 60 * 60 * 24)
-      );
-      setDaysSinceImplementation(Math.min(totalDays, 7)); // already exists
-      setThirtyDayProgress(Math.min(totalDays, 30)); // 👈 new state to track 30-day progress
+        const totalDays = Math.floor(
+          (today - implementedDate) / (1000 * 60 * 60 * 24)
+        );
+        setDaysSinceImplementation(Math.min(totalDays, 7)); // already exists
+        setThirtyDayProgress(Math.min(totalDays, 30)); // 👈 new state to track 30-day progress
 
-      if (data.preStats && data.postStats) {
-        setDelta({
-          impressions: data.postStats.impressions - data.preStats.impressions,
-          clicks: data.postStats.clicks - data.preStats.clicks,
-          ctr: (data.postStats.ctr - data.preStats.ctr).toFixed(2),
-          position: (data.postStats.position - data.preStats.position).toFixed(
-            2
-          ),
+        if (data.preStats && data.postStats) {
+          setDelta({
+            impressions: data.postStats.impressions - data.preStats.impressions,
+            clicks: data.postStats.clicks - data.preStats.clicks,
+            ctr: (data.postStats.ctr - data.preStats.ctr).toFixed(2),
+            position: (data.postStats.position - data.preStats.position).toFixed(
+              2
+            ),
+          });
+        }
+
+        const daysSince =
+          (Date.now() - new Date(data.implementedAt).getTime()) /
+          (1000 * 60 * 60 * 24);
+        const zeroClicks = data?.postStats?.clicks === 0;
+
+        if (daysSince >= 30 && zeroClicks) {
+          setShowRefreshButton(true);
+        }
+      } catch (error) {
+        console.error("❌ Error fetching implementedSeoTips:", error);
+        console.error("❌ Error details:", {
+          code: error.code,
+          message: error.message,
+          docId: `${user.id}_${encodeURIComponent(pageUrl)}`
         });
-      }
-
-      const daysSince =
-        (Date.now() - new Date(data.implementedAt).getTime()) /
-        (1000 * 60 * 60 * 24);
-      const zeroClicks = data?.postStats?.clicks === 0;
-
-      if (daysSince >= 30 && zeroClicks) {
-        setShowRefreshButton(true);
+        return;
       }
     };
 

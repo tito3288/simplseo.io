@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
+import { createGSCTokenManager } from "../lib/gscTokenManager";
 import MainLayout from "../components/MainLayout";
 import { useRouter } from "next/navigation";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
@@ -134,26 +135,36 @@ export default function Dashboard() {
   useEffect(() => {
     if (isLoading || !user?.id) return;
 
-    const savedToken = localStorage.getItem("gscAccessToken");
-    if (!savedToken) return; // Don't auto-fetch
+    const checkGSCConnection = async () => {
+      try {
+        const tokenManager = createGSCTokenManager(user.id);
+        const accessToken = await tokenManager.getValidAccessToken();
+        
+        if (!accessToken) {
+          setIsGscConnected(false);
+          return;
+        }
 
-    fetch("https://searchconsole.googleapis.com/webmasters/v3/sites", {
-      headers: { Authorization: `Bearer ${savedToken}` },
-    })
-      .then(async (res) => {
-        if (res.status === 200) {
-          setGscAccessToken(savedToken);
+        // Verify token is still valid
+        const response = await fetch("https://searchconsole.googleapis.com/webmasters/v3/sites", {
+          headers: { Authorization: `Bearer ${accessToken}` },
+        });
+
+        if (response.status === 200) {
+          setGscAccessToken(accessToken);
           setIsGscConnected(true);
-          fetchAndMatchGSC(savedToken);
+          fetchAndMatchGSC(accessToken);
         } else {
           console.warn("⚠️ GSC token is invalid, try reconnecting manually.");
           setIsGscConnected(false);
         }
-      })
-      .catch((err) => {
-        console.error("⚠️ Error verifying token:", err);
+      } catch (error) {
+        console.error("⚠️ Error checking GSC connection:", error);
         setIsGscConnected(false);
-      });
+      }
+    };
+
+    checkGSCConnection();
   }, [isLoading, user?.id]);
 
   useEffect(() => {
@@ -195,32 +206,104 @@ export default function Dashboard() {
     const match = potentialMatches.find((url) => verifiedSites.includes(url));
 
     if (match) {
-      localStorage.setItem("gscSiteUrl", match); // ✅ move it here
+      // Store site URL in Firestore
+      const tokenManager = createGSCTokenManager(user.id);
+      await tokenManager.storeTokens(null, token, match);
+      
       fetchSearchAnalyticsData(match, token, dateRange);
     }
   };
 
-  const requestGSCAuthToken = () => {
-    const client = window.google.accounts.oauth2.initTokenClient({
-      client_id:
-        "956212275866-7dtgdq7b38b156riehghuvh8b8469ktg.apps.googleusercontent.com",
-      scope: GSC_SCOPE,
-      callback: async (tokenResponse) => {
-        if (tokenResponse.access_token) {
-          localStorage.setItem("gscAccessToken", tokenResponse.access_token);
-          setGscAccessToken(tokenResponse.access_token);
-          setIsGscConnected(true);
+  const requestGSCAuthToken = async () => {
+    // Debug: Log what we're trying to do
+    console.log("🔐 Starting GSC OAuth flow...");
+    
+    // Clear existing GSC data first
+    try {
+      const tokenManager = createGSCTokenManager(user.id);
+      await tokenManager.clearGSCData();
+      console.log("✅ Cleared existing GSC data");
+    } catch (error) {
+      console.error("❌ Failed to clear GSC data:", error);
+    }
+    
+    // Use authorization code flow to get refresh tokens
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=956212275866-7dtgdq7b38b156riehghuvh8b8469ktg.apps.googleusercontent.com&` +
+      `redirect_uri=${encodeURIComponent(window.location.origin + '/gsc-callback')}&` +
+      `response_type=code&` +
+      `scope=${encodeURIComponent(GSC_SCOPE)}&` +
+      `access_type=offline&` +
+      `prompt=consent&` +
+      `include_granted_scopes=true`;
+    
+    // Open popup for authorization
+    const popup = window.open(authUrl, 'gsc-auth', 'width=500,height=600');
+    
+    // Listen for the authorization code
+    const handleMessage = async (event) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === 'GSC_AUTH_SUCCESS' && event.data.code) {
+        console.log("🔐 Authorization code received:", event.data.code);
+        
+        try {
+          console.log("🔐 About to exchange code for tokens...");
+          
+          // Exchange code for tokens
+          const response = await fetch('/api/gsc/exchange-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: event.data.code })
+          });
+          
+          const tokenData = await response.json();
+          console.log("🔐 Token exchange response:", tokenData);
+          
+                           if (tokenData.access_token) {
+                   console.log("🔐 Token exchange successful:", {
+                     hasAccessToken: !!tokenData.access_token,
+                     hasRefreshToken: !!tokenData.refresh_token,
+                     refreshTokenLength: tokenData.refresh_token?.length
+                   });
+                   
+                   const tokenManager = createGSCTokenManager(user.id);
+                   
+                   console.log("🔐 About to store tokens:", {
+                     hasRefreshToken: !!tokenData.refresh_token,
+                     refreshTokenLength: tokenData.refresh_token?.length,
+                     hasAccessToken: !!tokenData.access_token,
+                     accessTokenLength: tokenData.access_token?.length
+                   });
+                   
+                   // Store tokens in Firestore
+                   await tokenManager.storeTokens(
+                     tokenData.refresh_token || null,
+                     tokenData.access_token,
+                     null // siteUrl will be set after matching
+                   );
 
-          await updateDoc(doc(db, "onboarding", user.id), { hasGSC: true });
+                   console.log("✅ Tokens stored in Firestore");
 
-          fetchAndMatchGSC(tokenResponse.access_token);
-        } else {
-          console.error("❌ Manual token failed");
+                   setGscAccessToken(tokenData.access_token);
+                   setIsGscConnected(true);
+
+                   await updateDoc(doc(db, "onboarding", user.id), { hasGSC: true });
+
+                   fetchAndMatchGSC(tokenData.access_token);
+                 } else {
+                   console.error("❌ No access token in response:", tokenData);
+                 }
+        } catch (error) {
+          console.error("❌ Failed to exchange code for tokens:", error);
         }
-      },
-    });
-
-    client.requestAccessToken(); // ⬅️ THIS will open the popup
+        
+        popup.close();
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
   };
 
   const fetchSearchAnalyticsData = async (siteUrl, token, range) => {
@@ -380,8 +463,8 @@ export default function Dashboard() {
       impressionTrends={gscImpressionTrends}
     >
       <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">
-          Welcome to your SEO Dashboard
+        <h1 className="text-5xl font-bold mb-2">
+          Welcome {data?.name ? data.name.split(" ")[0] : ""}!<br/> <span className="text-3xl">SEO Dashboard</span>
         </h1>
         <p className="text-muted-foreground">
           Get insights and recommendations for improving your website&apos;s search

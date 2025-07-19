@@ -122,6 +122,15 @@ const OnboardingWizard = () => {
                   </h2>
                 </div>
                 <div className="space-y-2">
+                  <Label htmlFor="name">Your Name</Label>
+                  <Input
+                    id="name"
+                    placeholder="e.g. Bryan"
+                    value={data.name || ""}
+                    onChange={(e) => updateData({ name: e.target.value })}
+                  />
+                </div>
+                <div className="space-y-2">
                   <Label htmlFor="businessName">Business Name</Label>
                   <Input
                     id="businessName"
