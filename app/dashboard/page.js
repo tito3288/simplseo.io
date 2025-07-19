@@ -657,7 +657,7 @@ export default function Dashboard() {
                   Connect to see opportunities
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  Find keywords you're close to ranking for on page 1
+                Find keywords you&apos;re close to ranking for on page 1
                 </p>
                 <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
