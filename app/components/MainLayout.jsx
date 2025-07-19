@@ -37,8 +37,8 @@ const MainLayout = ({
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isChatOpen, setIsChatOpen] = useState(true);
-  const [unreadMessages, setUnreadMessages] = useState(1);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const [unreadMessages, setUnreadMessages] = useState(0);
 
   useEffect(() => {
     if (typeof window !== "undefined" && !user) {
@@ -55,6 +55,20 @@ const MainLayout = ({
   useEffect(() => {
     setIsMobileMenuOpen(false);
   }, [pathname]);
+
+  // Show chat assistant only on first visit
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const hasSeenChat = localStorage.getItem("hasSeenChatAssistant");
+      
+      if (!hasSeenChat) {
+        // First time visitor - show chat
+        setIsChatOpen(true);
+        setUnreadMessages(1);
+        localStorage.setItem("hasSeenChatAssistant", "true");
+      }
+    }
+  }, []);
 
   const navItems = [
     {

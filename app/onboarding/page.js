@@ -239,7 +239,7 @@ const OnboardingWizard = () => {
                       Do you have Google Search Console set up?
                     </Label>
                     <p className="text-sm text-muted-foreground">
-                      Google Search Console helps track your search performance
+                      <strong>Important:</strong> Google Search Console is required to track your search performance and provide SEO insights
                     </p>
                   </div>
                   <Switch
@@ -253,9 +253,20 @@ const OnboardingWizard = () => {
 
                 {!data.hasGSC && (
                   <div className="bg-muted p-3 rounded-md mt-4">
-                    <p className="text-sm">
-                      Don&apos;t worry! We&apos;ll help you verify your site after onboarding.
-                    </p>
+                    <div className="space-y-3">
+                      <p className="text-sm font-medium">
+                        <strong>Required Setup:</strong> You&apos;ll need to set up Google Search Console first:
+                      </p>
+                      <ol className="text-sm text-muted-foreground space-y-2 ml-4">
+                        <li>1. Go to <a href="https://search.google.com/search-console" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Search Console</a></li>
+                        <li>2. Add your property: <code className="bg-background px-1 rounded">{data.websiteUrl || "your-website.com"}</code></li>
+                        <li>3. Verify ownership (DNS record or HTML file)</li>
+                        <li>4. Come back and connect your account</li>
+                      </ol>
+                      <p className="text-xs text-muted-foreground mt-2">
+                        <strong>Note:</strong> Only toggle &quot;Yes&quot; if you&apos;re certain you have GSC set up. You can always set it up later!
+                      </p>
+                    </div>
                   </div>
                 )}
               </div>

@@ -120,3 +120,8 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Toast description text override for better readability */
+[data-sonner-toaster] [data-description] {
+  color: #000000 !important;
+}

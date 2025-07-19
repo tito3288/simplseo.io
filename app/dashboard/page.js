@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useRef } from "react";
 import { doc, getDoc, updateDoc } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
@@ -39,6 +39,7 @@ import {
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import DateRangeFilter from "../components/dashboard/DateRangeFilter";
 import KeywordTable from "../components/dashboard/KeywordTable";
+import { toast } from "sonner";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -60,6 +61,8 @@ export default function Dashboard() {
   const [aiTips, setAiTips] = useState([]);
   const [generatedTitles, setGeneratedTitles] = useState([]);
   const [generatedMeta, setGeneratedMeta] = useState([]);
+  const [hasShownGscError, setHasShownGscError] = useState(false);
+  const [gscAlert, setGscAlert] = useState(null);
 
   const generateMetaDescription = async (pageUrl) => {
     try {
@@ -135,6 +138,9 @@ export default function Dashboard() {
   useEffect(() => {
     if (isLoading || !user?.id) return;
 
+    // Reset error flag when user changes
+    setHasShownGscError(false);
+
     const checkGSCConnection = async () => {
       try {
         const tokenManager = createGSCTokenManager(user.id);
@@ -167,11 +173,12 @@ export default function Dashboard() {
     checkGSCConnection();
   }, [isLoading, user?.id]);
 
-  useEffect(() => {
-    if (gscAccessToken) {
-      fetchAndMatchGSC(gscAccessToken);
-    }
-  }, [gscAccessToken, dateRange]);
+  // Commented out to prevent duplicate calls
+  // useEffect(() => {
+  //   if (gscAccessToken) {
+  //     fetchAndMatchGSC(gscAccessToken);
+  //   }
+  // }, [gscAccessToken, dateRange]);
 
   if (isLoading || !user) {
     return null; // or show a loader/spinner if you want
@@ -202,7 +209,34 @@ export default function Dashboard() {
     );
 
     const data = await res.json();
+    
+    // Check if user has any GSC properties
+    if (!data.siteEntry || data.siteEntry.length === 0) {
+      console.log("❌ No GSC properties found for this account");
+      
+      if (!hasShownGscError) {
+        toast.error("No GSC Properties Found", {
+          description: "This Google account doesn't have any Search Console properties. Please add your website to Google Search Console first.",
+          duration: 30000, // 30 seconds - longer duration
+          style: {
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca'
+          }
+        });
+        setHasShownGscError(true);
+        setGscAlert({
+          type: "no-properties",
+          title: "No Google Search Console Properties Found",
+          description: "This Google account doesn't have any Search Console properties. You need to add your website to Google Search Console first.",
+          action: "Set Up GSC"
+        });
+      }
+      return;
+    }
+    
     const verifiedSites = data.siteEntry.map((site) => site.siteUrl);
+    console.log("🔍 Available GSC sites:", verifiedSites);
+    
     const match = potentialMatches.find((url) => verifiedSites.includes(url));
 
     if (match) {
@@ -211,12 +245,37 @@ export default function Dashboard() {
       await tokenManager.storeTokens(null, token, match);
       
       fetchSearchAnalyticsData(match, token, dateRange);
+    } else {
+      console.log("❌ No matching site found");
+      console.log("🔍 Looking for:", potentialMatches);
+      console.log("🔍 Available sites:", verifiedSites);
+      
+      if (!hasShownGscError) {
+        toast.error("Website Not Found in GSC", {
+          description: `Your website ${data.websiteUrl || "your website"} is not verified in Google Search Console. Please add it first.`,
+          duration: 0, // Don't auto-dismiss
+          style: {
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca'
+          }
+        });
+        setHasShownGscError(true);
+        setGscAlert({
+          type: "website-not-found",
+          title: "Website Not Found in Google Search Console",
+          description: `Your website ${data.websiteUrl || "your website"} is not verified in Google Search Console. You need to add it first.`,
+          action: "Set Up GSC"
+        });
+      }
     }
   };
 
   const requestGSCAuthToken = async () => {
     // Debug: Log what we're trying to do
     console.log("🔐 Starting GSC OAuth flow...");
+    
+    // Reset error flag for new attempt
+    setHasShownGscError(false);
     
     // Clear existing GSC data first
     try {
@@ -471,6 +530,8 @@ export default function Dashboard() {
           performance
         </p>
       </div>
+
+
       <Card className="col-span-full mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between">
@@ -504,6 +565,31 @@ export default function Dashboard() {
         </CardContent>
       </Card>
 
+            {/* GSC Setup Alert */}
+            {gscAlert && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-red-800 mb-2">
+                  {gscAlert.title}
+                </h3>
+                <p className="text-red-700 mb-4">
+                  {gscAlert.description}
+                </p>
+                <Button 
+                  onClick={() => window.open("https://search.google.com/search-console", "_blank")}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {gscAlert.action}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Top Performing Keywords Card */}
         <Card className="col-span-full md:col-span-1 h-full">
@@ -532,8 +618,7 @@ export default function Dashboard() {
                   Connect Google Search Console
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  See your top keywords and rankings by connecting your Google
-                  Search Console account
+                  See your top keywords and rankings by connecting your Google Search Console account
                 </p>
                 <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
@@ -572,11 +657,9 @@ export default function Dashboard() {
                   Connect to see opportunities
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  Find keywords you&apos;re close to ranking for on page 1
+                  Find keywords you're close to ranking for on page 1
                 </p>
-                <Button onClick={requestGSCAuthToken}>
-                  Connect GSC
-                </Button>
+                <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
             )}
           </CardContent>

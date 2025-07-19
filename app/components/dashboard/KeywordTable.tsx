@@ -29,17 +29,19 @@ interface KeywordTableProps {
   title: string;
   description?: string;
   renderActions?: (keyword: Keyword) => React.ReactNode; // ✅ new prop
+  showPagination?: boolean; // ✅ new prop to control pagination
 }
 
-const KeywordTable = ({ keywords, title, description }: KeywordTableProps) => {
+const KeywordTable = ({ keywords, title, description, showPagination = true }: KeywordTableProps) => {
   const [currentPage, setCurrentPage] = useState(1);
   const rowsPerPage = 10;
 
   const totalPages = Math.ceil(keywords.length / rowsPerPage);
-  const paginatedKeywords = keywords.slice(
-    (currentPage - 1) * rowsPerPage,
-    currentPage * rowsPerPage
-  );
+  
+  // ✅ Show all keywords if pagination is disabled, otherwise paginate
+  const displayKeywords = showPagination 
+    ? keywords.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage)
+    : keywords;
 
   return (
     <div>
@@ -60,7 +62,7 @@ const KeywordTable = ({ keywords, title, description }: KeywordTableProps) => {
             </TableRow>
           </TableHeader>
           <TableBody>
-            {paginatedKeywords.map((item, index) => (
+            {displayKeywords.map((item, index) => (
               <TableRow key={index}>
                 <TableCell className="font-medium">{item.keyword}</TableCell>
                 <TableCell className="text-right">{item.clicks}</TableCell>
@@ -114,7 +116,7 @@ const KeywordTable = ({ keywords, title, description }: KeywordTableProps) => {
       </div>
 
       {/* Pagination controls */}
-      {totalPages > 1 && (
+      {showPagination && totalPages > 1 && (
         <div className="flex justify-end mt-4 space-x-2">
           <Button
             variant="ghost"
