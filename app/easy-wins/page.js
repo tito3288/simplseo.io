@@ -13,9 +13,12 @@ import {
 import { AlertTriangle, AlertCircle } from "lucide-react";
 import SeoTitleSuggestionPanel from "../components/dashboard/SeoTitleSuggestionPanel";
 import { createGSCTokenManager } from "../lib/gscTokenManager";
+import { Button } from "@/components/ui/button";
+import { useRouter } from "next/navigation";
 
 export default function EasyWinsPage() {
   const { user, isLoading } = useAuth();
+  const router = useRouter();
   const [gscKeywords, setGscKeywords] = useState([]);
   const [generatedTitles, setGeneratedTitles] = useState([]);
   const [loading, setLoading] = useState(true);
@@ -87,7 +90,7 @@ export default function EasyWinsPage() {
         }
 
         const formatted = data.rows.map((row) => ({
-          keyword: row.keys[0],
+          keyword: row.keys[0].replace(/^\[|\]$/g, ""),
           page: row.keys[1],
           clicks: row.clicks,
           impressions: row.impressions,
@@ -146,12 +149,11 @@ export default function EasyWinsPage() {
   if (loading) {
     return (
       <MainLayout>
-        <div className="mb-6">
-          <h1 className="text-3xl font-bold mb-2">Easy Win Opportunities</h1>
-          <p className="text-muted-foreground">
-            These are keywords currently ranking on page 2 of search results. With
-            a bit of effort, they can hit page 1.
-          </p>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Easy Win Opportunities</h1>
+          <Button onClick={() => router.back()} variant="outline">
+            Back to Dashboard
+          </Button>
         </div>
         <Card>
           <CardContent className="pt-6">
@@ -167,13 +169,17 @@ export default function EasyWinsPage() {
 
   return (
     <MainLayout>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Easy Win Opportunities</h1>
-        <p className="text-muted-foreground">
-          These are keywords currently ranking on page 2 of search results. With
-          a bit of effort, they can hit page 1.
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Easy Win Opportunities</h1>
+        <Button onClick={() => router.back()} variant="outline">
+          Back to Dashboard
+        </Button>
       </div>
+
+      <p className="text-muted-foreground mb-4">
+        These are keywords currently ranking on page 2 of search results. With
+        a bit of effort, they can hit page 1.
+      </p>
 
       {error ? (
         <Card>

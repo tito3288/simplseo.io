@@ -119,6 +119,10 @@ const ChatAssistant = ({
             lowCtrPages,
             impressionTrends,
             onboarding: data,
+            // Enhanced context for better responses
+            currentPage: typeof window !== 'undefined' ? window.location.pathname : '/dashboard',
+            userFirstName: firstName,
+            timestamp: new Date().toISOString(),
           },
         }),
       });
@@ -251,8 +255,8 @@ const ChatAssistant = ({
             disabled={isThinking}
           />
 
-          <div>
-            {/* <input
+          {/* <div>
+            <input
               id="upload-image"
               type="file"
               accept="image/*"
@@ -260,7 +264,7 @@ const ChatAssistant = ({
               onChange={handleUploadImage}
               disabled={isThinking}
               className="hidden"
-            /> */}
+            />
 
             <Button
               type="button"
@@ -272,7 +276,7 @@ const ChatAssistant = ({
             >
               +
             </Button>
-          </div>
+          </div> */}
 
           <Button
             onClick={handleSendMessage}

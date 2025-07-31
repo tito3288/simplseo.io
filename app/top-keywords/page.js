@@ -77,7 +77,7 @@ export default function TopKeywordsPage() {
 
         if (json.rows) {
           const formatted = json.rows.map((row) => ({
-            keyword: row.keys[0],
+            keyword: row.keys[0].replace(/^\[|\]$/g, ""),
             page: row.keys[1],
             clicks: row.clicks,
             impressions: row.impressions,

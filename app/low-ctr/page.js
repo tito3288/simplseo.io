@@ -22,6 +22,7 @@ import {
 import { AlertTriangle } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // ✅ Add filtering function at top
 const isRelevantPage = (url) =>
@@ -48,6 +49,7 @@ const isRelevantPage = (url) =>
 
 export default function LowCtrPage() {
   const { user, isLoading } = useAuth();
+  const router = useRouter();
   const [lowCtrPages, setLowCtrPages] = useState([]);
   const [aiMeta, setAiMeta] = useState([]);
   const [sitemapUrls, setSitemapUrls] = useState([]);
@@ -308,13 +310,17 @@ export default function LowCtrPage() {
 
   return (
     <MainLayout>
-      <div className="mb-6">
-        <h1 className="text-3xl font-bold mb-2">Low CTR Fixes</h1>
-        <p className="text-muted-foreground">
-          These pages appear in search but get very few clicks. Try improving
-          their titles and meta descriptions.
-        </p>
+      <div className="mb-6 flex items-center justify-between">
+        <h1 className="text-3xl font-bold">Low CTR Fixes</h1>
+        <Button onClick={() => router.back()} variant="outline">
+          Back to Dashboard
+        </Button>
       </div>
+
+      <p className="text-muted-foreground mb-4">
+        These pages appear in search but get very few clicks. Try improving
+        their titles and meta descriptions.
+      </p>
 
       <Card className="mb-6">
         <CardHeader>
