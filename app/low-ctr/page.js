@@ -23,6 +23,8 @@ import { AlertTriangle } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import SquashBounceLoader from "../components/ui/squash-bounce-loader";
+import { useMinimumLoading } from "../hooks/use-minimum-loading";
 
 // ✅ Add filtering function at top
 const isRelevantPage = (url) =>
@@ -54,6 +56,8 @@ export default function LowCtrPage() {
   const [aiMeta, setAiMeta] = useState([]);
   const [sitemapUrls, setSitemapUrls] = useState([]);
   const [implementedPages, setImplementedPages] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const shouldShowLoader = useMinimumLoading(loading, 3000);
 
   useEffect(() => {
     const fetchGSCData = async () => {
@@ -96,6 +100,7 @@ export default function LowCtrPage() {
         fetchLowCtrPages(gscData.siteUrl, validToken);
       } catch (error) {
         console.error("❌ Error fetching GSC data:", error);
+        setLoading(false);
       }
     };
 
@@ -260,6 +265,7 @@ export default function LowCtrPage() {
     );
 
     setAiMeta(aiResults);
+    setLoading(false);
   };
 
   const PerformanceDelta = ({ pageUrl }) => {
@@ -307,6 +313,27 @@ export default function LowCtrPage() {
   };
 
   if (isLoading || !user) return null;
+
+  if (shouldShowLoader) {
+    return (
+      <MainLayout>
+        <div className="mb-6 flex items-center justify-between">
+          <h1 className="text-3xl font-bold">Low CTR Fixes</h1>
+          <Button onClick={() => router.back()} variant="outline">
+            Back to Dashboard
+          </Button>
+        </div>
+        <Card>
+          <CardContent className="pt-6">
+            <div className="text-center py-8">
+              <SquashBounceLoader size="lg" className="mb-4" />
+              <p className="text-muted-foreground">Loading low CTR data...</p>
+            </div>
+          </CardContent>
+        </Card>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout>

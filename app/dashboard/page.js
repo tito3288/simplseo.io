@@ -9,6 +9,8 @@ import MainLayout from "../components/MainLayout";
 import { useRouter } from "next/navigation";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
 import Link from "next/link";
+import SquashBounceLoader from "../components/ui/squash-bounce-loader";
+import { useMinimumLoading } from "../hooks/use-minimum-loading";
 
 import {
   Card,
@@ -63,6 +65,10 @@ export default function Dashboard() {
   const [generatedMeta, setGeneratedMeta] = useState([]);
   const [hasShownGscError, setHasShownGscError] = useState(false);
   const [gscAlert, setGscAlert] = useState(null);
+  const [isLoadingGscData, setIsLoadingGscData] = useState(false);
+  
+  // Use minimum loading time for professional UX
+  const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
 
   const generateMetaDescription = async (pageUrl) => {
     try {
@@ -366,6 +372,7 @@ export default function Dashboard() {
   };
 
   const fetchSearchAnalyticsData = async (siteUrl, token, range) => {
+    setIsLoadingGscData(true);
     const today = new Date();
     const startDate = new Date();
     if (range === "all") {
@@ -496,6 +503,8 @@ export default function Dashboard() {
       }
     } catch (err) {
       console.error("❌ Failed to fetch GSC data:", err);
+    } finally {
+      setIsLoadingGscData(false);
     }
   };
 
@@ -520,6 +529,7 @@ export default function Dashboard() {
       topPages={topPages}
       lowCtrPages={lowCtrPages}
       impressionTrends={gscImpressionTrends}
+      isLoading={isLoadingGscData}
     >
       <div className="mb-6">
         <h1 className="text-5xl font-bold mb-2">
@@ -608,7 +618,14 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {isGscConnected ? (
-              <KeywordTable keywords={gscKeywords} title="Top Keywords" />
+                      shouldShowLoader ? (
+          <div className="text-center py-8">
+            <SquashBounceLoader size="lg" className="mb-4" />
+            <p className="text-sm text-muted-foreground">Loading keywords...</p>
+          </div>
+        ) : (
+                <KeywordTable keywords={gscKeywords} title="Top Keywords" />
+              )
             ) : (
               <div className="text-center py-6">
                 <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
@@ -643,11 +660,18 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {isGscConnected ? (
-              <KeywordTable
-                keywords={easyWins}
-                title="Low Hanging Fruit"
-                description="These keywords are on page 2 of search results. Focus on these for quick wins!"
-              />
+                      shouldShowLoader ? (
+          <div className="text-center py-8">
+            <SquashBounceLoader size="lg" className="mb-4" />
+            <p className="text-sm text-muted-foreground">Loading opportunities...</p>
+          </div>
+        ) : (
+                <KeywordTable
+                  keywords={easyWins}
+                  title="Low Hanging Fruit"
+                  description="These keywords are on page 2 of search results. Focus on these for quick wins!"
+                />
+              )
             ) : (
               <div className="text-center py-6">
                 <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
@@ -684,7 +708,12 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {topPages.length === 0 ? (
+            {shouldShowLoader ? (
+              <div className="text-center py-8">
+                <SquashBounceLoader size="lg" className="mb-4" />
+                <p className="text-sm text-muted-foreground">Loading pages...</p>
+              </div>
+            ) : topPages.length === 0 ? (
               <p className="text-sm text-muted-foreground">No data yet</p>
             ) : (
               <ul className="space-y-2">
@@ -726,7 +755,12 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {lowCtrPages.length === 0 ? (
+            {shouldShowLoader ? (
+              <div className="text-center py-8">
+                <SquashBounceLoader size="lg" className="mb-4" />
+                <p className="text-sm text-muted-foreground">Loading CTR data...</p>
+              </div>
+            ) : lowCtrPages.length === 0 ? (
               <p className="text-sm text-muted-foreground">No issues found</p>
             ) : (
               <ul className="space-y-2">

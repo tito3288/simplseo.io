@@ -9,12 +9,15 @@ import { Button } from "@/components/ui/button";
 import { createGSCTokenManager } from "../lib/gscTokenManager";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { AlertCircle } from "lucide-react";
+import SquashBounceLoader from "../components/ui/squash-bounce-loader";
+import { useMinimumLoading } from "../hooks/use-minimum-loading";
 
 export default function TopKeywordsPage() {
   const { user } = useAuth();
   const router = useRouter();
   const [keywords, setKeywords] = useState([]);
   const [loading, setLoading] = useState(true);
+  const shouldShowLoader = useMinimumLoading(loading, 3000);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -100,7 +103,7 @@ export default function TopKeywordsPage() {
     fetchKeywords();
   }, [user]);
 
-  if (loading) {
+  if (shouldShowLoader) {
     return (
       <MainLayout>
         <div className="mb-6 flex items-center justify-between">
@@ -111,10 +114,10 @@ export default function TopKeywordsPage() {
         </div>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Loading keywords...</p>
-            </div>
+                    <div className="text-center py-8">
+          <SquashBounceLoader size="lg" className="mb-4" />
+          <p className="text-muted-foreground">Loading keywords...</p>
+        </div>
           </CardContent>
         </Card>
       </MainLayout>

@@ -15,6 +15,8 @@ import SeoTitleSuggestionPanel from "../components/dashboard/SeoTitleSuggestionP
 import { createGSCTokenManager } from "../lib/gscTokenManager";
 import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
+import SquashBounceLoader from "../components/ui/squash-bounce-loader";
+import { useMinimumLoading } from "../hooks/use-minimum-loading";
 
 export default function EasyWinsPage() {
   const { user, isLoading } = useAuth();
@@ -22,6 +24,7 @@ export default function EasyWinsPage() {
   const [gscKeywords, setGscKeywords] = useState([]);
   const [generatedTitles, setGeneratedTitles] = useState([]);
   const [loading, setLoading] = useState(true);
+  const shouldShowLoader = useMinimumLoading(loading, 3000);
   const [error, setError] = useState(null);
 
   useEffect(() => {
@@ -146,7 +149,7 @@ export default function EasyWinsPage() {
 
   if (isLoading || !user) return null;
 
-  if (loading) {
+  if (shouldShowLoader) {
     return (
       <MainLayout>
         <div className="mb-6 flex items-center justify-between">
@@ -157,10 +160,10 @@ export default function EasyWinsPage() {
         </div>
         <Card>
           <CardContent className="pt-6">
-            <div className="text-center py-8">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto mb-4"></div>
-              <p className="text-muted-foreground">Loading easy win opportunities...</p>
-            </div>
+                    <div className="text-center py-8">
+          <SquashBounceLoader size="lg" className="mb-4" />
+          <p className="text-muted-foreground">Loading easy win opportunities...</p>
+        </div>
           </CardContent>
         </Card>
       </MainLayout>
