@@ -39,6 +39,8 @@ const MainLayout = ({
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isChatOpen, setIsChatOpen] = useState(false);
   const [unreadMessages, setUnreadMessages] = useState(0);
+  const [isAnimating, setIsAnimating] = useState(false);
+  const [showTooltip, setShowTooltip] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && !user) {
@@ -99,6 +101,34 @@ const MainLayout = ({
     await logout();
     router.push("/auth");
   };
+
+
+
+  const handleChatOpen = (open) => {
+    setIsChatOpen(open);
+  };
+
+  // Handle manual click to open chat
+  const handleManualChatOpen = () => {
+    setIsChatOpen(!isChatOpen);
+    setShowTooltip(false); // Hide tooltip when chat is opened
+  };
+
+  // Auto-animate every 30 seconds
+  useEffect(() => {
+    if (isChatOpen) return; // Don't animate if chat is open
+
+    const interval = setInterval(() => {
+      setIsAnimating(true);
+      setTimeout(() => {
+        setIsAnimating(false);
+        // Keep tooltip visible after animation
+        setShowTooltip(true);
+      }, 5000); // Animation duration
+    }, 30000); // Every 30 seconds
+
+    return () => clearInterval(interval);
+  }, [isChatOpen]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
@@ -201,24 +231,71 @@ const MainLayout = ({
 
       {/* Chat Assistant */}
       {showChat && (
-        <Popover open={isChatOpen} onOpenChange={setIsChatOpen}>
-          <PopoverTrigger asChild>
-            <Button
-              className="fixed bottom-6 right-6 rounded-full w-14 h-14 shadow-lg flex items-center justify-center z-50 bg-primary hover:bg-primary/90"
-              size="icon"
-            >
-              <MessageSquare className="w-6 h-6 text-white" />
-              {unreadMessages > 0 && !isChatOpen && (
-                <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
-                  {unreadMessages}
-                </span>
-              )}
-            </Button>
-          </PopoverTrigger>
+        <>
+          {/* Inline styles for the animation */}
+          {isAnimating && (
+            <style jsx>{`
+              @keyframes bounce-squash {
+                0% {
+                  transform: translateY(0) scaleX(1) scaleY(1);
+                }
+                10% {
+                  transform: translateY(-20px) scaleX(1.05) scaleY(0.95);
+                }
+                25% {
+                  transform: translateY(-50px) scaleX(0.95) scaleY(1.05);
+                }
+                50% {
+                  transform: translateY(0) scaleX(1.2) scaleY(0.8); /* squash on impact */
+                }
+                75% {
+                  transform: translateY(-30px) scaleX(0.98) scaleY(1.02);
+                }
+                100% {
+                  transform: translateY(0) scaleX(1) scaleY(1);
+                }
+              }
+            `}</style>
+          )}
+          
+          <Popover open={isChatOpen} onOpenChange={handleChatOpen}>
+            <PopoverTrigger asChild>
+              <div className="fixed bottom-6 right-6" onClick={handleManualChatOpen}>
+                <Button
+                  className="rounded-full w-14 h-14 shadow-lg flex items-center justify-center z-50 bg-[#00BF63] hover:bg-[#00BF63]/90"
+                  size="icon"
+                  style={{
+                    animation: isAnimating ? 'bounce-squash 1s ease-in-out' : 'none'
+                  }}
+                >
+                  <MessageSquare className="w-6 h-6 text-white" />
+                  {unreadMessages > 0 && !isChatOpen && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                      {unreadMessages}
+                    </span>
+                  )}
+                </Button>
+                
+                {/* Tooltip that appears during animation */}
+                {(isAnimating || showTooltip) && (
+                  <div 
+                    className="fixed bottom-25 right-6 bg-[#00bf63]/8 backdrop-blur-md text-black text-sm px-3 py-2 rounded-lg shadow-lg z-50"
+                    style={{
+                      animation: isAnimating ? 'bounce-squash 1s ease-in-out' : 'none'
+                    }}
+                  >
+                    <div className="flex items-center gap-2">
+                      <span>Need SEO help or a bad joke? 🤔</span>
+                    </div>
+                    <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white-900"></div>
+                  </div>
+                )}
+              </div>
+            </PopoverTrigger>
           <PopoverContent
             side="top"
             align="end"
-            className="w-80 sm:w-96 p-0 rounded-xl shadow-xl backdrop-blur-md bg-white/1 border border-white/10 ring-1 ring-white/20 mr-2 mb-2"
+            className="w-80 sm:w-96 p-0 rounded-xl shadow-xl backdrop-blur-md bg-white/1 border border-white/10 ring-1 ring-white/20 mr-2 mb-2 z-[60]"
             sideOffset={16}
           >
             <div className="max-h-[500px] overflow-hidden rounded-xl">
@@ -234,6 +311,7 @@ const MainLayout = ({
             </div>
           </PopoverContent>
         </Popover>
+        </>
       )}
     </div>
   );
