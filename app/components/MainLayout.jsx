@@ -13,6 +13,7 @@ import {
   User,
   Menu,
   X,
+  AlertTriangle,
 } from "lucide-react";
 import ChatAssistant from "../components/ChatAssistant";
 import {
@@ -77,6 +78,11 @@ const MainLayout = ({
       path: "/dashboard",
       label: "Dashboard",
       icon: <LayoutDashboard className="w-5 h-5" />,
+    },
+    {
+      path: "/intent-mismatch",
+      label: "Intent Mismatch",
+      icon: <AlertTriangle className="w-5 h-5" />,
     },
     {
       path: "/website",
