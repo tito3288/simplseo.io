@@ -58,7 +58,9 @@ const SeoRecommendationPanel = ({
 
   const copyToClipboard = async (text, type) => {
     try {
-      await navigator.clipboard.writeText(text);
+      // Remove any surrounding quotes before copying
+      const cleanText = text?.replace(/^["']|["']$/g, '') || '';
+      await navigator.clipboard.writeText(cleanText);
       toast.success(
         `${
           type === "title" ? "Meta title" : "Meta description"
@@ -270,14 +272,14 @@ const SeoRecommendationPanel = ({
               <Label className="mb-2">Suggested Meta Title</Label>
               <div className="flex items-center justify-between">
                 <Textarea
-                  value={suggestedTitle}
+                  value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
                   readOnly
                   className="resize-none"
                 />
                 <Button
                   variant="ghost"
                   size="sm"
-                  onClick={() => copyToClipboard(suggestedTitle, "title")}
+                  onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
                 >
                   <Copy className="h-4 w-4" />
                 </Button>
@@ -289,7 +291,7 @@ const SeoRecommendationPanel = ({
               <Label className="mb-2">Suggested Meta Description</Label>
               <div className="flex items-center justify-between">
                 <Textarea
-                  value={suggestedDescription}
+                  value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
                   readOnly
                   className="resize-none"
                 />
@@ -297,7 +299,7 @@ const SeoRecommendationPanel = ({
                   variant="ghost"
                   size="sm"
                   onClick={() =>
-                    copyToClipboard(suggestedDescription, "description")
+                    copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
                   }
                 >
                   <Copy className="h-4 w-4" />
@@ -345,7 +347,7 @@ const SeoRecommendationPanel = ({
                   </div>
                   <p className="text-xs text-muted-foreground mt-1">
                     Your changes are being tracked! Google recommends waiting 7
-                    days to let your SEO changes take effect. We’ll track
+                    days to let your SEO changes take effect. We&apos;ll track
                     performance and show results in the SEO Progress section
                     once enough data is available.
                   </p>
@@ -367,12 +369,18 @@ const SeoRecommendationPanel = ({
                       />
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      No clicks after 30 days? You’ll be able to refresh this
+                      No clicks after 30 days? You&apos;ll be able to refresh this
                       recommendation and get updated suggestions tailored to
                       your page
                     </p>
                   </div>
                 )}
+
+                {/* ✅ NEW: Continuous Progress Info */}
+                <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                  <span className="font-medium">💡 Tip:</span> After 7 days, your progress will appear in the SEO Progress section above. 
+                  The system continues monitoring your performance daily, so check back regularly for ongoing updates!
+                </div>
               </div>
             )}
 

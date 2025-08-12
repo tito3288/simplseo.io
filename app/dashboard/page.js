@@ -57,7 +57,7 @@ export default function Dashboard() {
   const [gscAccessToken, setGscAccessToken] = useState(null);
   const [gscKeywords, setGscKeywords] = useState([]);
   const [gscImpressionTrends, setGscImpressionTrends] = useState([]);
-  const [dateRange, setDateRange] = useState("7");
+  const [dateRange, setDateRange] = useState("28"); // Changed from "7" to "28"
   const [topPages, setTopPages] = useState([]);
   const [lowCtrPages, setLowCtrPages] = useState([]);
   const [aiTips, setAiTips] = useState([]);
@@ -66,6 +66,7 @@ export default function Dashboard() {
   const [hasShownGscError, setHasShownGscError] = useState(false);
   const [gscAlert, setGscAlert] = useState(null);
   const [isLoadingGscData, setIsLoadingGscData] = useState(false);
+  const [isRefreshingData, setIsRefreshingData] = useState(false); // ✅ NEW: Track refresh state
   
   // Use minimum loading time for professional UX
   const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
@@ -185,6 +186,15 @@ export default function Dashboard() {
   //     fetchAndMatchGSC(gscAccessToken);
   //   }
   // }, [gscAccessToken, dateRange]);
+
+  // ✅ NEW: Refresh all data when date range changes
+  useEffect(() => {
+    if (gscAccessToken && isGscConnected) {
+      console.log(`🔄 Date range changed to ${dateRange} days, refreshing all data...`);
+      setIsRefreshingData(true);
+      fetchAndMatchGSC(gscAccessToken);
+    }
+  }, [dateRange, gscAccessToken, isGscConnected]);
 
   if (isLoading || !user) {
     return null; // or show a loader/spinner if you want
@@ -505,6 +515,7 @@ export default function Dashboard() {
       console.error("❌ Failed to fetch GSC data:", err);
     } finally {
       setIsLoadingGscData(false);
+      setIsRefreshingData(false); // Reset refreshing state after data fetch
     }
   };
 
@@ -549,9 +560,12 @@ export default function Dashboard() {
             <DateRangeFilter
               value={dateRange}
               onValueChange={(value) => setDateRange(value)}
+              isLoading={isRefreshingData}
             />
           </CardTitle>
-          <CardDescription>Track impressions over time</CardDescription>
+          <CardDescription>
+            Track impressions over time - Last {dateRange === "all" ? "year" : `${dateRange} days`}
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <div className="h-[250px] w-full">
@@ -689,7 +703,7 @@ export default function Dashboard() {
                 <CardDescription>
                   These pages show up in searches but aren&apos;t getting many
                   clicks. Consider rewriting their titles and meta descriptions
-                  to improve click-through rate.
+                  to improve click-through rate. Data from last {dateRange === "all" ? "year" : `${dateRange} days`}.
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">
@@ -751,9 +765,9 @@ export default function Dashboard() {
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Top Pages This Month</CardTitle>
+                <CardTitle>Top Pages</CardTitle>
                 <CardDescription>
-                  Pages that appeared in search results this month (may include
+                  Pages that appeared in search results in the last {dateRange === "all" ? "year" : `${dateRange} days`} (may include
                   0-click pages)
                 </CardDescription>
               </div>
@@ -817,7 +831,7 @@ export default function Dashboard() {
               <div>
                 <CardTitle>Top Performing Keywords</CardTitle>
                 <CardDescription>
-                  Your most clicked search terms
+                  Your most clicked search terms in the last {dateRange === "all" ? "year" : `${dateRange} days`}
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">
@@ -844,7 +858,7 @@ export default function Dashboard() {
               <div>
                 <CardTitle>Easy Win Opportunities</CardTitle>
                 <CardDescription>
-                  Keywords close to ranking on Page 1
+                  Keywords close to ranking on Page 1 in the last {dateRange === "all" ? "year" : `${dateRange} days`}
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">

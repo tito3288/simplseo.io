@@ -69,7 +69,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
     return (
       <Card>
         <CardHeader>
-          <CardTitle>SEO Impact Leaderboard</CardTitle>
+          <CardTitle>SEO Progress</CardTitle>
         </CardHeader>
         <CardContent>
           <Skeleton className="h-12 w-full" />
@@ -89,9 +89,22 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         <CardContent>
           <p className="text-muted-foreground">
             Your SEO results will appear here 7 days after you apply an AI
-            suggestion. We’ll show changes in impressions, clicks, and
+            suggestion. We&apos;ll show changes in impressions, clicks, and
             ranking—check back soon!
           </p>
+          
+          {/* Show countdown for implemented tips */}
+          {implementedCount > 0 && (
+            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
+              <h4 className="text-sm font-medium text-blue-900 mb-2">
+                📊 Implementation Status
+              </h4>
+              <p className="text-xs text-blue-700">
+                You have {implementedCount} implemented SEO tip{implementedCount !== 1 ? 's' : ''}. 
+                The Cloud Function will process these after 7 days and display the results here.
+              </p>
+            </div>
+          )}
         </CardContent>
       </Card>
     );
@@ -100,7 +113,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>SEO Impact Leaderboard</CardTitle>
+        <CardTitle>SEO Progress</CardTitle>
       </CardHeader>
       <CardContent>
         {/* Progress Bar */}
@@ -193,6 +206,21 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
               </div>
             );
           })}
+        </div>
+
+        {/* ✅ NEW: Continuous Update Message */}
+        <div className="mt-6 p-3 bg-green-50 border border-green-200 rounded-lg">
+          <div className="flex items-center gap-2 mb-2">
+            <span className="text-green-600">🔄</span>
+            <h4 className="text-sm font-medium text-green-900">
+              Continuous Progress Tracking
+            </h4>
+          </div>
+          <p className="text-xs text-green-700">
+            Your SEO progress continues to update after the initial 7-day results. 
+            The system monitors your performance daily and will show ongoing improvements 
+            or declines. Check back regularly to see the latest progress!
+          </p>
         </div>
       </CardContent>
     </Card>

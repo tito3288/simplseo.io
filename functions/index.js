@@ -93,6 +93,7 @@ exports.updateAllMissingPostStats = functions.https.onRequest(async (req, res) =
       await doc.ref.set({
         postStats: newPostStats,
         updatedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(), // Track when it was last updated
       }, { merge: true });
 
       console.log(`✅ Updated ${pageUrl} with postStats`);
@@ -189,6 +190,7 @@ exports.updateDocumentWithGscData = functions.https.onRequest(async (req, res) =
     await doc.ref.set({
       postStats,
       updatedAt: new Date().toISOString(),
+      lastUpdated: new Date().toISOString(), // Track when it was last updated
     }, { merge: true });
 
     console.log(`✅ Updated postStats for ${data.pageUrl}:`, postStats);
@@ -341,6 +343,7 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
       {
         postStats,
         updatedAt: new Date().toISOString(),
+        lastUpdated: new Date().toISOString(), // Track when it was last updated
       },
       { merge: true }
     );
@@ -391,6 +394,7 @@ exports.checkSeoTipProgress = pubsub
 
       console.log(`📅 Days since implementation: ${daysSince}`);
 
+      // ✅ MODIFIED: Process documents that are 7+ days old (not just create once)
       if (daysSince < 7) {
         console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
         continue;
@@ -452,8 +456,9 @@ exports.checkSeoTipProgress = pubsub
           console.log("⚠️ Using dummy postStats:", postStats);
         }
 
+        // ✅ MODIFIED: Always update postStats (continuous monitoring)
         console.log(
-          `📊 Updated postStats for ${pageUrl}:`,
+          `📊 Updating postStats for ${pageUrl}:`,
           postStats
         );
 
@@ -462,6 +467,7 @@ exports.checkSeoTipProgress = pubsub
             {
               postStats,
               updatedAt: new Date().toISOString(),
+              lastUpdated: new Date().toISOString(), // Track when it was last updated
             },
             { merge: true }
           )
@@ -472,6 +478,6 @@ exports.checkSeoTipProgress = pubsub
     }
 
     await Promise.all(updates);
-    console.log(`✅ Updated ${updates.length} SEO tip documents`);
+    console.log(`✅ Updated ${updates.length} SEO tip documents with continuous monitoring`);
     return null;
   });
