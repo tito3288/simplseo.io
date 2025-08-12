@@ -15,6 +15,8 @@ import { toast } from "sonner";
 import { createGSCTokenManager } from "../lib/gscTokenManager";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
+import { doc, getDoc, setDoc } from "firebase/firestore";
+import { db } from "../lib/firebaseConfig";
 
 export default function IntentMismatch() {
   const { user, isLoading: authLoading } = useAuth();
@@ -27,99 +29,105 @@ export default function IntentMismatch() {
   const [lowCtrPages, setLowCtrPages] = useState([]);
   const shouldShowLoader = useMinimumLoading(isLoading, 3000);
 
+  // Load cached results first for faster initial load
+  const loadCachedResults = async () => {
+    if (!user?.id) return;
+    
+    try {
+      console.log("🔍 Loading cached intent mismatches...");
+      const { collection, query, where, getDocs } = await import("firebase/firestore");
+      const { db } = await import("../lib/firebaseConfig");
+      
+      const q = query(
+        collection(db, "intentMismatches"),
+        where("userId", "==", user.id)
+      );
+      
+      const snapshot = await getDocs(q);
+      const cachedMismatches = snapshot.docs.map(doc => {
+        const data = doc.data();
+        // Map Firebase field names to frontend field names
+        return {
+          ...data,
+          suggestion: data.suggestedFix || data.suggestion, // Use suggestedFix if available, fallback to suggestion
+        };
+      });
+      
+      if (cachedMismatches.length > 0) {
+        console.log(`✅ Loaded ${cachedMismatches.length} cached mismatches`);
+        setMismatches(cachedMismatches);
+        setIsLoading(false);
+        return true;
+      }
+      
+      return false;
+    } catch (error) {
+      console.error("❌ Error loading cached results:", error);
+      return false;
+    }
+  };
+
   useEffect(() => {
-    const fetchGSCData = async () => {
+    const initializePage = async () => {
       if (!user?.id) {
         console.log("❌ No user ID");
         return;
       }
 
-      try {
-        console.log("🔍 Fetching GSC data for user:", user.id);
-        const tokenManager = createGSCTokenManager(user.id);
-        
-        // Add a small delay to ensure tokens are stored
-        await new Promise(resolve => setTimeout(resolve, 1000));
-        
-        const gscData = await tokenManager.getStoredGSCData();
-        
-        console.log("🔍 Stored GSC data:", gscData);
-        console.log("🔍 GSC data details:", {
-          hasAccessToken: !!gscData?.accessToken,
-          hasRefreshToken: !!gscData?.refreshToken,
-          hasSiteUrl: !!gscData?.siteUrl,
-          accessTokenLength: gscData?.accessToken?.length,
-          refreshTokenLength: gscData?.refreshToken?.length
-        });
-        
-        if (!gscData?.accessToken || !gscData?.siteUrl) {
-          console.log("❌ Missing GSC access token or site URL");
-          // Use dummy data if no GSC connection
-          setDummyData();
-          return;
-        }
+      // Try to load cached results first
+      const hasCached = await loadCachedResults();
+      
+      if (!hasCached) {
+        // If no cached data, check GSC and load fresh data
+        const fetchGSCData = async () => {
+          try {
+            console.log("🔍 Fetching GSC data for user:", user.id);
+            const tokenManager = createGSCTokenManager(user.id);
+            
+            // Add a small delay to ensure tokens are stored
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const gscData = await tokenManager.getStoredGSCData();
+            
+            console.log("🔍 Stored GSC data:", gscData);
+            console.log("🔍 GSC data details:", {
+              hasAccessToken: !!gscData?.accessToken,
+              hasRefreshToken: !!gscData?.refreshToken,
+              hasSiteUrl: !!gscData?.siteUrl,
+              accessTokenLength: gscData?.accessToken?.length,
+              refreshTokenLength: gscData?.refreshToken?.length
+            });
+            
+            if (!gscData?.accessToken || !gscData?.siteUrl) {
+              console.log("❌ Missing GSC access token or site URL");
+              setIsLoading(false);
+              return;
+            }
 
-        // Get valid access token (refresh if needed)
-        const validToken = await tokenManager.getValidAccessToken();
-        if (!validToken) {
-          console.log("❌ Could not get valid access token");
-          setDummyData();
-          return;
-        }
+            // Get valid access token (refresh if needed)
+            const validToken = await tokenManager.getValidAccessToken();
+            if (!validToken) {
+              console.log("❌ Could not get valid access token");
+              setIsLoading(false);
+              return;
+            }
 
-        console.log("✅ Got valid token, fetching low CTR pages...");
-        fetchLowCtrPages(gscData.siteUrl, validToken);
-      } catch (error) {
-        console.error("❌ Error fetching GSC data:", error);
-        setDummyData();
+            console.log("✅ Got valid token, fetching low CTR pages...");
+            fetchLowCtrPages(gscData.siteUrl, validToken);
+          } catch (error) {
+            console.error("❌ Error fetching GSC data:", error);
+            setIsLoading(false);
+          }
+        };
+
+        fetchGSCData();
       }
     };
 
-    fetchGSCData();
+    initializePage();
   }, [user]);
 
-  const setDummyData = () => {
-    const dummyMismatches = [
-      {
-        keyword: "best dentist in South Bend",
-        pageUrl: "/flossing-tips",
-        matchScore: 42,
-        reason: "This page discusses flossing but doesn't mention dental services or location.",
-        suggestion: "Add info about your South Bend dental practice and a CTA for booking."
-      },
-      {
-        keyword: "dental cleaning cost",
-        pageUrl: "/about-us",
-        matchScore: 35,
-        reason: "Page is about the practice but doesn't mention pricing or services.",
-        suggestion: "Add a pricing section and list your dental services with costs."
-      },
-      {
-        keyword: "emergency dentist near me",
-        pageUrl: "/contact",
-        matchScore: 28,
-        reason: "Contact page doesn't mention emergency services or location details.",
-        suggestion: "Add emergency dental services info and highlight your location."
-      },
-      {
-        keyword: "teeth whitening",
-        pageUrl: "/services",
-        matchScore: 65,
-        reason: "Services page mentions whitening but lacks specific details and pricing.",
-        suggestion: "Add detailed whitening procedure info, before/after photos, and pricing."
-      },
-      {
-        keyword: "root canal treatment",
-        pageUrl: "/blog/dental-health",
-        matchScore: 45,
-        reason: "Blog post discusses dental health but doesn't specifically cover root canals.",
-        suggestion: "Create dedicated root canal page or add detailed root canal section."
-      }
-    ];
-    
-    setMismatches(dummyMismatches);
-    setIsLoading(false);
-  };
+
 
   const fetchLowCtrPages = async (siteUrl, token) => {
     const today = new Date();
@@ -189,39 +197,134 @@ export default function IntentMismatch() {
 
     setLowCtrPages(grouped);
 
-    // Convert low CTR data to intent mismatches with dummy scores/reasons
-    const intentMismatches = filteredRows.map((row, index) => {
+    // Convert low CTR data to intent mismatches with real AI analysis
+    const intentMismatches = [];
+    
+    // Process each keyword-page pair with AI analysis
+    for (let i = 0; i < Math.min(filteredRows.length, 10); i++) { // Limit to 10 for demo
+      const row = filteredRows[i];
       const keyword = row.keys[0];
       const pageUrl = row.keys[1];
       
-      // Generate dummy match score (20-70 range for low CTR pages)
-      const matchScore = Math.floor(Math.random() * 50) + 20;
-      
-      // Generate dummy reasons based on common patterns
-      const dummyReasons = [
-        "Page content doesn't directly address the search query",
-        "Missing specific information that searchers expect",
-        "Content is too general and doesn't provide actionable value",
-        "Page lacks the specific details mentioned in the keyword",
-        "Content doesn't match the user's search intent"
-      ];
-      
-      const dummySuggestions = [
-        "Rewrite the introduction to directly address the search query",
-        "Add a dedicated section that answers the specific question",
-        "Include more specific details and actionable information",
-        "Restructure content to better match user expectations",
-        "Add relevant keywords and improve content relevance"
-      ];
-      
-      return {
-        keyword,
-        pageUrl,
-        matchScore,
-        reason: dummyReasons[index % dummyReasons.length],
-        suggestion: dummySuggestions[index % dummySuggestions.length]
-      };
-    });
+      try {
+        // Step 1: Scrape the page content
+        console.log(`🔍 Scraping content for: ${pageUrl}`);
+        const scrapeResponse = await fetch("/api/scrape-content", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pageUrl }),
+        });
+
+        if (!scrapeResponse.ok) {
+          console.error(`❌ Failed to scrape ${pageUrl}: ${scrapeResponse.status}`);
+          continue;
+        }
+
+        const scrapeData = await scrapeResponse.json();
+        console.log(`✅ Scraped content for ${pageUrl}:`, {
+          titleLength: scrapeData.data.title?.length || 0,
+          contentLength: scrapeData.data.textContent?.length || 0,
+          hasHeadings: scrapeData.data.headings?.length > 0
+        });
+        
+        const { title, metaDescription, textContent, headings } = scrapeData.data;
+
+        // Step 2: Check if we have cached results
+        const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(pageUrl)}`;
+        console.log(`🔍 Checking cache for: ${keyword}`);
+        
+        try {
+          const cachedDoc = await getDoc(doc(db, "intentMismatches", cacheKey));
+          
+          let analysis;
+          if (cachedDoc.exists()) {
+            // Use cached result
+            analysis = cachedDoc.data();
+            console.log(`✅ Using cached analysis for ${keyword}`);
+          } else {
+            // Perform new AI analysis
+            console.log(`🤖 Performing AI analysis for: ${keyword}`);
+            const analysisResponse = await fetch("/api/intent-analysis", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                keyword,
+                pageUrl,
+                pageContent: textContent,
+                title,
+                metaDescription,
+                headings
+              }),
+            });
+
+            if (!analysisResponse.ok) {
+              console.error(`❌ Failed to analyze ${keyword} for ${pageUrl}: ${analysisResponse.status}`);
+              throw new Error(`AI analysis failed: ${analysisResponse.status}`);
+            }
+
+            analysis = await analysisResponse.json();
+            console.log(`✅ AI analysis completed for ${keyword}:`, analysis);
+            
+            // Cache the result
+            try {
+              await setDoc(doc(db, "intentMismatches", cacheKey), {
+                ...analysis,
+                userId: user.id,
+                keyword,
+                pageUrl,
+                createdAt: new Date(),
+                title,
+                metaDescription
+              });
+              console.log(`💾 Cached new analysis for ${keyword}`);
+            } catch (cacheError) {
+              console.error(`❌ Failed to cache analysis for ${keyword}:`, cacheError);
+              // Continue without caching
+            }
+          }
+          
+          intentMismatches.push({
+            keyword,
+            pageUrl,
+            matchScore: analysis.matchScore,
+            reason: analysis.reason,
+            suggestion: analysis.suggestedFix,
+            suggestedFix: analysis.suggestedFix // Also save with the original field name for consistency
+          });
+        } catch (error) {
+          console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
+          
+          // Fallback to dummy data if AI analysis fails
+          intentMismatches.push({
+            keyword,
+            pageUrl,
+            matchScore: Math.floor(Math.random() * 50) + 20,
+            reason: "AI analysis failed - using fallback data",
+            suggestion: "Review page content and ensure it matches search intent",
+            suggestedFix: "Review page content and ensure it matches search intent"
+          });
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
+        
+        // Fallback to dummy data if AI analysis fails
+        intentMismatches.push({
+          keyword,
+          pageUrl,
+          matchScore: Math.floor(Math.random() * 50) + 20,
+          reason: "AI analysis failed - using fallback data",
+          suggestion: "Review page content and ensure it matches search intent",
+          suggestedFix: "Review page content and ensure it matches search intent"
+        });
+      }
+    }
 
     setMismatches(intentMismatches);
     setIsLoading(false);
@@ -331,16 +434,30 @@ export default function IntentMismatch() {
             <div>
               <h3 className="text-lg font-semibold mb-2">Generate Intent Analysis</h3>
               <p className="text-sm text-muted-foreground">
-                Analyze your Google Search Console data to find keyword-page mismatches
+                {mismatches.length > 0 
+                  ? `Showing ${mismatches.length} cached results. Click to refresh with fresh GSC data.`
+                  : "Analyze your Google Search Console data to find keyword-page mismatches"
+                }
               </p>
             </div>
-            <Button 
-              onClick={generateMismatches} 
-              disabled={isGenerating || !data?.hasGSC}
-              className="bg-[#00bf63] hover:bg-[#00bf63]/90"
-            >
-              {isGenerating ? "Generating..." : !data?.hasGSC ? "Connect GSC First" : "Generate Analysis"}
-            </Button>
+            <div className="flex gap-2">
+              {mismatches.length > 0 && (
+                <Button 
+                  onClick={loadCachedResults} 
+                  variant="outline"
+                  disabled={isLoading}
+                >
+                  Load Cached
+                </Button>
+              )}
+              <Button 
+                onClick={generateMismatches} 
+                disabled={isGenerating || !data?.hasGSC}
+                className="bg-[#00bf63] hover:bg-[#00bf63]/90"
+              >
+                {isGenerating ? "Generating..." : !data?.hasGSC ? "Connect GSC First" : "Generate Analysis"}
+              </Button>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -362,25 +479,33 @@ export default function IntentMismatch() {
         </Alert>
       )}
 
-      {/* Filter */}
-      <div className="mb-6 flex items-center gap-4">
-        <div className="flex items-center gap-2">
-          <span className="text-sm font-medium">Filter by score:</span>
-          <Select value={filterScore} onValueChange={setFilterScore}>
-            <SelectTrigger className="w-[180px]">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="all">All Scores</SelectItem>
-              <SelectItem value="low">Low (&lt; 40)</SelectItem>
-              <SelectItem value="medium">Medium (40-69)</SelectItem>
-              <SelectItem value="high">High (70+)</SelectItem>
-            </SelectContent>
-          </Select>
+      {/* Filter and Status */}
+      <div className="mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2">
+            <span className="text-sm font-medium">Filter by score:</span>
+            <Select value={filterScore} onValueChange={setFilterScore}>
+              <SelectTrigger className="w-[180px]">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                <SelectItem value="all">All Scores</SelectItem>
+                <SelectItem value="low">Low (&lt; 40)</SelectItem>
+                <SelectItem value="medium">Medium (40-69)</SelectItem>
+                <SelectItem value="high">High (70+)</SelectItem>
+              </SelectContent>
+            </Select>
+          </div>
+          <span className="text-sm text-muted-foreground">
+            {filteredMismatches.length} of {mismatches.length} mismatches
+          </span>
         </div>
-        <span className="text-sm text-muted-foreground">
-          {filteredMismatches.length} of {mismatches.length} mismatches
-        </span>
+        {mismatches.length > 0 && (
+          <div className="flex items-center gap-2 text-sm">
+            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+            <span className="text-muted-foreground">Cached data loaded</span>
+          </div>
+        )}
       </div>
 
       {/* Results */}
@@ -398,11 +523,22 @@ export default function IntentMismatch() {
           <CardContent className="pt-6">
             <div className="text-center py-8">
               <CheckCircle2 className="h-12 w-12 text-green-500 mx-auto mb-4" />
-              <h3 className="text-lg font-medium mb-2">No mismatches found</h3>
-              <p className="text-muted-foreground mb-4">Great job! Your content appears to align well with search intent.</p>
-              <Button onClick={generateMismatches} className="bg-[#00bf63] hover:bg-[#00bf63]/90">
-                Generate Analysis
-              </Button>
+              <h3 className="text-lg font-medium mb-2">No intent mismatches found</h3>
+              <p className="text-muted-foreground mb-4">
+                {data?.hasGSC 
+                  ? "No cached analysis found. Generate your first intent mismatch analysis to get started."
+                  : "Connect your Google Search Console to analyze intent mismatches."
+                }
+              </p>
+              {data?.hasGSC ? (
+                <Button onClick={generateMismatches} className="bg-[#00bf63] hover:bg-[#00bf63]/90">
+                  Generate Analysis
+                </Button>
+              ) : (
+                <Button onClick={() => router.push("/dashboard")} className="bg-[#00bf63] hover:bg-[#00bf63]/90">
+                  Connect GSC
+                </Button>
+              )}
             </div>
           </CardContent>
         </Card>

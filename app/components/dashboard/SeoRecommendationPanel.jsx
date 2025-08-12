@@ -60,18 +60,34 @@ const SeoRecommendationPanel = ({
 
     if (checked && user?.id && pageUrl) {
       try {
-        const token = localStorage.getItem("gscAccessToken");
-        const siteUrl = localStorage.getItem("gscSiteUrl");
-
+        // Get GSC data using the token manager
+        const { createGSCTokenManager } = await import("../../lib/gscTokenManager");
+        const tokenManager = createGSCTokenManager(user.id);
+        
         let preStats = { impressions: 0, clicks: 0, ctr: 0, position: 0 };
+        let gscToken = null;
+        let siteUrl = null;
 
-        if (token && siteUrl) {
-          const res = await fetch("/api/gsc/page-metrics", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({ token, siteUrl, pageUrl }),
-          });
-          if (res.ok) preStats = await res.json();
+        try {
+          // Get stored GSC data
+          const gscData = await tokenManager.getStoredGSCData();
+          if (gscData?.accessToken && gscData?.siteUrl) {
+            gscToken = gscData.accessToken;
+            siteUrl = gscData.siteUrl;
+            
+            // Get valid access token
+            const validToken = await tokenManager.getValidAccessToken();
+            if (validToken) {
+              const res = await fetch("/api/gsc/page-metrics", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ token: validToken, siteUrl, pageUrl }),
+              });
+              if (res.ok) preStats = await res.json();
+            }
+          }
+        } catch (error) {
+          console.error("Error getting GSC data:", error);
         }
 
         const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
@@ -85,6 +101,8 @@ const SeoRecommendationPanel = ({
             description: suggestedDescription,
             status: "implemented",
             preStats,
+            gscToken, // Save the token for the Firebase function
+            siteUrl,  // Save the site URL for the Firebase function
           },
           { merge: true }
         );
