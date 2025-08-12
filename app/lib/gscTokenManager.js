@@ -90,7 +90,10 @@ export class GSCTokenManager {
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
     
-    return (now - connectedTime) > oneHour;
+    // Add 5-minute buffer to be safe
+    const bufferTime = 5 * 60 * 1000;
+    
+    return (now - connectedTime) > (oneHour - bufferTime);
   }
 
   // Update last sync timestamp

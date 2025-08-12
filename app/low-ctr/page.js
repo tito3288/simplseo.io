@@ -25,6 +25,39 @@ import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
+import { Calendar, ChevronDown } from "lucide-react";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
+
+// Helper function to create safe document IDs
+const createSafeDocId = (userId, pageUrl) => {
+  // Create a more unique hash to avoid collisions
+  let hash = 0;
+  for (let i = 0; i < pageUrl.length; i++) {
+    const char = pageUrl.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  // Convert to positive hex string and take first 8 chars
+  const urlHash = Math.abs(hash).toString(16).padStart(8, '0').substring(0, 8);
+  const finalId = `${userId}_${urlHash}`;
+  
+  // Debug logging
+  console.log("🔍 createSafeDocId Debug:");
+  console.log("  userId:", userId);
+  console.log("  pageUrl:", pageUrl);
+  console.log("  raw hash:", hash);
+  console.log("  urlHash:", urlHash);
+  console.log("  finalId:", finalId);
+  console.log("  expectedId:", "c7uSLI9gpbUSoeRv05zeDkIER763_3b0a68f3");
+  console.log("  match:", finalId === "c7uSLI9gpbUSoeRv05zeDkIER763_3b0a68f3");
+  
+  return finalId;
+};
 
 // ✅ Add filtering function at top
 const isRelevantPage = (url) =>
@@ -33,6 +66,7 @@ const isRelevantPage = (url) =>
   !url.includes("/category/") &&
   !url.includes("/event") &&
   !url.includes("/faq") &&
+  !url.includes("/author/") &&
   !url.includes("/author/") &&
   !url.includes("/topics/") &&
   !url.includes("/rvm") &&
@@ -57,6 +91,7 @@ export default function LowCtrPage() {
   const [sitemapUrls, setSitemapUrls] = useState([]);
   const [implementedPages, setImplementedPages] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [timePeriod, setTimePeriod] = useState(28); // Default to 28 days
   const shouldShowLoader = useMinimumLoading(loading, 3000);
 
   useEffect(() => {
@@ -105,7 +140,7 @@ export default function LowCtrPage() {
     };
 
     fetchGSCData();
-  }, [user]);
+  }, [user, timePeriod]); // Add timePeriod dependency
 
   useEffect(() => {
     const loadWpPages = async () => {
@@ -162,7 +197,7 @@ export default function LowCtrPage() {
   const fetchLowCtrPages = async (siteUrl, token) => {
     const today = new Date();
     const start = new Date(today);
-    start.setDate(today.getDate() - 28);
+    start.setDate(today.getDate() - timePeriod);
 
     const format = (d) => d.toISOString().split("T")[0];
     const from = format(start);
@@ -273,7 +308,7 @@ export default function LowCtrPage() {
 
     useEffect(() => {
       const fetchDelta = async () => {
-        const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
+        const docId = createSafeDocId(user.id, pageUrl);
         const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
         const data = snapshot.data();
         if (!data?.postStats || !data?.preStats) return;
@@ -351,10 +386,31 @@ export default function LowCtrPage() {
 
       <Card className="mb-6">
         <CardHeader>
-          <CardTitle>Raw Low CTR Data</CardTitle>
-          <CardDescription>
-            Pages with impressions but 0% click-through rate
-          </CardDescription>
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle>Raw Low CTR Data</CardTitle>
+              <CardDescription>
+                Pages with impressions but 0% click-through rate
+              </CardDescription>
+            </div>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button variant="outline" className="flex items-center gap-2">
+                  <Calendar className="h-4 w-4" />
+                  Last {timePeriod} days
+                  <ChevronDown className="h-4 w-4" />
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => setTimePeriod(7)}>
+                  Last 7 days
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => setTimePeriod(28)}>
+                  Last 28 days
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+          </div>
         </CardHeader>
         <CardContent>
           {lowCtrPages.length === 0 ? (

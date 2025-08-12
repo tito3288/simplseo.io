@@ -251,7 +251,15 @@ exports.listImplementedSeoTips = functions.https.onRequest(async (req, res) => {
 // 🔧 Manual trigger to test postStats update for a specific document
 exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
   try {
-    const { docId } = req.query;
+    // Handle both GET and POST requests
+    let docId;
+    if (req.method === 'GET') {
+      docId = req.query.docId;
+    } else if (req.method === 'POST') {
+      docId = req.body.docId;
+    } else {
+      return res.status(405).json({ error: "Method not allowed. Use GET or POST." });
+    }
     
     if (!docId) {
       return res.status(400).json({ error: "docId parameter is required" });
@@ -304,7 +312,7 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
 
     console.log(`🌐 Fetching postStats for ${pageUrl} from API`);
     
-    const res = await fetch(
+    const apiRes = await fetch(
       "https://simplseo-io.vercel.app/api/gsc/page-metrics",
       {
         method: "POST",
@@ -315,11 +323,11 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
 
     let postStats;
     
-    if (res.ok) {
-      postStats = await res.json();
+    if (apiRes.ok) {
+      postStats = await apiRes.json();
       console.log(`✅ Fetched real postStats from API:`, postStats);
     } else {
-      console.log(`⚠️ API failed with status ${res.status}, using dummy postStats`);
+      console.log(`⚠️ API failed with status ${apiRes.status}, using dummy postStats`);
       postStats = {
         impressions: Math.floor(Math.random() * 100) + 50,
         clicks: Math.floor(Math.random() * 20) + 5,

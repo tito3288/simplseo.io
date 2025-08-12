@@ -21,6 +21,20 @@ import {
   TooltipContent,
 } from "@/components/ui/tooltip";
 
+// Helper function to create safe document IDs
+const createSafeDocId = (userId, pageUrl) => {
+  // Create a more unique hash to avoid collisions
+  let hash = 0;
+  for (let i = 0; i < pageUrl.length; i++) {
+    const char = pageUrl.charCodeAt(i);
+    hash = ((hash << 5) - hash) + char;
+    hash = hash & hash; // Convert to 32-bit integer
+  }
+  // Convert to positive hex string and take first 16 chars
+  const urlHash = Math.abs(hash).toString(16).padStart(8, '0').substring(0, 8);
+  return `${userId}_${urlHash}`;
+};
+
 const SeoRecommendationPanel = ({
   title,
   pageUrl,
@@ -90,7 +104,7 @@ const SeoRecommendationPanel = ({
           console.error("Error getting GSC data:", error);
         }
 
-        const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
+        const docId = createSafeDocId(user.id, pageUrl);
         await setDoc(
           doc(db, "implementedSeoTips", docId),
           {
@@ -150,23 +164,27 @@ const SeoRecommendationPanel = ({
   };
 
   useEffect(() => {
+    console.log(`🔍 [${pageUrl}] useEffect triggered - checking if implemented`);
     const fetchExisting = async () => {
-      if (!user?.id || !pageUrl) return;
+      if (!user?.id || !pageUrl) {
+        console.log(`🔍 [${pageUrl}] Missing user.id or pageUrl, skipping`);
+        return;
+      }
 
       try {
-        const docId = `${user.id}_${encodeURIComponent(pageUrl)}`;
-        console.log("🔍 Fetching implementedSeoTips document:", docId);
+        const docId = createSafeDocId(user.id, pageUrl);
+        console.log(`🔍 [${pageUrl}] Fetching implementedSeoTips document:`, docId);
         const snapshot = await getDoc(doc(db, "implementedSeoTips", docId));
         const data = snapshot.data();
-        console.log("🔍 Document data:", data);
+        console.log(`🔍 [${pageUrl}] Document data:`, data);
         
         // Check if document exists and has the right status
         if (!data || !data.status || data.status !== "implemented") {
-          console.log("🔍 Document doesn't exist or status is not 'implemented'");
+          console.log(`🔍 [${pageUrl}] Document doesn't exist or status is not 'implemented'`);
           return;
         }
         
-        console.log("✅ Document found and status is 'implemented'");
+        console.log(`✅ [${pageUrl}] Document found and status is 'implemented'`);
 
         setIsImplemented(true);
 
@@ -203,11 +221,11 @@ const SeoRecommendationPanel = ({
           setShowRefreshButton(true);
         }
       } catch (error) {
-        console.error("❌ Error fetching implementedSeoTips:", error);
-        console.error("❌ Error details:", {
+        console.error(`❌ [${pageUrl}] Error fetching implementedSeoTips:`, error);
+        console.error(`❌ [${pageUrl}] Error details:`, {
           code: error.code,
           message: error.message,
-          docId: `${user.id}_${encodeURIComponent(pageUrl)}`
+          docId: createSafeDocId(user.id, pageUrl)
         });
         return;
       }
