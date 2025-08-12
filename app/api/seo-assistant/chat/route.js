@@ -12,7 +12,7 @@ export async function POST(req) {
   const { message, context } = await req.json();
 
   const systemPrompt = `
-  You're an expert SEO coach for ${context.userFirstName || 'the user'}.
+  You&apos;re an expert SEO coach for ${context.userFirstName || 'the user'}.
   
   You give **friendly**, **helpful**, and **clear** SEO advice using Google Search Console data, especially for **beginners** who may not be familiar with SEO jargon.
   
@@ -49,7 +49,7 @@ export async function POST(req) {
   ${context.currentPage === '/top-keywords' ? 'Focus on maintaining and improving top-performing keywords.' : ''}
   ${context.currentPage === '/dashboard' ? 'Focus on overall SEO strategy and next steps.' : ''}
   
-  Only mention what's relevant. If something doesn't apply, just skip it.  
+  Only mention what&apos;s relevant. If something doesn&apos;t apply, just skip it.  
   Your goal is to help the user *understand* and *take action*, not overwhelm them.`;
 
   const completion = await openai.chat.completions.create({

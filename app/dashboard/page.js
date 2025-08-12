@@ -222,7 +222,7 @@ export default function Dashboard() {
       
       if (!hasShownGscError) {
         toast.error("No GSC Properties Found", {
-          description: "This Google account doesn't have any Search Console properties. Please add your website to Google Search Console first.",
+          description: "This Google account doesn&apos;t have any Search Console properties. Please add your website to Google Search Console first.",
           duration: 30000, // 30 seconds - longer duration
           style: {
             backgroundColor: '#fef2f2',
@@ -233,7 +233,7 @@ export default function Dashboard() {
         setGscAlert({
           type: "no-properties",
           title: "No Google Search Console Properties Found",
-          description: "This Google account doesn't have any Search Console properties. You need to add your website to Google Search Console first.",
+          description: "This Google account doesn&apos;t have any Search Console properties. You need to add your website to Google Search Console first.",
           action: "Set Up GSC"
         });
       }

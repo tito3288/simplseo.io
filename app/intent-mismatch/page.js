@@ -616,8 +616,8 @@ export default function IntentMismatch() {
       <Alert className="mt-6">
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
-          Intent mismatches occur when your page ranks for a keyword but doesn't fully satisfy what the searcher is looking for. 
-          This can lead to high bounce rates and poor user experience. Use the "Fix This" button to get AI-powered suggestions for improving your content.
+          Intent mismatches occur when your page ranks for a keyword but doesn&apos;t fully satisfy what the searcher is looking for. 
+          This can lead to high bounce rates and poor user experience. Use the &quot;Fix This&quot; button to get AI-powered suggestions for improving your content.
         </AlertDescription>
       </Alert>
     </MainLayout>

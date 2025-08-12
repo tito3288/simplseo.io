@@ -53,7 +53,7 @@ export class GSCTokenManager {
           accessTokenLength: storedData.gscAccessToken?.length
         });
       } else {
-        console.log("❌ Verification failed - Document doesn't exist after storage");
+        console.log("❌ Verification failed - Document doesn&apos;t exist after storage");
       }
     } catch (error) {
       console.error("❌ Failed to store GSC tokens:", error);

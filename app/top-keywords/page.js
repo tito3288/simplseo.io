@@ -90,7 +90,7 @@ export default function TopKeywordsPage() {
 
           setKeywords(formatted);
         } else {
-          setError("No keyword data found. This could mean your site hasn't received any search traffic in the past 28 days.");
+          setError("No keyword data found. This could mean your site hasn&apos;t received any search traffic in the past 28 days.");
         }
       } catch (err) {
         console.error("❌ Failed to load keyword data:", err);

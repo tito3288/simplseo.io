@@ -180,7 +180,7 @@ const SeoRecommendationPanel = ({
         
         // Check if document exists and has the right status
         if (!data || !data.status || data.status !== "implemented") {
-          console.log(`🔍 [${pageUrl}] Document doesn't exist or status is not 'implemented'`);
+          console.log(`🔍 [${pageUrl}] Document doesn&apos;t exist or status is not &apos;implemented&apos;`);
           return;
         }
         
@@ -317,7 +317,7 @@ const SeoRecommendationPanel = ({
                     onCheckedChange={onCheckboxChange}
                   />
                   <Label htmlFor="implemented">
-                    I've updated this on my site
+                    I&apos;ve updated this on my site
                   </Label>
                 </>
               ) : (
@@ -410,7 +410,7 @@ const SeoRecommendationPanel = ({
           <div className="bg-white p-6 rounded shadow-md max-w-sm">
             <h2 className="text-lg font-semibold mb-4">Confirm Update</h2>
             <p className="text-sm mb-4">
-              Are you sure you've updated this SEO recommendation on your live
+              Are you sure you&apos;ve updated this SEO recommendation on your live
               site? This will impact your performance tracking.
             </p>
             <div className="flex justify-end gap-2">

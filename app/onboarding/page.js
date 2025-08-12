@@ -48,7 +48,7 @@ const cmsPlatforms = [
   "Webflow",
   "Custom",
   "Other",
-  "I don't know",
+          "I don&apos;t know",
 ];
 
 const OnboardingWizard = () => {
