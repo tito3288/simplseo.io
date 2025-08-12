@@ -378,7 +378,7 @@ const SeoRecommendationPanel = ({
 
                 {/* ✅ NEW: Continuous Progress Info */}
                 <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
-                  <span className="font-medium">💡 Tip:</span> After 7 days, your progress will appear in the SEO Progress section above. 
+                  <span className="font-medium">💡 Tip:</span> After 7 days, your progress will appear in the SEO Progress section below. 
                   The system continues monitoring your performance daily, so check back regularly for ongoing updates!
                 </div>
               </div>

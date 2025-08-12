@@ -568,24 +568,38 @@ export default function Dashboard() {
           </CardDescription>
         </CardHeader>
         <CardContent>
-          <div className="h-[250px] w-full">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={gscImpressionTrends}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} />
-                <XAxis dataKey="date" />
-                <YAxis />
-                <Tooltip />
-                <Line
-                  type="monotone"
-                  dataKey="impressions"
-                  stroke="black"
-                  strokeWidth={1}
-                  dot={{ r: 5, fill: "#00BF63" }}
-                  activeDot={{ r: 6, fill: "#00BF63" }}
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+          {shouldShowLoader ? (
+            <div className="text-center py-8">
+              <SquashBounceLoader size="lg" className="mb-4" />
+              <p className="text-sm text-muted-foreground">Loading chart data...</p>
+            </div>
+          ) : !isGscConnected ? (
+            <div className="text-center py-8">
+              <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
+                <Unlink className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <p className="text-sm text-muted-foreground">Connect GSC to see chart data</p>
+            </div>
+          ) : (
+            <div className="h-[250px] w-full">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={gscImpressionTrends}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} />
+                  <XAxis dataKey="date" />
+                  <YAxis />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="impressions"
+                    stroke="black"
+                    strokeWidth={1}
+                    dot={{ r: 5, fill: "#00BF63" }}
+                    activeDot={{ r: 6, fill: "#00BF63" }}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
         </CardContent>
       </Card>
 
