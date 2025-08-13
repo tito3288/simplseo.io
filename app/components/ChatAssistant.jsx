@@ -56,6 +56,100 @@ const ChatAssistant = ({
     }
   }, []);
 
+  // Check for stored chat context when component mounts
+  useEffect(() => {
+    const chatContext = localStorage.getItem("chatContext");
+    if (chatContext) {
+      try {
+        const context = JSON.parse(chatContext);
+        if (context.type === "intent_mismatch") {
+          // Add the context message to the chat
+          const contextMessage = {
+            id: Date.now().toString(),
+            role: "user",
+            content: context.message,
+            timestamp: new Date(),
+          };
+          
+          setMessages(prev => [...prev, contextMessage]);
+          
+          // Clear the stored context after using it
+          localStorage.removeItem("chatContext");
+          
+          // Automatically send the message to get AI response
+          setTimeout(() => {
+            sendMessageToAI(contextMessage.content, context.mismatch);
+          }, 1000);
+        }
+      } catch (error) {
+        console.error("Error parsing chat context:", error);
+      }
+    }
+  }, []);
+
+  // Function to send message to AI (separate from handleSendMessage)
+  const sendMessageToAI = async (messageContent, pageContext = null) => {
+    setIsThinking(true);
+    
+    try {
+      const res = await fetch("/api/seo-assistant/chat", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          message: messageContent,
+          context: {
+            aiTips,
+            gscKeywords,
+            easyWins,
+            topPages,
+            lowCtrPages,
+            impressionTrends,
+            onboarding: data,
+            // Enhanced context for better responses
+            currentPage: typeof window !== 'undefined' ? window.location.pathname : '/dashboard',
+            userFirstName: firstName,
+            timestamp: new Date().toISOString(),
+            // Include comprehensive page context if available
+            pageContext: pageContext ? {
+              targetKeyword: pageContext.targetKeyword,
+              pageUrl: pageContext.currentPageUrl,
+              matchScore: pageContext.currentMatchScore,
+              pageStructure: pageContext.pageStructure,
+              fullPageContent: pageContext.fullPageContent,
+              allHeadings: pageContext.allHeadings,
+              seoGuidance: pageContext.seoGuidance
+            } : null
+          },
+        }),
+      });
+
+      const { reply } = await res.json();
+
+      const assistantMessage = {
+        id: Date.now().toString(),
+        role: "assistant",
+        content: reply,
+        timestamp: new Date(),
+      };
+
+      setMessages(prev => [...prev, assistantMessage]);
+    } catch (error) {
+      console.error("OpenAI error:", error);
+      setMessages(prev => [
+        ...prev,
+        {
+          id: Date.now().toString(),
+          role: "assistant",
+          content:
+            "Sorry, something went wrong while trying to give you SEO advice. Try again shortly.",
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsThinking(false);
+    }
+  };
+
   // Save conversation on every update
   useEffect(() => {
     const payload = {

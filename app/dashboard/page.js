@@ -705,15 +705,20 @@ export default function Dashboard() {
       </Card>
 
 
-      {/* Top Pages Card */}
+      {/* Top Row - Action Items */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
 
         {/* Low CTR Fixes Card */}
-        <Card className="col-span-full md:col-span-1 h-full">
+        <Card className="col-span-full md:col-span-1 h-full border-red-200 shadow-red-100">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Low CTR Fixes</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Low CTR Fixes
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                    High Priority
+                  </span>
+                </CardTitle>
                 <CardDescription>
                   These pages show up in searches but aren&apos;t getting many
                   clicks. Consider rewriting their titles and meta descriptions
@@ -774,20 +779,24 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Top Pages This Month Card */}
-        <Card className="col-span-full md:col-span-1 h-full">
+        {/* Easy Win Opportunities Card */}
+        <Card className="col-span-full md:col-span-1 h-full border-yellow-200 shadow-yellow-100">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Top Pages</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Easy Win Opportunities
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">
+                    Medium Priority
+                  </span>
+                </CardTitle>
                 <CardDescription>
-                  Pages that appeared in search results in the last {dateRange === "all" ? "year" : `${dateRange} days`} (may include
-                  0-click pages)
+                  Keywords close to ranking on Page 1 in the last {dateRange === "all" ? "year" : `${dateRange} days`}
                 </CardDescription>
               </div>
-              {/* <Button variant="outline" size="sm">
-                See More
-              </Button> */}
+              <Button asChild variant="outline" size="sm">
+                <Link href="/easy-wins">See More</Link>
+              </Button>
             </div>
           </CardHeader>
           <CardContent>
@@ -795,28 +804,14 @@ export default function Dashboard() {
               shouldShowLoader ? (
                 <div className="text-center py-8">
                   <SquashBounceLoader size="lg" className="mb-4" />
-                  <p className="text-sm text-muted-foreground">Loading pages...</p>
+                  <p className="text-sm text-muted-foreground">Loading opportunities...</p>
                 </div>
-              ) : topPages.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No data yet</p>
               ) : (
-                <ul className="space-y-2">
-                  {topPages.map((page) => (
-                    <li key={page.page} className="flex flex-col">
-                      <a
-                        href={page.page}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-[#00BF63] underline truncate max-w-full"
-                      >
-                        {page.page}
-                      </a>
-                      <div className="text-sm text-muted-foreground">
-                        {page.clicks} clicks
-                      </div>
-                    </li>
-                  ))}
-                </ul>
+                <KeywordTable
+                  keywords={easyWins}
+                  title="Low Hanging Fruit"
+                  description="These keywords are on page 2 of search results. Focus on these for quick wins!"
+                />
               )
             ) : (
               <div className="text-center py-6">
@@ -827,7 +822,7 @@ export default function Dashboard() {
                   Connect Google Search Console
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  See your top performing pages by connecting your Google Search Console account
+                  Find keywords close to ranking on page 1 for quick SEO wins
                 </p>
                 <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
@@ -836,14 +831,19 @@ export default function Dashboard() {
         </Card>
       </div>
 
-
+      {/* Bottom Row - Analytics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Top Performing Keywords Card */}
-        <Card className="col-span-full md:col-span-1 h-full">
+        <Card className="col-span-full md:col-span-1 h-full border-green-200 shadow-green-100">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Top Performing Keywords</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Top Performing Keywords
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                    Low Priority
+                  </span>
+                </CardTitle>
                 <CardDescription>
                   Your most clicked search terms in the last {dateRange === "all" ? "year" : `${dateRange} days`}
                 </CardDescription>
@@ -865,37 +865,57 @@ export default function Dashboard() {
           </CardContent>
         </Card>
 
-        {/* Easy Win Opportunities Card */}
-        <Card className="col-span-full md:col-span-1 h-full">
+        {/* Top Pages Card */}
+        <Card className="col-span-full md:col-span-1 h-full border-green-200 shadow-green-100">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
-                <CardTitle>Easy Win Opportunities</CardTitle>
+                <CardTitle className="flex items-center gap-2">
+                  Top Pages
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                    Low Priority
+                  </span>
+                </CardTitle>
                 <CardDescription>
-                  Keywords close to ranking on Page 1 in the last {dateRange === "all" ? "year" : `${dateRange} days`}
+                  Pages that appeared in search results in the last {dateRange === "all" ? "year" : `${dateRange} days`} (may include
+                  0-click pages)
                 </CardDescription>
               </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/easy-wins">See More</Link>
-              </Button>
+              {/* <Button variant="outline" size="sm">
+                See More
+              </Button> */}
             </div>
           </CardHeader>
           <CardContent>
             {shouldShowLoader ? (
               <div className="text-center py-8">
                 <SquashBounceLoader size="lg" className="mb-4" />
-                <p className="text-sm text-muted-foreground">Loading opportunities...</p>
+                <p className="text-sm text-muted-foreground">Loading pages...</p>
               </div>
+            ) : topPages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No data yet</p>
             ) : (
-              <KeywordTable
-                keywords={easyWins}
-                title="Low Hanging Fruit"
-                description="These keywords are on page 2 of search results. Focus on these for quick wins!"
-              />
+              <ul className="space-y-2">
+                {topPages.map((page) => (
+                  <li key={page.page} className="flex flex-col">
+                    <a
+                      href={page.page}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[#00BF63] underline truncate max-w-full"
+                    >
+                      {page.page}
+                    </a>
+                    <div className="text-sm text-muted-foreground">
+                      {page.clicks} clicks
+                    </div>
+                  </li>
+                ))}
+              </ul>
             )}
           </CardContent>
         </Card>
-      </div> 
+      </div>
 
     </MainLayout>
   );

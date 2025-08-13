@@ -46,10 +46,45 @@ export default function IntentMismatch() {
       const snapshot = await getDocs(q);
       const cachedMismatches = snapshot.docs.map(doc => {
         const data = doc.data();
-        // Map Firebase field names to frontend field names
+        console.log(`🔍 Loading cached data for ${data.keyword}:`, {
+          hasTitle: !!data.title,
+          hasMetaDescription: !!data.metaDescription,
+          hasPageContent: !!data.pageContent,
+          hasPageHeadings: !!data.pageHeadings,
+          hasPageStructure: !!data.pageStructure,
+          pageContentLength: data.pageContent?.length || 0,
+          pageHeadingsCount: data.pageHeadings?.length || 0
+        });
+        
+        // Map Firebase field names to frontend field names and ensure consistency
         return {
           ...data,
-          suggestion: data.suggestedFix || data.suggestion, // Use suggestedFix if available, fallback to suggestion
+          // Ensure we have the correct field names
+          suggestion: data.suggestedFix || data.suggestion,
+          // Map page data fields consistently
+          title: data.title || data.pageTitle || 'Not available',
+          metaDescription: data.metaDescription || data.pageMetaDescription || 'Not available',
+          // Ensure other fields are available
+          pageUrl: data.pageUrl,
+          keyword: data.keyword,
+          matchScore: data.matchScore,
+          reason: data.reason,
+          suggestedFix: data.suggestedFix,
+          // Map page structure fields from cached data
+          pageContent: data.pageContent || data.fullPageContent || 'Not available',
+          pageHeadings: data.pageHeadings || data.allHeadings || [],
+          // Map page structure data
+          pageStructure: data.pageStructure || {
+            headings: data.pageHeadings || data.allHeadings || [],
+            contentLength: data.pageContent ? data.pageContent.length : 0,
+            contentPreview: data.pageContent ? data.pageContent.substring(0, 500) : 'Not available',
+            hasContent: !!data.pageContent,
+            headingsCount: data.pageHeadings ? data.pageHeadings.length : 0
+          },
+          // Map full page content
+          fullPageContent: data.fullPageContent || data.pageContent || '',
+          // Map all headings
+          allHeadings: data.allHeadings || data.pageHeadings || []
         };
       });
       
@@ -161,7 +196,8 @@ export default function IntentMismatch() {
     console.log("🔍 GSC Raw Data:", json);
     if (!json.rows) {
       console.log("❌ No rows returned from GSC");
-      setDummyData();
+      setMismatches([]);
+      setIsLoading(false);
       return;
     }
     console.log("✅ GSC returned", json.rows.length, "rows");
@@ -203,7 +239,7 @@ export default function IntentMismatch() {
     // Process each keyword-page pair with AI analysis
     for (let i = 0; i < Math.min(filteredRows.length, 10); i++) { // Limit to 10 for demo
       const row = filteredRows[i];
-      const keyword = row.keys[0];
+      const keyword = row.keys[0].replace(/^\[|\]$/g, '');
       const pageUrl = row.keys[1];
       
       try {
@@ -229,7 +265,7 @@ export default function IntentMismatch() {
           hasHeadings: scrapeData.data.headings?.length > 0
         });
         
-        const { title, metaDescription, textContent, headings } = scrapeData.data;
+        let { title, metaDescription, textContent, headings } = scrapeData.data;
 
         // Step 2: Check if we have cached results
         const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(pageUrl)}`;
@@ -243,6 +279,20 @@ export default function IntentMismatch() {
             // Use cached result
             analysis = cachedDoc.data();
             console.log(`✅ Using cached analysis for ${keyword}`);
+            
+            // Ensure we have the page data from cache
+            if (analysis.title && analysis.metaDescription) {
+              title = analysis.title;
+              metaDescription = analysis.metaDescription;
+            }
+            
+            // Also get page structure data from cache if available
+            if (analysis.pageContent) {
+              textContent = analysis.pageContent;
+            }
+            if (analysis.pageHeadings) {
+              headings = analysis.pageHeadings;
+            }
           } else {
             // Perform new AI analysis
             console.log(`🤖 Performing AI analysis for: ${keyword}`);
@@ -278,7 +328,30 @@ export default function IntentMismatch() {
                 pageUrl,
                 createdAt: new Date(),
                 title,
-                metaDescription
+                metaDescription,
+                // Store comprehensive page data for better context
+                pageContent: textContent?.substring(0, 2000), // Store more content for better context
+                pageHeadings: headings,
+                // Store the full crawl data for comprehensive analysis
+                fullPageData: {
+                  title,
+                  metaDescription,
+                  contentLength: textContent?.length || 0,
+                  headingsCount: headings?.length || 0,
+                  hasContent: !!textContent
+                },
+                // Store page structure data with consistent field names
+                pageStructure: {
+                  headings: headings || [],
+                  contentLength: textContent ? textContent.length : 0,
+                  contentPreview: textContent ? textContent.substring(0, 500) : '',
+                  hasContent: !!textContent,
+                  headingsCount: headings ? headings.length : 0
+                },
+                // Store full page content for detailed analysis
+                fullPageContent: textContent || '',
+                // Store all headings for structure analysis
+                allHeadings: headings || []
               });
               console.log(`💾 Cached new analysis for ${keyword}`);
             } catch (cacheError) {
@@ -293,7 +366,30 @@ export default function IntentMismatch() {
             matchScore: analysis.matchScore,
             reason: analysis.reason,
             suggestion: analysis.suggestedFix,
-            suggestedFix: analysis.suggestedFix // Also save with the original field name for consistency
+            suggestedFix: analysis.suggestedFix, // Also save with the original field name for consistency
+            // Include the page data for comprehensive context
+            title,
+            metaDescription,
+            pageContent: textContent?.substring(0, 2000), // Store more content for better context
+            pageHeadings: headings,
+            // Store analysis metadata
+            analysisData: {
+              matchScore: analysis.matchScore,
+              reason: analysis.reason,
+              suggestedFix: analysis.suggestedFix
+            },
+            // Store comprehensive page structure data
+            pageStructure: {
+              headings: headings || [],
+              contentLength: textContent ? textContent.length : 0,
+              contentPreview: textContent ? textContent.substring(0, 500) : '',
+              hasContent: !!textContent,
+              headingsCount: headings ? headings.length : 0
+            },
+            // Store full page content for detailed analysis
+            fullPageContent: textContent || '',
+            // Store all headings for structure analysis
+            allHeadings: headings || []
           });
         } catch (error) {
           console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
@@ -305,7 +401,22 @@ export default function IntentMismatch() {
             matchScore: Math.floor(Math.random() * 50) + 20,
             reason: "AI analysis failed - using fallback data",
             suggestion: "Review page content and ensure it matches search intent",
-            suggestedFix: "Review page content and ensure it matches search intent"
+            suggestedFix: "Review page content and ensure it matches search intent",
+            // Include basic page data even in fallback
+            title: title || 'Not available',
+            metaDescription: metaDescription || 'Not available',
+            pageContent: textContent?.substring(0, 1000) || 'Content not available',
+            pageHeadings: headings || [],
+            // Include basic page structure
+            pageStructure: {
+              headings: headings || [],
+              contentLength: textContent ? textContent.length : 0,
+              contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
+              hasContent: !!textContent,
+              headingsCount: headings ? headings.length : 0
+            },
+            fullPageContent: textContent || '',
+            allHeadings: headings || []
           });
         }
 
@@ -321,7 +432,22 @@ export default function IntentMismatch() {
           matchScore: Math.floor(Math.random() * 50) + 20,
           reason: "AI analysis failed - using fallback data",
           suggestion: "Review page content and ensure it matches search intent",
-          suggestedFix: "Review page content and ensure it matches search intent"
+          suggestedFix: "Review page content and ensure it matches search intent",
+          // Include basic page data even in fallback
+          title: title || 'Not available',
+          metaDescription: metaDescription || 'Not available',
+          pageContent: textContent?.substring(0, 1000) || 'Content not available',
+          pageHeadings: headings || [],
+          // Include basic page structure
+          pageStructure: {
+            headings: headings || [],
+            contentLength: textContent ? textContent.length : 0,
+            contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
+            hasContent: !!textContent,
+            headingsCount: headings ? headings.length : 0
+          },
+          fullPageContent: textContent || '',
+          allHeadings: headings || []
         });
       }
     }
@@ -394,17 +520,107 @@ export default function IntentMismatch() {
   });
 
   const openChatWithContext = (mismatch) => {
-    const message = `I need help fixing an intent mismatch. My page "${mismatch.pageUrl}" ranks for "${mismatch.keyword}" but has a match score of ${mismatch.matchScore}. The issue is: ${mismatch.reason}. Can you suggest content improvements?`;
+    // Create a comprehensive, SEO-friendly message with complete page context
+    const message = `I need help optimizing my page for better search performance. Here's the complete context:
+
+🔑 **Target Keyword:** "${mismatch.keyword.replace(/^\[|\]$/g, '')}"
+🌐 **Page URL:** ${mismatch.pageUrl}
+📊 **Current Match Score:** ${mismatch.matchScore}/100
+
+**Current Page Content:**
+- Title: "${mismatch.title || 'Not available'}"
+- Meta Description: "${mismatch.metaDescription || 'Not available'}"
+
+**Page Structure & Content:**
+- Page Content Length: ${mismatch.pageContent ? mismatch.pageContent.length + ' characters' : 'Not available'}
+- Headings Found: ${mismatch.pageHeadings ? mismatch.pageHeadings.length + ' headings' : 'Not available'}
+- Content Preview: "${mismatch.pageContent ? mismatch.pageContent.substring(0, 200) + '...' : 'Not available'}"
+
+**Current Headings Structure:**
+${mismatch.pageHeadings ? mismatch.pageHeadings.map((heading, index) => `  ${index + 1}. ${heading}`).join('\n') : 'No headings available'}
+
+**SEO Issue:** ${mismatch.reason}
+
+**Goal:** Improve this page's performance for "${mismatch.keyword.replace(/^\[|\]$/g, '')}" while maintaining natural content flow and avoiding over-optimization.
+
+Can you analyze my page structure and give me specific, actionable advice for improving this page's SEO performance naturally?`;
     
-    // Store the context in localStorage for the chat component to pick up
+    // Store comprehensive context for the chatbot with ALL page data
     localStorage.setItem("chatContext", JSON.stringify({
       type: "intent_mismatch",
-      mismatch,
-      message
+      mismatch: {
+        ...mismatch,
+        // Include all the crawl data for context
+        pageTitle: mismatch.title,
+        pageMetaDescription: mismatch.metaDescription,
+        // Add the target keyword for focus
+        targetKeyword: mismatch.keyword.replace(/^\[|\]$/g, ''),
+        // Include the current page URL for reference
+        currentPageUrl: mismatch.pageUrl,
+        // Add the match score for context
+        currentMatchScore: mismatch.matchScore,
+        // Include complete page structure data
+        pageStructure: {
+          headings: mismatch.pageHeadings || [],
+          contentLength: mismatch.pageContent ? mismatch.pageContent.length : 0,
+          contentPreview: mismatch.pageContent ? mismatch.pageContent.substring(0, 500) : '',
+          hasContent: !!mismatch.pageContent,
+          headingsCount: mismatch.pageHeadings ? mismatch.pageHeadings.length : 0
+        },
+        // Include the full page content for detailed analysis
+        fullPageContent: mismatch.pageContent || '',
+        // Include all headings for structure analysis
+        allHeadings: mismatch.pageHeadings || []
+      },
+      message,
+      // Add comprehensive SEO guidance parameters
+      seoGuidance: {
+        approach: "natural_optimization",
+        focus: "user_experience_first",
+        avoid: "keyword_stuffing",
+        strategy: "semantic_relevance",
+        // Add specific SEO best practices
+        bestPractices: {
+          keywordDensity: "Keep keyword usage natural (1-2% max)",
+          contentQuality: "Focus on valuable, informative content",
+          userIntent: "Match what users actually want to find",
+          futureProofing: "Optimize for semantic relevance, not exact matches",
+          competitiveAnalysis: "Consider what competitors are doing well"
+        },
+        // Add optimization priorities based on page structure
+        optimizationPriorities: [
+          "Analyze current page structure and headings",
+          "Improve page title and meta description",
+          "Enhance H1 and main heading structure", 
+          "Add relevant, valuable content sections",
+          "Improve internal linking opportunities",
+          "Ensure mobile-friendly user experience"
+        ],
+        // Add page-specific analysis guidance
+        pageAnalysis: {
+          checkHeadings: "Review all H1, H2, H3 tags for keyword opportunities",
+          contentGaps: "Identify areas where target keyword could naturally fit",
+          structureOptimization: "Optimize heading hierarchy for better SEO",
+          contentEnhancement: "Enhance existing content sections with target keywords"
+        }
+      }
     }));
     
-    // Navigate to dashboard with chat open
-    router.push("/dashboard?openChat=true");
+    // Instead of navigating to dashboard, open the chat directly
+    // We'll use a custom event to trigger the chat opening
+    const chatEvent = new CustomEvent('openChatAssistant', {
+      detail: {
+        context: 'intent_mismatch',
+        message: message,
+        hasPageStructure: !!(mismatch.pageHeadings && mismatch.pageContent)
+      }
+    });
+    window.dispatchEvent(chatEvent);
+    
+    // Show a toast notification that chat context is loaded
+    toast.success("Complete page context loaded!", {
+      description: "Click the chat button in the bottom right to get detailed SEO help for this page."
+    });
   };
 
   if (authLoading || !user) {
@@ -543,73 +759,121 @@ export default function IntentMismatch() {
           </CardContent>
         </Card>
       ) : (
-        <Card>
-          <CardHeader>
-            <CardTitle>Intent Mismatches</CardTitle>
-            <CardDescription>
-              Pages that rank for keywords but may not satisfy searcher expectations
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead>
-                  <tr className="border-b">
-                    <th className="text-left py-3 px-4 font-medium">Keyword</th>
-                    <th className="text-left py-3 px-4 font-medium">Page</th>
-                    <th className="text-left py-3 px-4 font-medium">Match Score</th>
-                    <th className="text-left py-3 px-4 font-medium">Mismatch Reason</th>
-                    <th className="text-left py-3 px-4 font-medium">Suggested Fix</th>
-                    <th className="text-left py-3 px-4 font-medium">Action</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredMismatches.map((mismatch, index) => (
-                    <tr key={index} className="border-b hover:bg-muted/50">
-                      <td className="py-3 px-4">
-                        <div className="font-medium">{mismatch.keyword}</div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <a 
-                          href={mismatch.pageUrl} 
-                          target="_blank" 
-                          rel="noopener noreferrer"
-                          className="text-[#00bf63] hover:underline flex items-center gap-1"
-                        >
-                          {mismatch.pageUrl}
-                          <ExternalLink className="w-3 h-3" />
-                        </a>
-                      </td>
-                      <td className="py-3 px-4">
-                        {getScoreBadge(mismatch.matchScore)}
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm text-muted-foreground max-w-xs">
-                          {mismatch.reason}
+        <>
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Intent Mismatches</CardTitle>
+              <CardDescription>
+                Pages that rank for keywords but may not satisfy searcher expectations
+              </CardDescription>
+            </CardHeader>
+          </Card>
+          
+          <div className="space-y-4">
+          {filteredMismatches.map((mismatch, index) => (
+            <Card key={index} className="hover:shadow-md transition-shadow">
+              <CardContent className="pt-6">
+                <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                  {/* Left Column - Keyword & Page */}
+                  <div className="space-y-3">
+                    <div>
+                      <h3 className="font-semibold text-lg text-gray-900 mb-1">
+                        {mismatch.keyword.replace(/^\[|\]$/g, '')}
+                      </h3>
+                      <a 
+                        href={mismatch.pageUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="text-[#00bf63] hover:underline text-sm flex items-center gap-1"
+                      >
+                        {mismatch.pageUrl}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      {getScoreBadge(mismatch.matchScore)}
+                    </div>
+                  </div>
+
+                  {/* Middle Column - Mismatch Reason */}
+                  <div className="space-y-2">
+                    <h4 className="font-medium text-gray-900 text-sm">Mismatch Reason</h4>
+                    <div className="text-sm text-gray-600 leading-relaxed">
+                      {mismatch.reason.length > 150 ? (
+                        <div>
+                          <p>
+                            {mismatch.reason.length > 150 && !mismatch.showFullReason 
+                              ? `${mismatch.reason.substring(0, 150)}...`
+                              : mismatch.reason
+                            }
+                          </p>
+                          <button 
+                            onClick={() => {
+                              const updatedMismatches = [...mismatches];
+                              updatedMismatches[index] = {
+                                ...updatedMismatches[index],
+                                showFullReason: !updatedMismatches[index].showFullReason
+                              };
+                              setMismatches(updatedMismatches);
+                            }}
+                            className="mt-2 text-[#00bf63] hover:text-[#00bf63]/80 text-sm font-medium cursor-pointer"
+                          >
+                            {mismatch.showFullReason ? 'Show less' : 'Read more'}
+                          </button>
                         </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <div className="text-sm max-w-xs">
-                          {mismatch.suggestion}
-                        </div>
-                      </td>
-                      <td className="py-3 px-4">
-                        <Button 
-                          size="sm" 
-                          onClick={() => openChatWithContext(mismatch)}
-                          className="bg-[#00bf63] hover:bg-[#00bf63]/90"
-                        >
-                          <MessageSquare className="w-4 h-4 mr-1" />
-                          Fix This
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
+                      ) : (
+                        <p>{mismatch.reason}</p>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Right Column - Suggested Fix & Action */}
+                  <div className="space-y-3">
+                    <div>
+                      <h4 className="font-medium text-gray-900 text-sm mb-2">Suggested Fix</h4>
+                      <div className="text-sm text-gray-600 leading-relaxed">
+                        {mismatch.suggestion.length > 120 ? (
+                          <div>
+                            <p>
+                              {mismatch.suggestion.length > 120 && !mismatch.showFullSuggestion 
+                                ? `${mismatch.suggestion.substring(0, 120)}...`
+                                : mismatch.suggestion
+                              }
+                            </p>
+                            <button 
+                              onClick={() => {
+                                const updatedMismatches = [...mismatches];
+                                updatedMismatches[index] = {
+                                  ...updatedMismatches[index],
+                                  showFullSuggestion: !updatedMismatches[index].showFullSuggestion
+                                };
+                                setMismatches(updatedMismatches);
+                              }}
+                              className="mt-2 text-[#00bf63] hover:text-[#00bf63]/80 text-sm font-medium cursor-pointer"
+                            >
+                              {mismatch.showFullSuggestion ? 'Show less' : 'Read more'}
+                            </button>
+                          </div>
+                        ) : (
+                          <p>{mismatch.suggestion}</p>
+                        )}
+                      </div>
+                    </div>
+                    <Button 
+                      size="sm" 
+                      onClick={() => openChatWithContext(mismatch)}
+                      className="bg-[#00bf63] hover:bg-[#00bf63]/90 w-full"
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      Fix This
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+          ))}
+        </div>
+      </>
       )}
 
       {/* Info Alert */}

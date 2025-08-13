@@ -120,6 +120,23 @@ const MainLayout = ({
     setShowTooltip(false); // Hide tooltip when chat is opened
   };
 
+  // Listen for chat open events from other components (like intent mismatch page)
+  useEffect(() => {
+    const handleChatOpenEvent = (event) => {
+      if (event.detail?.context === 'intent_mismatch') {
+        setIsChatOpen(true);
+        // The chat context is already stored in localStorage
+        console.log('Chat opened from intent mismatch page with context:', event.detail);
+      }
+    };
+
+    window.addEventListener('openChatAssistant', handleChatOpenEvent);
+    
+    return () => {
+      window.removeEventListener('openChatAssistant', handleChatOpenEvent);
+    };
+  }, []);
+
   // Auto-animate every 30 seconds
   useEffect(() => {
     if (isChatOpen) return; // Don't animate if chat is open
