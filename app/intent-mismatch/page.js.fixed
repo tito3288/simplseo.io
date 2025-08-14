@@ -34,801 +34,7 @@ export default function IntentMismatch() {
   const [locationAlertInteractions, setLocationAlertInteractions] = useState(new Map());
   const shouldShowLoader = useMinimumLoading(isLoading, 3000);
 
-  useEffect(() => {
-    // Load cached results first for faster initial load
-    const loadCachedResults = async () => {
-      if (!user?.id) return;
-      
-      try {
-        console.log("🔍 Loading cached intent mismatches...");
-        const { collection, query, where, getDocs } = await import("firebase/firestore");
-        const { db } = await import("../lib/firebaseConfig");
-        
-        const q = query(
-          collection(db, "intentMismatches"),
-          where("userId", "==", user.id)
-        );
-        
-        const snapshot = await getDocs(q);
-        const cachedMismatches = snapshot.docs.map(doc => {
-          const data = doc.data();
-          console.log(`🔍 Loading cached data for ${data.keyword}:`, {
-            hasTitle: !!data.title,
-            hasMetaDescription: !!data.metaDescription,
-            hasPageContent: !!data.pageContent,
-            hasPageHeadings: !!data.pageHeadings,
-            hasPageStructure: !!data.pageStructure,
-            pageContentLength: data.pageContent?.length || 0,
-            pageHeadingsCount: data.pageHeadings?.length || 0
-          });
-          
-          // Map Firebase field names to frontend field names and ensure consistency
-          return {
-            ...data,
-            // Ensure we have the correct field names
-            suggestion: data.suggestedFix || data.suggestion,
-            // Map page data fields consistently
-            title: data.title || data.pageTitle || 'Not available',
-            metaDescription: data.metaDescription || data.pageMetaDescription || 'Not available',
-            // Ensure other fields are available
-            pageUrl: data.pageUrl,
-            keyword: data.keyword,
-            matchScore: data.matchScore,
-            reason: data.reason,
-            suggestedFix: data.suggestedFix,
-            // Map page structure fields from cached data
-            pageContent: data.pageContent || data.fullPageContent || 'Not available',
-            pageHeadings: data.pageHeadings || data.allHeadings || [],
-            // Map page structure data
-            pageStructure: data.pageStructure || {
-              headings: data.pageHeadings || data.allHeadings || [],
-              contentLength: data.pageContent ? data.pageContent.length : 0,
-              contentPreview: data.pageContent ? data.pageContent.substring(0, 500) : 'Not available',
-              hasContent: !!data.pageContent,
-              headingsCount: data.pageHeadings ? data.pageHeadings.length : 0
-            },
-            // Map full page content
-            fullPageContent: data.fullPageContent || data.pageContent || '',
-            // Map all headings
-            allHeadings: data.allHeadings || data.pageHeadings || []
-          };
-        });
-        
-        // Filter out original documents when there's a fixed version available
-        const filteredMismatches = cachedMismatches.filter(mismatch => {
-          // If this is a fixed version, keep it
-          if (mismatch.locationIssueFixed || mismatch.isFixedVersion) {
-            return true;
-          }
-          
-          // If this is an original document, check if there's a fixed version
-          const hasFixedVersion = cachedMismatches.some(other => 
-            other.locationIssueFixed && 
-            other.keyword === mismatch.keyword &&
-            other.pageUrl === mismatch.pageUrl
-          );
-          
-          // Only keep original if there's no fixed version
-          return !hasFixedVersion;
-        });
-        
-        if (filteredMismatches.length > 0) {
-          console.log(`✅ Loaded ${filteredMismatches.length} filtered mismatches (removed ${cachedMismatches.length - filteredMismatches.length} duplicates)`);
-          setMismatches(filteredMismatches);
-          setIsLoading(false);
-          return true;
-        }
-        
-        return false;
-      } catch (error) {
-        console.error("❌ Error loading cached results:", error);
-        return false;
-      }
-    };
-
-    const fetchLowCtrPages = async (siteUrl, token) => {
-      const today = new Date();
-      const start = new Date(today);
-      start.setDate(today.getDate() - 28);
-
-      const format = (d) => d.toISOString().split("T")[0];
-      const from = format(start);
-      const to = format(today);
-
-      const res = await fetch(
-        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
-          siteUrl
-        )}/searchAnalytics/query`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            startDate: from,
-            endDate: to,
-            dimensions: ["query", "page"],
-            rowLimit: 250,
-          }),
-        }
-      );
-
-      const json = await res.json();
-      console.log("🔍 GSC Raw Data:", json);
-      if (!json.rows) {
-        console.log("❌ No rows returned from GSC");
-        setMismatches([]);
-        setIsLoading(false);
-        return;
-      }
-      console.log("✅ GSC returned", json.rows.length, "rows");
-
-      // Debug: Log all rows before filtering
-      console.log("🔍 All GSC rows before filtering:", json.rows.slice(0, 5));
-      
-      const filteredRows = json.rows.filter(
-        (r) =>
-          parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
-      );
-      
-      console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
-      console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
-      
-      const grouped = Object.values(
-        filteredRows
-          .reduce((acc, row) => {
-            const page = row.keys[1];
-            if (!acc[page]) {
-              acc[page] = {
-                page,
-                clicks: 0,
-                impressions: 0,
-                ctr: "0%",
-              };
-            }
-            acc[page].clicks += row.clicks;
-            acc[page].impressions += row.impressions;
-            return acc;
-          }, {})
-      );
-
-      setLowCtrPages(grouped);
-
-      // Convert low CTR data to intent mismatches with real AI analysis
-      const intentMismatches = [];
-      
-      // Process each keyword-page pair with AI analysis
-      for (let i = 0; i < Math.min(filteredRows.length, 10); i++) { // Limit to 10 for demo
-        const row = filteredRows[i];
-        const keyword = row.keys[0].replace(/^\[|\]$/g, '');
-        const pageUrl = row.keys[1];
-        
-        try {
-          // Step 1: Scrape the page content
-          console.log(`🔍 Scraping content for: ${pageUrl}`);
-          const scrapeResponse = await fetch("/api/scrape-content", {
-            method: "POST",
-            headers: {
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({ pageUrl }),
-          });
-
-          if (!scrapeResponse.ok) {
-            console.error(`❌ Failed to scrape ${pageUrl}: ${scrapeResponse.status}`);
-            continue;
-          }
-
-          const scrapeData = await scrapeResponse.json();
-          console.log(`✅ Scraped content for ${pageUrl}:`, {
-            titleLength: scrapeData.data.title?.length || 0,
-            contentLength: scrapeData.data.textContent?.length || 0,
-            hasHeadings: scrapeData.data.headings?.length > 0
-          });
-          
-          let { title, metaDescription, textContent, headings } = scrapeData.data;
-
-          // Step 2: Check if we have cached results
-          const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(pageUrl)}`;
-          console.log(`🔍 Checking cache for: ${keyword}`);
-          
-          try {
-            const cachedDoc = await getDoc(doc(db, "intentMismatches", cacheKey));
-            
-            let analysis;
-            if (cachedDoc.exists()) {
-              // Use cached result
-              analysis = cachedDoc.data();
-              console.log(`✅ Using cached analysis for ${keyword}`);
-              
-              // Ensure we have the page data from cache
-              if (analysis.title && analysis.metaDescription) {
-                title = analysis.title;
-                metaDescription = analysis.metaDescription;
-              }
-              
-              // Also get page structure data from cache if available
-              if (analysis.pageContent) {
-                textContent = analysis.pageContent;
-              }
-              if (analysis.pageHeadings) {
-                headings = analysis.pageHeadings;
-              }
-            } else {
-              // Perform new AI analysis
-              console.log(`🤖 Performing AI analysis for: ${keyword}`);
-              const analysisResponse = await fetch("/api/intent-analysis", {
-                method: "POST",
-                headers: {
-                  "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                  keyword,
-                  pageUrl,
-                  pageContent: textContent,
-                  title,
-                  metaDescription,
-                  headings
-                }),
-              });
-
-              if (!analysisResponse.ok) {
-                console.error(`❌ Failed to analyze ${keyword} for ${pageUrl}: ${analysisResponse.status}`);
-                throw new Error(`AI analysis failed: ${analysisResponse.status}`);
-              }
-
-              analysis = await analysisResponse.json();
-              console.log(`✅ AI analysis completed for ${keyword}:`, analysis);
-              
-              // Cache the result
-              try {
-                await setDoc(doc(db, "intentMismatches", cacheKey), {
-                  ...analysis,
-                  userId: user.id,
-                  keyword,
-                  pageUrl,
-                  createdAt: new Date(),
-                  title,
-                  metaDescription,
-                  // Store comprehensive page data for better context
-                  pageContent: textContent?.substring(0, 2000), // Store more content for better context
-                  pageHeadings: headings,
-                  // Store the full crawl data for comprehensive analysis
-                  fullPageData: {
-                    title,
-                    metaDescription,
-                    contentLength: textContent?.length || 0,
-                    headingsCount: headings?.length || 0,
-                    hasContent: !!textContent
-                  },
-                  // Store page structure data with consistent field names
-                  pageStructure: {
-                    headings: headings || [],
-                    contentLength: textContent ? textContent.length : 0,
-                    contentPreview: textContent ? textContent.substring(0, 500) : '',
-                    hasContent: !!textContent,
-                    headingsCount: headings ? headings.length : 0
-                  },
-                  // Store full page content for detailed analysis
-                  fullPageContent: textContent || '',
-                  // Store all headings for structure analysis
-                  allHeadings: headings || []
-                });
-                console.log(`💾 Cached new analysis for ${keyword}`);
-              } catch (cacheError) {
-                console.error(`❌ Failed to cache analysis for ${keyword}:`, cacheError);
-                // Continue without caching
-              }
-            }
-            
-            intentMismatches.push({
-              keyword,
-              pageUrl,
-              matchScore: analysis.matchScore,
-              reason: analysis.reason,
-              suggestion: analysis.suggestedFix,
-              suggestedFix: analysis.suggestedFix, // Also save with the original field name for consistency
-              // Include the page data for comprehensive context
-              title,
-              metaDescription,
-              pageContent: textContent?.substring(0, 2000), // Store more content for better context
-              pageHeadings: headings,
-              // Store analysis metadata
-              analysisData: {
-                matchScore: analysis.matchScore,
-                reason: analysis.reason,
-                suggestedFix: analysis.suggestedFix
-              },
-              // Store comprehensive page structure data
-              pageStructure: {
-                headings: headings || [],
-                contentLength: textContent ? textContent.length : 0,
-                contentPreview: textContent ? textContent.substring(0, 500) : '',
-                hasContent: !!textContent,
-                headingsCount: headings ? headings.length : 0
-              },
-              // Store full page content for detailed analysis
-              fullPageContent: textContent || '',
-              // Store all headings for structure analysis
-              allHeadings: headings || []
-            });
-          } catch (error) {
-            console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
-            
-            // Fallback to dummy data if AI analysis fails
-            intentMismatches.push({
-              keyword,
-              pageUrl,
-              matchScore: Math.floor(Math.random() * 50) + 20,
-              reason: "AI analysis failed - using fallback data",
-              suggestion: "Review page content and ensure it matches search intent",
-              suggestedFix: "Review page content and ensure it matches search intent",
-              // Include basic page data even in fallback
-              title: title || 'Not available',
-              metaDescription: metaDescription || 'Not available',
-              pageContent: textContent?.substring(0, 1000) || 'Content not available',
-              pageHeadings: headings || [],
-              // Include basic page structure
-              pageStructure: {
-                headings: headings || [],
-                contentLength: textContent ? textContent.length : 0,
-                contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
-                hasContent: !!textContent,
-                headingsCount: headings ? headings.length : 0
-              },
-              fullPageContent: textContent || '',
-              allHeadings: headings || []
-            });
-          }
-
-          // Small delay to avoid rate limiting
-          await new Promise(resolve => setTimeout(resolve, 1000));
-        } catch (error) {
-          console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
-          
-          // Fallback to dummy data if AI analysis fails
-          intentMismatches.push({
-            keyword,
-            pageUrl,
-            matchScore: Math.floor(Math.random() * 50) + 20,
-            reason: "AI analysis failed - using fallback data",
-            suggestion: "Review page content and ensure it matches search intent",
-            suggestedFix: "Review page content and ensure it matches search intent",
-            // Include basic page data even in fallback
-            title: title || 'Not available',
-            metaDescription: metaDescription || 'Not available',
-            pageContent: textContent?.substring(0, 1000) || 'Content not available',
-            pageHeadings: headings || [],
-            // Include basic page structure
-            pageStructure: {
-              headings: headings || [],
-              contentLength: textContent ? textContent.length : 0,
-              contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
-              hasContent: !!textContent,
-              headingsCount: headings ? headings.length : 0
-            },
-            fullPageContent: textContent || '',
-            allHeadings: headings || []
-          });
-        }
-      }
-
-      setMismatches(intentMismatches);
-      setIsLoading(false);
-    };
-
-    const initializePage = async () => {
-      if (!user?.id) {
-        console.log("❌ No user ID");
-        return;
-      }
-
-      // Try to load cached results first
-      const hasCached = await loadCachedResults();
-      
-      if (!hasCached) {
-        // If no cached data, check GSC and load fresh data
-        const fetchGSCData = async () => {
-          try {
-            console.log("🔍 Fetching GSC data for user:", user.id);
-            const tokenManager = createGSCTokenManager(user.id);
-            
-            // Add a small delay to ensure tokens are stored
-            await new Promise(resolve => setTimeout(resolve, 1000));
-            
-            const gscData = await tokenManager.getStoredGSCData();
-            
-            console.log("🔍 Stored GSC data:", gscData);
-            console.log("🔍 GSC data details:", {
-              hasAccessToken: !!gscData?.accessToken,
-              hasRefreshToken: !!gscData?.refreshToken,
-              hasSiteUrl: !!gscData?.siteUrl,
-              accessTokenLength: gscData?.accessToken?.length,
-              refreshTokenLength: gscData?.refreshToken?.length
-            });
-            
-            if (!gscData?.accessToken || !gscData?.siteUrl) {
-              console.log("❌ Missing GSC access token or site URL");
-              setIsLoading(false);
-              return;
-            }
-
-            // Get valid access token (refresh if needed)
-            const validToken = await tokenManager.getValidAccessToken();
-            if (!validToken) {
-              console.log("❌ Could not get valid access token");
-              setIsLoading(false);
-              return;
-            }
-
-            console.log("✅ Got valid token, fetching low CTR pages...");
-            fetchLowCtrPages(gscData.siteUrl, validToken);
-          } catch (error) {
-            console.error("❌ Error fetching GSC data:", error);
-            setIsLoading(false);
-          }
-        };
-
-        fetchGSCData();
-      }
-    };
-
-    initializePage();
-  }, [user]);
-
-  // Note: We need to create a separate function for generateMismatches that can access the functions
-  const generateMismatches = async () => {
-    try {
-      setIsGenerating(true);
-      
-      // Re-fetch GSC data to get fresh intent mismatches
-      if (!user?.id) {
-        toast.error("User not authenticated");
-        return;
-      }
-
-      const tokenManager = createGSCTokenManager(user.id);
-      const gscData = await tokenManager.getStoredGSCData();
-      
-      if (!gscData?.accessToken || !gscData?.siteUrl) {
-        toast.error("Google Search Console not connected");
-        return;
-      }
-
-      const validToken = await tokenManager.getValidAccessToken();
-      if (!validToken) {
-        toast.error("Could not get valid access token");
-        return;
-      }
-
-      // Clear old intent mismatches before generating new ones
-      try {
-        console.log("🧹 Clearing old intent mismatches...");
-        const { collection, query, where, getDocs, deleteDoc } = await import("firebase/firestore");
-        
-        const q = query(
-          collection(db, "intentMismatches"),
-          where("userId", "==", user.id)
-        );
-        
-        const snapshot = await getDocs(q);
-        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
-        await Promise.all(deletePromises);
-        
-        console.log(`✅ Cleared ${snapshot.docs.length} old intent mismatches`);
-        toast.success(`Cleared ${snapshot.docs.length} old analyses`);
-      } catch (clearError) {
-        console.error("⚠️ Warning: Could not clear old data:", clearError);
-        // Continue with generation even if clearing fails
-      }
-
-      // We need to recreate fetchLowCtrPages here since it's now inside useEffect
-      const fetchLowCtrPages = async (siteUrl, token) => {
-        const today = new Date();
-        const start = new Date(today);
-        start.setDate(today.getDate() - 28);
-
-        const format = (d) => d.toISOString().split("T")[0];
-        const from = format(start);
-        const to = format(today);
-
-        const res = await fetch(
-          `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
-            siteUrl
-          )}/searchAnalytics/query`,
-          {
-            method: "POST",
-            headers: {
-              Authorization: `Bearer ${token}`,
-              "Content-Type": "application/json",
-            },
-            body: JSON.stringify({
-              startDate: from,
-              endDate: to,
-              dimensions: ["query", "page"],
-              rowLimit: 250,
-            }),
-          }
-        );
-
-        const json = await res.json();
-        console.log("🔍 GSC Raw Data:", json);
-        if (!json.rows) {
-          console.log("❌ No rows returned from GSC");
-          setMismatches([]);
-          setIsLoading(false);
-          return;
-        }
-        console.log("✅ GSC returned", json.rows.length, "rows");
-
-        // Debug: Log all rows before filtering
-        console.log("🔍 All GSC rows before filtering:", json.rows.slice(0, 5));
-        
-        const filteredRows = json.rows.filter(
-          (r) =>
-            parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
-        );
-        
-        console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
-        console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
-        
-        const grouped = Object.values(
-          filteredRows
-            .reduce((acc, row) => {
-              const page = row.keys[1];
-              if (!acc[page]) {
-                acc[page] = {
-                  page,
-                  clicks: 0,
-                  impressions: 0,
-                  ctr: "0%",
-                };
-              }
-              acc[page].clicks += row.clicks;
-              acc[page].impressions += row.impressions;
-              return acc;
-            }, {})
-        );
-
-        setLowCtrPages(grouped);
-
-        // Convert low CTR data to intent mismatches with real AI analysis
-        const intentMismatches = [];
-        
-        // Process each keyword-page pair with AI analysis
-        for (let i = 0; i < Math.min(filteredRows.length, 10); i++) { // Limit to 10 for demo
-          const row = filteredRows[i];
-          const keyword = row.keys[0].replace(/^\[|\]$/g, '');
-          const pageUrl = row.keys[1];
-          
-          try {
-            // Step 1: Scrape the page content
-            console.log(`🔍 Scraping content for: ${pageUrl}`);
-            const scrapeResponse = await fetch("/api/scrape-content", {
-              method: "POST",
-              headers: {
-                "Content-Type": "application/json",
-              },
-              body: JSON.stringify({ pageUrl }),
-            });
-
-            if (!scrapeResponse.ok) {
-              console.error(`❌ Failed to scrape ${pageUrl}: ${scrapeResponse.status}`);
-              continue;
-            }
-
-            const scrapeData = await scrapeResponse.json();
-            console.log(`✅ Scraped content for ${pageUrl}:`, {
-              titleLength: scrapeData.data.title?.length || 0,
-              contentLength: scrapeData.data.textContent?.length || 0,
-              hasHeadings: scrapeData.data.headings?.length > 0
-            });
-            
-            let { title, metaDescription, textContent, headings } = scrapeData.data;
-
-            // Step 2: Check if we have cached results
-            const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(pageUrl)}`;
-            console.log(`🔍 Checking cache for: ${keyword}`);
-            
-            try {
-              const cachedDoc = await getDoc(doc(db, "intentMismatches", cacheKey));
-              
-              let analysis;
-              if (cachedDoc.exists()) {
-                // Use cached result
-                analysis = cachedDoc.data();
-                console.log(`✅ Using cached analysis for ${keyword}`);
-                
-                // Ensure we have the page data from cache
-                if (analysis.title && analysis.metaDescription) {
-                  title = analysis.title;
-                  metaDescription = analysis.metaDescription;
-                }
-                
-                // Also get page structure data from cache if available
-                if (analysis.pageContent) {
-                  textContent = analysis.pageContent;
-                }
-                if (analysis.pageHeadings) {
-                  headings = analysis.pageHeadings;
-                }
-              } else {
-                // Perform new AI analysis
-                console.log(`🤖 Performing AI analysis for: ${keyword}`);
-                const analysisResponse = await fetch("/api/intent-analysis", {
-                  method: "POST",
-                  headers: {
-                    "Content-Type": "application/json",
-                  },
-                  body: JSON.stringify({
-                    keyword,
-                    pageUrl,
-                    pageContent: textContent,
-                    title,
-                    metaDescription,
-                    headings
-                  }),
-                });
-
-                if (!analysisResponse.ok) {
-                  console.error(`❌ Failed to analyze ${keyword} for ${pageUrl}: ${analysisResponse.status}`);
-                  throw new Error(`AI analysis failed: ${analysisResponse.status}`);
-                }
-
-                analysis = await analysisResponse.json();
-                console.log(`✅ AI analysis completed for ${keyword}:`, analysis);
-                
-                // Cache the result
-                try {
-                  await setDoc(doc(db, "intentMismatches", cacheKey), {
-                    ...analysis,
-                    userId: user.id,
-                    keyword,
-                    pageUrl,
-                    createdAt: new Date(),
-                    title,
-                    metaDescription,
-                    // Store comprehensive page data for better context
-                    pageContent: textContent?.substring(0, 2000), // Store more content for better context
-                    pageHeadings: headings,
-                    // Store the full crawl data for comprehensive analysis
-                    fullPageData: {
-                      title,
-                      metaDescription,
-                      contentLength: textContent?.length || 0,
-                      headingsCount: headings?.length || 0,
-                      hasContent: !!textContent
-                    },
-                    // Store page structure data with consistent field names
-                    pageStructure: {
-                      headings: headings || [],
-                      contentLength: textContent ? textContent.length : 0,
-                      contentPreview: textContent ? textContent.substring(0, 500) : '',
-                      hasContent: !!textContent,
-                      headingsCount: headings ? headings.length : 0
-                    },
-                    // Store full page content for detailed analysis
-                    fullPageContent: textContent || '',
-                    // Store all headings for structure analysis
-                    allHeadings: headings || []
-                  });
-                  console.log(`💾 Cached new analysis for ${keyword}`);
-                } catch (cacheError) {
-                  console.error(`❌ Failed to cache analysis for ${keyword}:`, cacheError);
-                  // Continue without caching
-                }
-              }
-              
-              intentMismatches.push({
-                keyword,
-                pageUrl,
-                matchScore: analysis.matchScore,
-                reason: analysis.reason,
-                suggestion: analysis.suggestedFix,
-                suggestedFix: analysis.suggestedFix, // Also save with the original field name for consistency
-                // Include the page data for comprehensive context
-                title,
-                metaDescription,
-                pageContent: textContent?.substring(0, 2000), // Store more content for better context
-                pageHeadings: headings,
-                // Store analysis metadata
-                analysisData: {
-                  matchScore: analysis.matchScore,
-                  reason: analysis.reason,
-                  suggestedFix: analysis.suggestedFix
-                },
-                // Store comprehensive page structure data
-                pageStructure: {
-                  headings: headings || [],
-                  contentLength: textContent ? textContent.length : 0,
-                  contentPreview: textContent ? textContent.substring(0, 500) : '',
-                  hasContent: !!textContent,
-                  headingsCount: headings ? headings.length : 0
-                },
-                // Store full page content for detailed analysis
-                fullPageContent: textContent || '',
-                // Store all headings for structure analysis
-                allHeadings: headings || []
-              });
-            } catch (error) {
-              console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
-              
-              // Fallback to dummy data if AI analysis fails
-              intentMismatches.push({
-                keyword,
-                pageUrl,
-                matchScore: Math.floor(Math.random() * 50) + 20,
-                reason: "AI analysis failed - using fallback data",
-                suggestion: "Review page content and ensure it matches search intent",
-                suggestedFix: "Review page content and ensure it matches search intent",
-                // Include basic page data even in fallback
-                title: title || 'Not available',
-                metaDescription: metaDescription || 'Not available',
-                pageContent: textContent?.substring(0, 1000) || 'Content not available',
-                pageHeadings: headings || [],
-                // Include basic page structure
-                pageStructure: {
-                  headings: headings || [],
-                  contentLength: textContent ? textContent.length : 0,
-                  contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
-                  hasContent: !!textContent,
-                  headingsCount: headings ? headings.length : 0
-                },
-                fullPageContent: textContent || '',
-                allHeadings: headings || []
-              });
-            }
-
-            // Small delay to avoid rate limiting
-            await new Promise(resolve => setTimeout(resolve, 1000));
-          } catch (error) {
-            console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
-            
-            // Fallback to dummy data if AI analysis fails
-            intentMismatches.push({
-              keyword,
-              pageUrl,
-              matchScore: Math.floor(Math.random() * 50) + 20,
-              reason: "AI analysis failed - using fallback data",
-              suggestion: "Review page content and ensure it matches search intent",
-              suggestedFix: "Review page content and ensure it matches search intent",
-              // Include basic page data even in fallback
-              title: title || 'Not available',
-              metaDescription: metaDescription || 'Not available',
-              pageContent: textContent?.substring(0, 1000) || 'Content not available',
-              pageHeadings: headings || [],
-              // Include basic page structure
-              pageStructure: {
-                headings: headings || [],
-                contentLength: textContent ? textContent.length : 0,
-                contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
-                hasContent: !!textContent,
-                headingsCount: headings ? headings.length : 0
-              },
-              fullPageContent: textContent || '',
-              allHeadings: headings || []
-            });
-          }
-        }
-
-        setMismatches(intentMismatches);
-        setIsLoading(false);
-      };
-
-      // Fetch fresh data
-      await fetchLowCtrPages(gscData.siteUrl, validToken);
-      toast.success("Generated fresh intent mismatches from GSC data");
-      
-    } catch (error) {
-      console.error("Error generating intent mismatches:", error);
-      toast.error("Failed to generate intent mismatches");
-    } finally {
-      setIsGenerating(false);
-    }
-  };
-
-  // We also need to create a loadCachedResults function that can be called from outside useEffect
+  // Load cached results first for faster initial load
   const loadCachedResults = async () => {
     if (!user?.id) return;
     
@@ -916,6 +122,417 @@ export default function IntentMismatch() {
     } catch (error) {
       console.error("❌ Error loading cached results:", error);
       return false;
+    }
+  };
+
+  useEffect(() => {
+    const initializePage = async () => {
+      if (!user?.id) {
+        console.log("❌ No user ID");
+        return;
+      }
+
+      // Try to load cached results first
+      const hasCached = await loadCachedResults();
+      
+      if (!hasCached) {
+        // If no cached data, check GSC and load fresh data
+        const fetchGSCData = async () => {
+          try {
+            console.log("🔍 Fetching GSC data for user:", user.id);
+            const tokenManager = createGSCTokenManager(user.id);
+            
+            // Add a small delay to ensure tokens are stored
+            await new Promise(resolve => setTimeout(resolve, 1000));
+            
+            const gscData = await tokenManager.getStoredGSCData();
+            
+            console.log("🔍 Stored GSC data:", gscData);
+            console.log("🔍 GSC data details:", {
+              hasAccessToken: !!gscData?.accessToken,
+              hasRefreshToken: !!gscData?.refreshToken,
+              hasSiteUrl: !!gscData?.siteUrl,
+              accessTokenLength: gscData?.accessToken?.length,
+              refreshTokenLength: gscData?.refreshToken?.length
+            });
+            
+            if (!gscData?.accessToken || !gscData?.siteUrl) {
+              console.log("❌ Missing GSC access token or site URL");
+              setIsLoading(false);
+              return;
+            }
+
+            // Get valid access token (refresh if needed)
+            const validToken = await tokenManager.getValidAccessToken();
+            if (!validToken) {
+              console.log("❌ Could not get valid access token");
+              setIsLoading(false);
+              return;
+            }
+
+            console.log("✅ Got valid token, fetching low CTR pages...");
+            fetchLowCtrPages(gscData.siteUrl, validToken);
+          } catch (error) {
+            console.error("❌ Error fetching GSC data:", error);
+            setIsLoading(false);
+          }
+        };
+
+        fetchGSCData();
+      }
+    };
+
+    initializePage();
+  }, [user]);
+
+
+
+  const fetchLowCtrPages = async (siteUrl, token) => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 28);
+
+    const format = (d) => d.toISOString().split("T")[0];
+    const from = format(start);
+    const to = format(today);
+
+    const res = await fetch(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+        siteUrl
+      )}/searchAnalytics/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          startDate: from,
+          endDate: to,
+          dimensions: ["query", "page"],
+          rowLimit: 250,
+        }),
+      }
+    );
+
+    const json = await res.json();
+    console.log("🔍 GSC Raw Data:", json);
+    if (!json.rows) {
+      console.log("❌ No rows returned from GSC");
+      setMismatches([]);
+      setIsLoading(false);
+      return;
+    }
+    console.log("✅ GSC returned", json.rows.length, "rows");
+
+    // Debug: Log all rows before filtering
+    console.log("🔍 All GSC rows before filtering:", json.rows.slice(0, 5));
+    
+    const filteredRows = json.rows.filter(
+      (r) =>
+        parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
+    );
+    
+    console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
+    console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
+    
+    const grouped = Object.values(
+      filteredRows
+        .reduce((acc, row) => {
+          const page = row.keys[1];
+          if (!acc[page]) {
+            acc[page] = {
+              page,
+              clicks: 0,
+              impressions: 0,
+              ctr: "0%",
+            };
+          }
+          acc[page].clicks += row.clicks;
+          acc[page].impressions += row.impressions;
+          return acc;
+        }, {})
+    );
+
+    setLowCtrPages(grouped);
+
+    // Convert low CTR data to intent mismatches with real AI analysis
+    const intentMismatches = [];
+    
+    // Process each keyword-page pair with AI analysis
+    for (let i = 0; i < Math.min(filteredRows.length, 10); i++) { // Limit to 10 for demo
+      const row = filteredRows[i];
+      const keyword = row.keys[0].replace(/^\[|\]$/g, '');
+      const pageUrl = row.keys[1];
+      
+      try {
+        // Step 1: Scrape the page content
+        console.log(`🔍 Scraping content for: ${pageUrl}`);
+        const scrapeResponse = await fetch("/api/scrape-content", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ pageUrl }),
+        });
+
+        if (!scrapeResponse.ok) {
+          console.error(`❌ Failed to scrape ${pageUrl}: ${scrapeResponse.status}`);
+          continue;
+        }
+
+        const scrapeData = await scrapeResponse.json();
+        console.log(`✅ Scraped content for ${pageUrl}:`, {
+          titleLength: scrapeData.data.title?.length || 0,
+          contentLength: scrapeData.data.textContent?.length || 0,
+          hasHeadings: scrapeData.data.headings?.length > 0
+        });
+        
+        let { title, metaDescription, textContent, headings } = scrapeData.data;
+
+        // Step 2: Check if we have cached results
+        const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(pageUrl)}`;
+        console.log(`🔍 Checking cache for: ${keyword}`);
+        
+        try {
+          const cachedDoc = await getDoc(doc(db, "intentMismatches", cacheKey));
+          
+          let analysis;
+          if (cachedDoc.exists()) {
+            // Use cached result
+            analysis = cachedDoc.data();
+            console.log(`✅ Using cached analysis for ${keyword}`);
+            
+            // Ensure we have the page data from cache
+            if (analysis.title && analysis.metaDescription) {
+              title = analysis.title;
+              metaDescription = analysis.metaDescription;
+            }
+            
+            // Also get page structure data from cache if available
+            if (analysis.pageContent) {
+              textContent = analysis.pageContent;
+            }
+            if (analysis.pageHeadings) {
+              headings = analysis.pageHeadings;
+            }
+          } else {
+            // Perform new AI analysis
+            console.log(`🤖 Performing AI analysis for: ${keyword}`);
+            const analysisResponse = await fetch("/api/intent-analysis", {
+              method: "POST",
+              headers: {
+                "Content-Type": "application/json",
+              },
+              body: JSON.stringify({
+                keyword,
+                pageUrl,
+                pageContent: textContent,
+                title,
+                metaDescription,
+                headings
+              }),
+            });
+
+            if (!analysisResponse.ok) {
+              console.error(`❌ Failed to analyze ${keyword} for ${pageUrl}: ${analysisResponse.status}`);
+              throw new Error(`AI analysis failed: ${analysisResponse.status}`);
+            }
+
+            analysis = await analysisResponse.json();
+            console.log(`✅ AI analysis completed for ${keyword}:`, analysis);
+            
+            // Cache the result
+            try {
+              await setDoc(doc(db, "intentMismatches", cacheKey), {
+                ...analysis,
+                userId: user.id,
+                keyword,
+                pageUrl,
+                createdAt: new Date(),
+                title,
+                metaDescription,
+                // Store comprehensive page data for better context
+                pageContent: textContent?.substring(0, 2000), // Store more content for better context
+                pageHeadings: headings,
+                // Store the full crawl data for comprehensive analysis
+                fullPageData: {
+                  title,
+                  metaDescription,
+                  contentLength: textContent?.length || 0,
+                  headingsCount: headings?.length || 0,
+                  hasContent: !!textContent
+                },
+                // Store page structure data with consistent field names
+                pageStructure: {
+                  headings: headings || [],
+                  contentLength: textContent ? textContent.length : 0,
+                  contentPreview: textContent ? textContent.substring(0, 500) : '',
+                  hasContent: !!textContent,
+                  headingsCount: headings ? headings.length : 0
+                },
+                // Store full page content for detailed analysis
+                fullPageContent: textContent || '',
+                // Store all headings for structure analysis
+                allHeadings: headings || []
+              });
+              console.log(`💾 Cached new analysis for ${keyword}`);
+            } catch (cacheError) {
+              console.error(`❌ Failed to cache analysis for ${keyword}:`, cacheError);
+              // Continue without caching
+            }
+          }
+          
+          intentMismatches.push({
+            keyword,
+            pageUrl,
+            matchScore: analysis.matchScore,
+            reason: analysis.reason,
+            suggestion: analysis.suggestedFix,
+            suggestedFix: analysis.suggestedFix, // Also save with the original field name for consistency
+            // Include the page data for comprehensive context
+            title,
+            metaDescription,
+            pageContent: textContent?.substring(0, 2000), // Store more content for better context
+            pageHeadings: headings,
+            // Store analysis metadata
+            analysisData: {
+              matchScore: analysis.matchScore,
+              reason: analysis.reason,
+              suggestedFix: analysis.suggestedFix
+            },
+            // Store comprehensive page structure data
+            pageStructure: {
+              headings: headings || [],
+              contentLength: textContent ? textContent.length : 0,
+              contentPreview: textContent ? textContent.substring(0, 500) : '',
+              hasContent: !!textContent,
+              headingsCount: headings ? headings.length : 0
+            },
+            // Store full page content for detailed analysis
+            fullPageContent: textContent || '',
+            // Store all headings for structure analysis
+            allHeadings: headings || []
+          });
+        } catch (error) {
+          console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
+          
+          // Fallback to dummy data if AI analysis fails
+          intentMismatches.push({
+            keyword,
+            pageUrl,
+            matchScore: Math.floor(Math.random() * 50) + 20,
+            reason: "AI analysis failed - using fallback data",
+            suggestion: "Review page content and ensure it matches search intent",
+            suggestedFix: "Review page content and ensure it matches search intent",
+            // Include basic page data even in fallback
+            title: title || 'Not available',
+            metaDescription: metaDescription || 'Not available',
+            pageContent: textContent?.substring(0, 1000) || 'Content not available',
+            pageHeadings: headings || [],
+            // Include basic page structure
+            pageStructure: {
+              headings: headings || [],
+              contentLength: textContent ? textContent.length : 0,
+              contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
+              hasContent: !!textContent,
+              headingsCount: headings ? headings.length : 0
+            },
+            fullPageContent: textContent || '',
+            allHeadings: headings || []
+          });
+        }
+
+        // Small delay to avoid rate limiting
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      } catch (error) {
+        console.error(`❌ Error processing ${keyword} for ${pageUrl}:`, error);
+        
+        // Fallback to dummy data if AI analysis fails
+        intentMismatches.push({
+          keyword,
+          pageUrl,
+          matchScore: Math.floor(Math.random() * 50) + 20,
+          reason: "AI analysis failed - using fallback data",
+          suggestion: "Review page content and ensure it matches search intent",
+          suggestedFix: "Review page content and ensure it matches search intent",
+          // Include basic page data even in fallback
+          title: title || 'Not available',
+          metaDescription: metaDescription || 'Not available',
+          pageContent: textContent?.substring(0, 1000) || 'Content not available',
+          pageHeadings: headings || [],
+          // Include basic page structure
+          pageStructure: {
+            headings: headings || [],
+            contentLength: textContent ? textContent.length : 0,
+            contentPreview: textContent ? textContent.substring(0, 300) : 'Content preview not available',
+            hasContent: !!textContent,
+            headingsCount: headings ? headings.length : 0
+          },
+          fullPageContent: textContent || '',
+          allHeadings: headings || []
+        });
+      }
+    }
+
+    setMismatches(intentMismatches);
+    setIsLoading(false);
+  };
+
+  const generateMismatches = async () => {
+    try {
+      setIsGenerating(true);
+      
+      // Re-fetch GSC data to get fresh intent mismatches
+      if (!user?.id) {
+        toast.error("User not authenticated");
+        return;
+      }
+
+      const tokenManager = createGSCTokenManager(user.id);
+      const gscData = await tokenManager.getStoredGSCData();
+      
+      if (!gscData?.accessToken || !gscData?.siteUrl) {
+        toast.error("Google Search Console not connected");
+        return;
+      }
+
+      const validToken = await tokenManager.getValidAccessToken();
+      if (!validToken) {
+        toast.error("Could not get valid access token");
+        return;
+      }
+
+      // Clear old intent mismatches before generating new ones
+      try {
+        console.log("🧹 Clearing old intent mismatches...");
+        const { collection, query, where, getDocs, deleteDoc } = await import("firebase/firestore");
+        
+        const q = query(
+          collection(db, "intentMismatches"),
+          where("userId", "==", user.id)
+        );
+        
+        const snapshot = await getDocs(q);
+        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+        
+        console.log(`✅ Cleared ${snapshot.docs.length} old intent mismatches`);
+        toast.success(`Cleared ${snapshot.docs.length} old analyses`);
+      } catch (clearError) {
+        console.error("⚠️ Warning: Could not clear old data:", clearError);
+        // Continue with generation even if clearing fails
+      }
+
+      // Fetch fresh data
+      await fetchLowCtrPages(gscData.siteUrl, validToken);
+      toast.success("Generated fresh intent mismatches from GSC data");
+      
+    } catch (error) {
+      console.error("Error generating intent mismatches:", error);
+      toast.error("Failed to generate intent mismatches");
+    } finally {
+      setIsGenerating(false);
     }
   };
 
@@ -1489,7 +1106,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                       ) : (
                         <p>{styleQuotedKeywords(mismatch.reason)}</p>
                       )}
-                                          </div>
+                    </div>
                   </div>
 
                   {/* Right Column - Suggested Fix & Action */}
@@ -1515,7 +1132,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                                 setMismatches(updatedMismatches);
                               }}
                               className="mt-2 text-[#00bf63] hover:text-[#00bf63]/80 text-sm font-medium cursor-pointer"
-                              >
+                            >
                               {mismatch.showFullSuggestion ? 'Show less' : 'Read more'}
                             </button>
                           </div>
@@ -1562,4 +1179,4 @@ Can you analyze my page structure and give me specific, actionable advice for im
       </Alert>
     </MainLayout>
   );
-}
+} 
