@@ -33,7 +33,7 @@ const MainLayout = ({
   lowCtrPages = [],
   impressionTrends = [],
 }) => {
-  const { logout, user } = useAuth();
+  const { logout, user, isLoading } = useAuth();
   const { data } = useOnboarding();
   const pathname = usePathname();
   const router = useRouter();
@@ -44,16 +44,15 @@ const MainLayout = ({
   const [showTooltip, setShowTooltip] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !user) {
+    if (typeof window !== "undefined" && !isLoading && !user) {
       router.push("/auth");
     }
-  }, [user]);
+  }, [user, isLoading, router]);
 
-  // ✅ Prevent hook mismatch error during logout
-  // if (typeof window !== "undefined" && !user) {
-  //   router.push("/auth");
-  //   return null;
-  // }
+  // Don't render anything while loading to prevent hook ordering issues
+  if (isLoading) {
+    return null;
+  }
 
   useEffect(() => {
     setIsMobileMenuOpen(false);

@@ -17,6 +17,9 @@ import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { db } from "../lib/firebaseConfig";
+import { detectLocationIssues } from "../lib/smartLocationDetector";
+import LocationIssueAlert from "../components/dashboard/LocationIssueAlert";
+import { generateRecommendedKeyword, updateSuggestionWithKeyword } from "../lib/locationUtils";
 
 export default function IntentMismatch() {
   const { user, isLoading: authLoading } = useAuth();
@@ -27,6 +30,8 @@ export default function IntentMismatch() {
   const [filterScore, setFilterScore] = useState("all");
   const [isGenerating, setIsGenerating] = useState(false);
   const [lowCtrPages, setLowCtrPages] = useState([]);
+  const [dismissedLocationAlerts, setDismissedLocationAlerts] = useState(new Set());
+  const [locationAlertInteractions, setLocationAlertInteractions] = useState(new Map());
   const shouldShowLoader = useMinimumLoading(isLoading, 3000);
 
   // Load cached results first for faster initial load
@@ -88,9 +93,27 @@ export default function IntentMismatch() {
         };
       });
       
-      if (cachedMismatches.length > 0) {
-        console.log(`✅ Loaded ${cachedMismatches.length} cached mismatches`);
-        setMismatches(cachedMismatches);
+      // Filter out original documents when there's a fixed version available
+      const filteredMismatches = cachedMismatches.filter(mismatch => {
+        // If this is a fixed version, keep it
+        if (mismatch.locationIssueFixed || mismatch.isFixedVersion) {
+          return true;
+        }
+        
+        // If this is an original document, check if there's a fixed version
+        const hasFixedVersion = cachedMismatches.some(other => 
+          other.locationIssueFixed && 
+          other.keyword === mismatch.keyword &&
+          other.pageUrl === mismatch.pageUrl
+        );
+        
+        // Only keep original if there's no fixed version
+        return !hasFixedVersion;
+      });
+      
+      if (filteredMismatches.length > 0) {
+        console.log(`✅ Loaded ${filteredMismatches.length} filtered mismatches (removed ${cachedMismatches.length - filteredMismatches.length} duplicates)`);
+        setMismatches(filteredMismatches);
         setIsLoading(false);
         return true;
       }
@@ -480,9 +503,30 @@ export default function IntentMismatch() {
         return;
       }
 
+      // Clear old intent mismatches before generating new ones
+      try {
+        console.log("🧹 Clearing old intent mismatches...");
+        const { collection, query, where, getDocs, deleteDoc } = await import("firebase/firestore");
+        
+        const q = query(
+          collection(db, "intentMismatches"),
+          where("userId", "==", user.id)
+        );
+        
+        const snapshot = await getDocs(q);
+        const deletePromises = snapshot.docs.map(doc => deleteDoc(doc.ref));
+        await Promise.all(deletePromises);
+        
+        console.log(`✅ Cleared ${snapshot.docs.length} old intent mismatches`);
+        toast.success(`Cleared ${snapshot.docs.length} old analyses`);
+      } catch (clearError) {
+        console.error("⚠️ Warning: Could not clear old data:", clearError);
+        // Continue with generation even if clearing fails
+      }
+
       // Fetch fresh data
       await fetchLowCtrPages(gscData.siteUrl, validToken);
-      toast.success("Generated intent mismatches from GSC data");
+      toast.success("Generated fresh intent mismatches from GSC data");
       
     } catch (error) {
       console.error("Error generating intent mismatches:", error);
@@ -519,17 +563,187 @@ export default function IntentMismatch() {
     return true;
   });
 
-  const openChatWithContext = (mismatch) => {
-    // Create a comprehensive, SEO-friendly message with complete page context
-    const message = `I need help optimizing my page for better search performance. Here's the complete context:
+  // Check if a keyword has location issues that need attention
+  const checkForLocationIssues = (keyword, userLocation) => {
+    if (!userLocation) return null;
+    
+    try {
+      const issues = detectLocationIssues(keyword, userLocation);
+      return issues;
+    } catch (error) {
+      console.error('Error checking location issues:', error);
+      return null;
+    }
+  };
 
-🔑 **Target Keyword:** "${mismatch.keyword.replace(/^\[|\]$/g, '')}"
+  // Handle location alert actions
+  const handleLocationAction = async (action, keyword, locationIssues) => {
+    console.log('Location action:', action, keyword, locationIssues);
+    
+    // Track that user has interacted with this location alert
+    const alertId = `${keyword}_${locationIssues.severity}`;
+    setLocationAlertInteractions(prev => new Map(prev).set(alertId, action));
+    
+    switch (action) {
+      case 'fix_keyword':
+        try {
+          // Find the mismatch that needs updating
+          const mismatchIndex = mismatches.findIndex(m => 
+            m.keyword.replace(/^\[|\]$/g, '') === keyword
+          );
+          
+          if (mismatchIndex !== -1) {
+            const mismatch = mismatches[mismatchIndex];
+            const recommendedKeyword = generateRecommendedKeyword(keyword, data.businessLocation);
+            
+            // Update the suggestion to use the recommended keyword
+            const updatedSuggestion = updateSuggestionWithKeyword(
+              mismatch.suggestion, 
+              keyword, 
+              recommendedKeyword
+            );
+            
+            // Update local state - keep original keyword, only update suggestion
+            const updatedMismatches = [...mismatches];
+            updatedMismatches[mismatchIndex] = {
+              ...updatedMismatches[mismatchIndex],
+              suggestion: updatedSuggestion,
+              suggestedFix: updatedSuggestion, // Also update the alternative field name
+              // Keep the original keyword from GSC unchanged
+              keyword: mismatch.keyword, // Preserve original: "bend local seo"
+              // Store the recommended keyword for reference
+              recommendedKeyword: recommendedKeyword,
+              // Mark as fixed
+              locationIssueFixed: true
+            };
+            
+            setMismatches(updatedMismatches);
+            
+            // Create new document in Firebase - keep original keyword, update suggestion
+            const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(mismatch.pageUrl)}`;
+            await setDoc(doc(db, "intentMismatches", cacheKey), {
+              ...mismatch,
+              suggestion: updatedSuggestion,
+              suggestedFix: updatedSuggestion,
+              // Keep the original keyword from GSC unchanged
+              keyword: mismatch.keyword, // Preserve original: "bend local seo"
+              // Store the recommended keyword for reference
+              recommendedKeyword: recommendedKeyword,
+              updatedAt: new Date(),
+              locationIssueFixed: true,
+              // This is a "fixed" version
+              isFixedVersion: true,
+              // Mark location alerts as dismissed for this keyword
+              locationAlertsDismissed: true,
+              dismissedLocationIssues: [
+                { 
+                  keyword: keyword, 
+                  severity: 'medium', // Assuming medium priority for location issues
+                  dismissedAt: new Date(),
+                  action: 'fix_keyword'
+                }
+              ]
+            });
+            
+            toast.success(`Keyword updated from "${keyword}" as requested`);
+            
+            // Refresh the cached results to show the updated list
+            await loadCachedResults();
+          }
+        } catch (error) {
+          console.error('Error updating keyword:', error);
+          toast.error('Failed to update keyword');
+        }
+        break;
+        
+      case 'do_not_fix':
+        // User chooses not to fix the location issue
+        toast.info(`Keeping original keyword "${keyword}" as requested`);
+        break;
+        
+      case 'dismiss':
+        // User dismisses the alert
+        console.log('Location alert dismissed');
+        break;
+        
+      default:
+        break;
+    }
+  };
+
+  // Handle location alert dismissal
+  const handleLocationAlertDismiss = (keyword, locationIssues) => {
+    // Create a unique identifier for this location alert
+    const alertId = `${keyword}_${locationIssues.severity}`;
+    setDismissedLocationAlerts(prev => new Set([...prev, alertId]));
+    
+    // Track that user has interacted with this location alert (dismissed)
+    setLocationAlertInteractions(prev => new Map(prev).set(alertId, 'dismissed'));
+    
+    // Also mark the mismatch as having dismissed location alerts
+    const mismatchIndex = mismatches.findIndex(m => 
+      m.keyword.replace(/^\[|\]$/g, '') === keyword
+    );
+    
+    if (mismatchIndex !== -1) {
+      const updatedMismatches = [...mismatches];
+      updatedMismatches[mismatchIndex] = {
+        ...updatedMismatches[mismatchIndex],
+        locationAlertsDismissed: true,
+        dismissedLocationIssues: [
+          ...(updatedMismatches[mismatchIndex].dismissedLocationIssues || []),
+          { keyword, severity: locationIssues.severity, dismissedAt: new Date() }
+        ]
+      };
+      setMismatches(updatedMismatches);
+    }
+  };
+
+  // Helper function to style quoted keywords in green
+  const styleQuotedKeywords = (text) => {
+    if (!text) return text;
+    
+    return text.split("'").map((part, index) => 
+      index % 2 === 1 ? (
+        <span key={index} className="text-green-600 font-medium">'{part}'</span>
+      ) : (
+        part
+      )
+    );
+  };
+
+  const openChatWithContext = (mismatch) => {
+    // Check if this keyword has been enhanced with a recommended keyword
+    const hasRecommendedKeyword = mismatch.recommendedKeyword && mismatch.locationIssueFixed;
+    const targetKeyword = mismatch.keyword.replace(/^\[|\]$/g, '');
+    const recommendedKeyword = mismatch.recommendedKeyword;
+    
+    // Create a comprehensive, SEO-friendly message with complete page context
+    let message = `I need help optimizing my page for better search performance. Here's the complete context:
+
+🔑 **Target Keyword:** "${targetKeyword}"`;
+    
+    // Add recommended keyword information if available
+    if (hasRecommendedKeyword) {
+      message += `
+🎯 **Recommended Enhanced Keyword:** "${recommendedKeyword}" (Location-specific improvement)`;
+    }
+    
+    message += `
 🌐 **Page URL:** ${mismatch.pageUrl}
 📊 **Current Match Score:** ${mismatch.matchScore}/100
 
 **Current Page Content:**
 - Title: "${mismatch.title || 'Not available'}"
-- Meta Description: "${mismatch.metaDescription || 'Not available'}"
+- Meta Description: "${mismatch.metaDescription || 'Not available'}"`;
+    
+    // Add enhanced content information if keyword was improved
+    if (hasRecommendedKeyword) {
+      message += `
+- Enhanced Suggestion: "${mismatch.suggestedFix || mismatch.suggestion}"`;
+    }
+    
+    message += `
 
 **Page Structure & Content:**
 - Page Content Length: ${mismatch.pageContent ? mismatch.pageContent.length + ' characters' : 'Not available'}
@@ -539,9 +753,20 @@ export default function IntentMismatch() {
 **Current Headings Structure:**
 ${mismatch.pageHeadings ? mismatch.pageHeadings.map((heading, index) => `  ${index + 1}. ${heading}`).join('\n') : 'No headings available'}
 
-**SEO Issue:** ${mismatch.reason}
+**SEO Issue:** ${mismatch.reason}`;
+    
+    // Add enhanced goal if keyword was improved
+    if (hasRecommendedKeyword) {
+      message += `
 
-**Goal:** Improve this page's performance for "${mismatch.keyword.replace(/^\[|\]$/g, '')}" while maintaining natural content flow and avoiding over-optimization.
+**Enhanced Goal:** Improve this page's performance for both "${targetKeyword}" and "${recommendedKeyword}" while maintaining natural content flow and avoiding over-optimization. Focus on incorporating the location-specific keyword "${recommendedKeyword}" naturally throughout the content.`;
+    } else {
+      message += `
+
+**Goal:** Improve this page's performance for "${targetKeyword}" while maintaining natural content flow and avoiding over-optimization.`;
+    }
+    
+    message += `
 
 Can you analyze my page structure and give me specific, actionable advice for improving this page's SEO performance naturally?`;
     
@@ -554,7 +779,9 @@ Can you analyze my page structure and give me specific, actionable advice for im
         pageTitle: mismatch.title,
         pageMetaDescription: mismatch.metaDescription,
         // Add the target keyword for focus
-        targetKeyword: mismatch.keyword.replace(/^\[|\]$/g, ''),
+        targetKeyword: targetKeyword,
+        // Include the recommended keyword if available
+        recommendedKeyword: hasRecommendedKeyword ? recommendedKeyword : null,
         // Include the current page URL for reference
         currentPageUrl: mismatch.pageUrl,
         // Add the match score for context
@@ -602,7 +829,21 @@ Can you analyze my page structure and give me specific, actionable advice for im
           contentGaps: "Identify areas where target keyword could naturally fit",
           structureOptimization: "Optimize heading hierarchy for better SEO",
           contentEnhancement: "Enhance existing content sections with target keywords"
-        }
+        },
+        // Add enhanced guidance for location-specific keywords
+        locationOptimization: hasRecommendedKeyword ? {
+          primaryKeyword: targetKeyword,
+          enhancedKeyword: recommendedKeyword,
+          strategy: "Incorporate both keywords naturally - use the enhanced location-specific keyword more prominently",
+          contentAreas: [
+            "Page title and meta description",
+            "H1 and main headings", 
+            "Introduction and conclusion sections",
+            "Local business information",
+            "Service area descriptions"
+          ],
+          keywordBalance: "Use enhanced keyword 60-70%, original keyword 30-40% for natural flow"
+        } : null
       }
     }));
     
@@ -623,15 +864,26 @@ Can you analyze my page structure and give me specific, actionable advice for im
     });
   };
 
-  if (authLoading || !user) {
+  // Show loading state while checking authentication
+  if (authLoading) {
     return (
-      <MainLayout>
-        <div className="text-center py-8">
-          <SquashBounceLoader size="lg" className="mb-4" />
-          <p className="text-sm text-muted-foreground">Loading...</p>
+      <div className="min-h-screen flex items-center justify-between">
+        <div className="flex-1"></div>
+        <div className="flex-1 flex items-center justify-center">
+          <div className="text-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#00BF63] mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Checking authentication...</p>
+          </div>
         </div>
-      </MainLayout>
+        <div className="flex-1"></div>
+      </div>
     );
+  }
+
+  // Redirect to auth if no user
+  if (!user) {
+    router.push("/auth");
+    return null;
   }
 
   return (
@@ -769,10 +1021,40 @@ Can you analyze my page structure and give me specific, actionable advice for im
             </CardHeader>
           </Card>
           
-          <div className="space-y-4">
-          {filteredMismatches.map((mismatch, index) => (
-            <Card key={index} className="hover:shadow-md transition-shadow">
-              <CardContent className="pt-6">
+          <div className="space-y-6">
+            {filteredMismatches.map((mismatch, index) => {
+              const cleanKeyword = mismatch.keyword.replace(/^\[|\]$/g, '');
+              const locationIssues = checkForLocationIssues(cleanKeyword, data?.businessLocation);
+              
+              return (
+                <Card key={index} className="hover:shadow-md transition-shadow">
+                  {/* Location Issue Alert - INSIDE the card, only when needed */}
+                  {locationIssues && 
+                   !dismissedLocationAlerts.has(`${cleanKeyword}_${locationIssues.severity}`) &&
+                   !mismatch.dismissedLocationIssues?.some(dismissed => 
+                     dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
+                   ) && (
+                    <div className="m-4 p-4 border border-gray-100 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg transition-all duration-300 ease-in-out">
+                      <LocationIssueAlert
+                        keyword={cleanKeyword}
+                        locationIssues={locationIssues}
+                        userLocation={data.businessLocation}
+                        onAction={handleLocationAction}
+                        onDismiss={handleLocationAlertDismiss}
+                      />
+                    </div>
+                  )}
+                  
+                  {/* Visual separator when there's a location alert */}
+                  {locationIssues && 
+                   !dismissedLocationAlerts.has(`${cleanKeyword}_${locationIssues.severity}`) &&
+                   !mismatch.dismissedLocationIssues?.some(dismissed => 
+                     dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
+                   ) && (
+                    <div className="border-b border-gray-100 mx-4 transition-all duration-300 ease-in-out"></div>
+                  )}
+                  
+                  <CardContent className="pt-4">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Left Column - Keyword & Page */}
                   <div className="space-y-3">
@@ -803,8 +1085,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
                         <div>
                           <p>
                             {mismatch.reason.length > 150 && !mismatch.showFullReason 
-                              ? `${mismatch.reason.substring(0, 150)}...`
-                              : mismatch.reason
+                              ? styleQuotedKeywords(`${mismatch.reason.substring(0, 150)}...`)
+                              : styleQuotedKeywords(mismatch.reason)
                             }
                           </p>
                           <button 
@@ -822,7 +1104,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                           </button>
                         </div>
                       ) : (
-                        <p>{mismatch.reason}</p>
+                        <p>{styleQuotedKeywords(mismatch.reason)}</p>
                       )}
                     </div>
                   </div>
@@ -836,8 +1118,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
                           <div>
                             <p>
                               {mismatch.suggestion.length > 120 && !mismatch.showFullSuggestion 
-                                ? `${mismatch.suggestion.substring(0, 120)}...`
-                                : mismatch.suggestion
+                                ? styleQuotedKeywords(`${mismatch.suggestion.substring(0, 120)}...`)
+                                : styleQuotedKeywords(mismatch.suggestion)
                               }
                             </p>
                             <button 
@@ -855,26 +1137,37 @@ Can you analyze my page structure and give me specific, actionable advice for im
                             </button>
                           </div>
                         ) : (
-                          <p>{mismatch.suggestion}</p>
+                          <p>{styleQuotedKeywords(mismatch.suggestion)}</p>
                         )}
                       </div>
                     </div>
+                    
+                    
                     <Button 
                       size="sm" 
                       onClick={() => openChatWithContext(mismatch)}
-                      className="bg-[#00bf63] hover:bg-[#00bf63]/90 w-full"
+                      disabled={locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`)}
+                      className={`w-full transition-all duration-300 ${
+                        locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`)
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50' // Faded out when no interaction
+                          : 'bg-[#00bf63] hover:bg-[#00bf63]/90 text-white' // Normal when interaction made
+                      }`}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
-                      Fix This
+                      {locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`)
+                        ? 'Fix This'
+                        : 'Fix This'
+                      }
                     </Button>
                   </div>
                 </div>
               </CardContent>
-            </Card>
-          ))}
-        </div>
-      </>
-      )}
+                </Card>
+              );
+            })}
+          </div>
+          </>
+        )}
 
       {/* Info Alert */}
       <Alert className="mt-6">
