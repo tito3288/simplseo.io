@@ -83,11 +83,11 @@ const MainLayout = ({
       label: "Intent Mismatch",
       icon: <AlertTriangle className="w-5 h-5" />,
     },
-    {
-      path: "/website",
-      label: "My Website",
-      icon: <Globe className="w-5 h-5" />,
-    },
+    // {
+    //   path: "/website",
+    //   label: "My Website",
+    //   icon: <Globe className="w-5 h-5" />,
+    // },
     {
       path: "/chatbot",
       label: "Chatbot",
@@ -246,9 +246,15 @@ const MainLayout = ({
 
       {/* Main */}
       <main className="flex-1 overflow-auto">
-        <div className="container mx-auto p-4 transition-all duration-300">
-          {children}
-        </div>
+        {pathname === "/chatbot" ? (
+          <div className="w-full">
+            {children}
+          </div>
+        ) : (
+          <div className="container mx-auto p-4 transition-all duration-300">
+            {children}
+          </div>
+        )}
       </main>
 
       {/* Chat Assistant */}
@@ -280,9 +286,11 @@ const MainLayout = ({
             `}</style>
           )}
           
-          <Popover open={isChatOpen} onOpenChange={handleChatOpen}>
-            <PopoverTrigger asChild>
-              <div className="fixed bottom-6 right-6" onClick={handleManualChatOpen}>
+          {/* Only show floating chat button if not on chatbot page */}
+          {pathname !== "/chatbot" && (
+            <Popover open={isChatOpen} onOpenChange={handleChatOpen}>
+              <PopoverTrigger asChild>
+                <div className="fixed bottom-6 right-6" onClick={handleManualChatOpen}>
                 <Button
                   className="rounded-full w-14 h-14 shadow-lg flex items-center justify-center z-50 bg-[#00BF63] hover:bg-[#00BF63]/90"
                   size="icon"
@@ -332,7 +340,8 @@ const MainLayout = ({
               />
             </div>
           </PopoverContent>
-        </Popover>
+            </Popover>
+          )}
         </>
       )}
     </div>

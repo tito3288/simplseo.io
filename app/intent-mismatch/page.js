@@ -1416,7 +1416,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
                    !dismissedLocationAlerts.has(`${cleanKeyword}_${locationIssues.severity}`) &&
                    !mismatch.dismissedLocationIssues?.some(dismissed => 
                      dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
-                   ) && (
+                   ) &&
+                   !mismatch.locationIssueFixed && (
                     <div className="m-4 p-4 border border-gray-100 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg transition-all duration-300 ease-in-out">
                       <LocationIssueAlert
                         keyword={cleanKeyword}
@@ -1433,7 +1434,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
                    !dismissedLocationAlerts.has(`${cleanKeyword}_${locationIssues.severity}`) &&
                    !mismatch.dismissedLocationIssues?.some(dismissed => 
                      dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
-                   ) && (
+                   ) &&
+                   !mismatch.locationIssueFixed && (
                     <div className="border-b border-gray-100 mx-4 transition-all duration-300 ease-in-out"></div>
                   )}
                   
@@ -1457,6 +1459,12 @@ Can you analyze my page structure and give me specific, actionable advice for im
                     </div>
                     <div className="flex items-center gap-2">
                       {getScoreBadge(mismatch.matchScore)}
+                      {mismatch.locationIssueFixed && (
+                        <Badge variant="default" className="bg-green-100 text-green-800 border-green-200">
+                          <CheckCircle2 className="w-3 h-3 mr-1" />
+                          Correct Location Added to Keyword
+                        </Badge>
+                      )}
                     </div>
                   </div>
 
@@ -1529,18 +1537,15 @@ Can you analyze my page structure and give me specific, actionable advice for im
                     <Button 
                       size="sm" 
                       onClick={() => openChatWithContext(mismatch)}
-                      disabled={locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`)}
+                      disabled={locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`) && !mismatch.locationIssueFixed}
                       className={`w-full transition-all duration-300 ${
-                        locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`)
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50' // Faded out when no interaction
-                          : 'bg-[#00bf63] hover:bg-[#00bf63]/90 text-white' // Normal when interaction made
+                        locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`) && !mismatch.locationIssueFixed
+                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50' // Faded out when no interaction and not fixed
+                          : 'bg-[#00bf63] hover:bg-[#00bf63]/90 text-white' // Normal when interaction made or already fixed
                       }`}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
-                      {locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`)
-                        ? 'Fix This'
-                        : 'Fix This'
-                      }
+                      Fix This
                     </Button>
                   </div>
                 </div>
