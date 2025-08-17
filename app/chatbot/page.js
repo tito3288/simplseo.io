@@ -68,6 +68,7 @@ export default function Chatbot() {
 
   const [currentTitle, setCurrentTitle] = useState("");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && !authLoading && !user) {
@@ -88,6 +89,25 @@ export default function Chatbot() {
     const randomIndex = Math.floor(Math.random() * rotatingTitles.length);
     setCurrentTitle(rotatingTitles[randomIndex]);
   }, []);
+
+  // Mobile detection and sidebar state management
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // On mobile, start with sidebar collapsed
+      if (mobile) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
+
 
   const scrollToBottom = () => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -284,79 +304,75 @@ export default function Chatbot() {
 
         {/* Main Chat Area - Takes remaining width, no margins */}
         <div className="flex-1 flex flex-col bg-gray-50">
-          {/* Chat Header - Centered content */}
-          <div className="flex-1 flex flex-col items-center justify-center px-6">
-            <div className="text-center max-w-2xl w-600">
 
-                <div className="flex items-center justify-center space-x-4 mb-8">
+          {/* Chat Header - Centered content */}
+          <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
+            <div className="text-center w-full max-w-2xl">
+
+                <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6 sm:mb-8">
                   <SquashBounceLoader size="lg" className="text-green-500" />
-                  <h1 className="text-3xl font-semibold text-gray-900">{currentTitle}</h1>
+                  <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 px-4">{currentTitle}</h1>
                 </div>
               
               {/* Input Field */}
-              <div className="relative mb-8">
+              <div className="relative mb-6 sm:mb-8 w-full">
                 <Textarea
                   ref={textareaRef}
                   value={input}
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`How can I help you today ${data?.name?.split(' ')[0] || 'there'}?`}
-                  className="w-full min-h-[120px] pr-32 resize-none text-xl border-gray-200 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-gray-200 rounded-lg transition-all duration-200"
+                  className="w-full min-h-[100px] sm:min-h-[120px] pr-24 sm:pr-32 resize-none text-lg sm:text-xl border-gray-200 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-gray-200 rounded-lg transition-all duration-200"
                   disabled={isThinking}
                 />
                 
                 {/* Input Controls - Left side */}
-                <div className="absolute bottom-3 left-3 flex items-center gap-2">
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <Plus className="h-4 w-4" />
+                <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 flex items-center gap-1 sm:gap-2">
+                  <Button variant="ghost" size="sm" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                    <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <ArrowUp className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                    <ArrowUp className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
-                  <Button variant="ghost" size="sm" className="h-8 w-8 p-0">
-                    <Search className="h-4 w-4" />
+                  <Button variant="ghost" size="sm" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
+                    <Search className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
                 </div>
                 
                 {/* Model Selection & Send - Right side */}
-                <div className="absolute bottom-3 right-3 flex items-center gap-2">
+                <div className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 flex items-center gap-1 sm:gap-2">
                   <Select>
-                    <SelectTrigger className="w-40 h-8">
+                    <SelectTrigger className="w-32 sm:w-40 h-7 sm:h-8 text-sm">
                       <SelectValue placeholder="SEO Assistant" />
                     </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="seo">SEO Assistant</SelectItem>
-                      <SelectItem value="technical">Technical SEO</SelectItem>
-                      <SelectItem value="content">Content Strategy</SelectItem>
-                    </SelectContent>
                   </Select>
                   
                   <Button 
                     onClick={handleSendMessage}
                     disabled={!input.trim() || isThinking}
-                    className="h-8 w-8 p-0 bg-green-500 hover:bg-green-600"
+                    className="h-7 w-7 sm:h-8 sm:w-8 p-0 bg-green-500 hover:bg-green-600"
                   >
-                    <ArrowUp className="h-4 w-4" />
+                    <ArrowUp className="h-3 w-3 sm:h-4 sm:w-4" />
                   </Button>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex justify-center space-x-4">
-                <Button variant="outline" className="flex items-center space-x-2">
-                  <Pencil className="w-4 h-4" />
+              <div className="flex flex-wrap justify-center gap-2 sm:gap-4 px-4">
+                <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
+                  <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Write</span>
                 </Button>
-                <Button variant="outline" className="flex items-center space-x-2">
-                  <GraduationCap className="w-4 h-4" />
+                <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
+                  <GraduationCap className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Learn</span>
                 </Button>
-                <Button variant="outline" className="flex items-center space-x-2">
-                  <Code className="w-4 h-4" />
+                <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
+                  <Code className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Ideas</span>
                 </Button>
-                <Button variant="outline" className="flex items-center space-x-2">
-                  <Coffee className="w-4 h-4" />
+                <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
+                  <Coffee className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Track</span>
                 </Button>
               </div>
