@@ -107,6 +107,23 @@ export default function Chatbot() {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
 
+  // Mobile detection and sidebar state management
+  useEffect(() => {
+    const checkMobile = () => {
+      const mobile = window.innerWidth < 768;
+      setIsMobile(mobile);
+      
+      // On mobile, start with sidebar collapsed
+      if (mobile) {
+        setIsSidebarCollapsed(true);
+      }
+    };
+
+    checkMobile();
+    window.addEventListener('resize', checkMobile);
+    return () => window.removeEventListener('resize', checkMobile);
+  }, []);
+
 
 
   const scrollToBottom = () => {
@@ -166,11 +183,13 @@ export default function Chatbot() {
 
   return (
     <MainLayout>
-      <div className="flex h-screen w-full bg-gray-50">
+      <div className="flex h-screen w-full bg-gray-50 z-2">
                 {/* Left Sidebar - Collapsible with smooth animation */}
         <div className={`bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out ${
-          isSidebarCollapsed ? 'w-16' : 'w-80'
-        }`}>
+          isMobile 
+            ? (isSidebarCollapsed ? 'w-0' : 'w-80') 
+            : (isSidebarCollapsed ? 'w-16' : 'w-80')
+        } ${isMobile ? 'absolute left-0 top-0 h-full z-20' : 'relative'} ${isMobile && isSidebarCollapsed ? 'overflow-hidden' : ''}`}>
           {/* Header */}
           <div className={`border-b border-gray-200 transition-all duration-300 ${
             isSidebarCollapsed ? 'p-4' : 'p-6'
@@ -303,7 +322,24 @@ export default function Chatbot() {
         </div>
 
         {/* Main Chat Area - Takes remaining width, no margins */}
-        <div className="flex-1 flex flex-col bg-gray-50">
+        <div className="flex-1 flex flex-col bg-gray-50 relative z-0">
+          {/* Mobile Backdrop Overlay - Only visible when sidebar is open on mobile */}
+          {isMobile && !isSidebarCollapsed && (
+            <div 
+              className="fixed inset-0 backdrop-blur-sm bg-white/10 z-10"
+              onClick={() => setIsSidebarCollapsed(true)}
+            />
+          )}
+          
+          {/* Mobile Sidebar Toggle - Only visible when sidebar is closed on mobile */}
+          {isMobile && isSidebarCollapsed && (
+            <button
+              onClick={() => setIsSidebarCollapsed(false)}
+              className="absolute top-4 left-4 z-10 p-2 bg-white rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+            >
+              <PanelLeftOpen className="w-5 h-5 text-gray-600" />
+            </button>
+          )}
 
           {/* Chat Header - Centered content */}
           <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
@@ -322,7 +358,7 @@ export default function Chatbot() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`How can I help you today ${data?.name?.split(' ')[0] || 'there'}?`}
-                  className="w-full min-h-[100px] sm:min-h-[120px] pr-24 sm:pr-32 resize-none text-lg sm:text-xl border-gray-200 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-gray-200 rounded-lg transition-all duration-200"
+                  className="w-full min-h-[100px] sm:min-h-[120px] pr-24 sm:pr-32 resize-none text-base sm:text-lg placeholder:text-sm sm:placeholder:text-base border-gray-200 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-gray-200 rounded-lg transition-all duration-200"
                   disabled={isThinking}
                 />
                 
