@@ -32,7 +32,9 @@ import {
   Wand2,
   User,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Lightbulb,
+  TrendingUp
 } from "lucide-react";
 import { toast } from "sonner";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
@@ -404,11 +406,11 @@ export default function Chatbot() {
                   <span>Learn</span>
                 </Button>
                 <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
-                  <Code className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Ideas</span>
                 </Button>
                 <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
-                  <Coffee className="w-3 h-3 sm:w-4 sm:h-4" />
+                  <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
                   <span>Track</span>
                 </Button>
               </div>
