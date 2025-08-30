@@ -11,7 +11,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { ArrowDown, ArrowUp } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
 
@@ -20,6 +20,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const [loading, setLoading] = useState(true);
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [implementedCount, setImplementedCount] = useState(0);
+  const [expandedRows, setExpandedRows] = useState(new Set());
 
   useEffect(() => {
     if (!user?.id) return;
@@ -40,9 +41,12 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       const deltas = docs
         .filter((doc) => doc.preStats && doc.postStats)
         .map((doc) => {
-          const { preStats, postStats, pageUrl } = doc;
+          const { preStats, postStats, pageUrl, implementedAt } = doc;
           return {
             pageUrl,
+            implementedAt,
+            preStats,
+            postStats,
             impressionsDelta: postStats.impressions - preStats.impressions,
             clicksDelta: postStats.clicks - preStats.clicks,
             ctrDelta: postStats.ctr - preStats.ctr,
@@ -64,6 +68,16 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
 
     fetchLeaderboardData();
   }, [user]);
+
+  const toggleRow = (index) => {
+    const newExpanded = new Set(expandedRows);
+    if (newExpanded.has(index)) {
+      newExpanded.delete(index);
+    } else {
+      newExpanded.add(index);
+    }
+    setExpandedRows(newExpanded);
+  };
 
   if (loading) {
     return (
@@ -145,11 +159,12 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
           </div>
         </div>
 
-        <div className="space-y-4">
+        <div className="space-y-3">
           {leaderboardData.map((item, idx) => {
             const cleanUrl = item.pageUrl
               .replace(/^https?:\/\//, "")
               .replace(/\/$/, "");
+            const isExpanded = expandedRows.has(idx);
 
             const renderDelta = (label, value, invert = false) => {
               const isImprovement = invert ? value < 0 : value > 0;
@@ -178,31 +193,146 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             return (
               <div
                 key={idx}
-                className="border rounded-md p-3 hover:bg-muted/50"
+                className="border rounded-md overflow-hidden hover:bg-muted/50 transition-all duration-200"
               >
-                <div className="font-medium truncate">{cleanUrl}</div>
-                <div className="grid grid-cols-4 text-muted-foreground text-sm mt-2 gap-2">
-                  <div>
-                    <strong>Impressions:</strong>
-                    <br />
-                    {renderDelta("Impressions", item.impressionsDelta)}
+                {/* Main Row - Always Visible */}
+                <div 
+                  className="p-3 cursor-pointer flex items-center justify-between"
+                  onClick={() => toggleRow(idx)}
+                >
+                  <div className="flex-1">
+                    <div className="font-medium truncate mb-2">{cleanUrl}</div>
+                    <div className="grid grid-cols-4 text-muted-foreground text-sm gap-2">
+                      <div>
+                        <strong>Impressions:</strong>
+                        <br />
+                        {renderDelta("Impressions", item.impressionsDelta)}
+                      </div>
+                      <div>
+                        <strong>Clicks:</strong>
+                        <br />
+                        {renderDelta("Clicks", item.clicksDelta)}
+                      </div>
+                      <div>
+                        <strong>CTR (%):</strong>
+                        <br />
+                        {renderDelta("CTR", item.ctrDelta.toFixed(2))}
+                      </div>
+                      <div>
+                        <strong>Position:</strong>
+                        <br />
+                        {renderDelta("Position", item.positionDelta, true)}
+                      </div>
+                    </div>
                   </div>
-                  <div>
-                    <strong>Clicks:</strong>
-                    <br />
-                    {renderDelta("Clicks", item.clicksDelta)}
-                  </div>
-                  <div>
-                    <strong>CTR (%):</strong>
-                    <br />
-                    {renderDelta("CTR", item.ctrDelta.toFixed(2))}
-                  </div>
-                  <div>
-                    <strong>Position:</strong>
-                    <br />
-                    {renderDelta("Position", item.positionDelta, true)}
+                  
+                  {/* Expand/Collapse Icon */}
+                  <div className="ml-4 text-muted-foreground">
+                    {isExpanded ? (
+                      <ChevronDown className="h-5 w-5" />
+                    ) : (
+                      <ChevronRight className="h-5 w-5" />
+                    )}
                   </div>
                 </div>
+
+                {/* Expanded Details - Show Before/After Comparison */}
+                {isExpanded && (
+                  <div className="border-t bg-muted/30 p-4 space-y-3">
+                    <h4 className="text-sm font-medium text-muted-foreground mb-3">
+                      📊 Detailed Metrics Comparison
+                    </h4>
+                    
+                    {/* Before (Implementation) */}
+                    <div className="bg-white rounded-lg p-3 border">
+                      <h5 className="text-xs font-medium text-blue-600 mb-2">
+                        🎯 Before (Implementation)
+                      </h5>
+                      <div className="text-xs text-blue-500 mb-3">
+                        Implemented on: {new Date(item.implementedAt).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })}
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Impressions:</span>
+                          <br />
+                          <span className="font-medium">{item.preStats.impressions}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Clicks:</span>
+                          <br />
+                          <span className="font-medium">{item.preStats.clicks}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">CTR:</span>
+                          <br />
+                          <span className="font-medium">{(item.preStats.ctr * 100).toFixed(2)}%</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Position:</span>
+                          <br />
+                          <span className="font-medium">{item.preStats.position.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* After (7+ Days) */}
+                    <div className="bg-white rounded-lg p-3 border">
+                      <h5 className="text-xs font-medium text-green-600 mb-2">
+                        🚀 After (7+ Days)
+                      </h5>
+                      <div className="text-xs text-green-500 mb-3">
+                        Last updated: {new Date(item.postStats.lastUpdated || item.postStats.updatedAt || Date.now()).toLocaleDateString('en-US', {
+                          year: 'numeric',
+                          month: 'short',
+                          day: 'numeric'
+                        })} • {Math.floor((new Date(item.postStats.lastUpdated || item.postStats.updatedAt || Date.now()).getTime() - new Date(item.implementedAt).getTime()) / (1000 * 60 * 60 * 24))} days since implementation
+                      </div>
+                      <div className="grid grid-cols-4 gap-3 text-xs">
+                        <div>
+                          <span className="text-muted-foreground">Impressions:</span>
+                          <br />
+                          <span className="font-medium">{item.postStats.impressions}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Clicks:</span>
+                          <br />
+                          <span className="font-medium">{item.postStats.clicks}</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">CTR:</span>
+                          <br />
+                          <span className="font-medium">{(item.postStats.ctr * 100).toFixed(2)}%</span>
+                        </div>
+                        <div>
+                          <span className="text-muted-foreground">Position:</span>
+                          <br />
+                          <span className="font-medium">{item.postStats.position.toFixed(2)}</span>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Summary of Changes */}
+                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
+                      <h5 className="text-xs font-medium text-blue-700 mb-2">
+                        📈 Summary of Changes
+                      </h5>
+                      <div className="text-xs text-blue-600">
+                        <p>
+                          <strong>Impressions:</strong> {item.impressionsDelta > 0 ? '+' : ''}{item.impressionsDelta} 
+                          ({item.impressionsDelta > 0 ? 'improved' : 'decreased'})
+                        </p>
+                        <p>
+                          <strong>Position:</strong> {item.positionDelta < 0 ? '+' : ''}{Math.abs(item.positionDelta).toFixed(2)} 
+                          ({item.positionDelta < 0 ? 'improved ranking' : 'ranking decreased'})
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
               </div>
             );
           })}
@@ -217,9 +347,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             </h4>
           </div>
           <p className="text-xs text-green-700">
-            Your SEO progress continues to update after the initial 7-day results. 
-            The system monitors your performance daily and will show ongoing improvements 
-            or declines. Check back regularly to see the latest progress!
+          Your SEO tracking doesn't stop after the first week! We monitor your performance daily and provide fresh insights every 7 days, so you can stay on top of your progress. Check back regularly to see the latest progress!
           </p>
         </div>
       </CardContent>

@@ -22,10 +22,10 @@ exports.updateAllMissingPostStats = functions.https.onRequest(async (req, res) =
       const data = doc.data();
       const { implementedAt, pageUrl, userId, preStats, postStats } = data;
 
-      // Skip if already has postStats
+      // ✅ MODIFIED: Update postStats for documents over 7 days old, even if they already have postStats
+      // This allows refreshing stale data and fixing the 0s from CORS issues
       if (postStats) {
-        console.log(`⏭️ Skipping ${doc.id} - already has postStats`);
-        continue;
+        console.log(`🔄 Refreshing existing postStats for ${doc.id}`);
       }
 
       // Skip if missing required fields
@@ -399,6 +399,10 @@ exports.checkSeoTipProgress = pubsub
         console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
         continue;
       }
+      
+      // ✅ MODIFIED: Always process documents over 7 days old, even if they already have postStats
+      // This allows refreshing stale data and continuous monitoring
+      console.log(`🔄 Processing ${doc.id} (${daysSince.toFixed(1)} days old) - refreshing postStats`);
       
       // Try to get GSC data from the document first
       let token = data.gscToken;
