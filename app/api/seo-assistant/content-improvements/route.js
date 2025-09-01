@@ -44,8 +44,12 @@ export async function POST(req) {
     const openaiData = await openaiResponse.json();
     const aiResponse = openaiData.choices[0].message.content;
 
+    console.log("🔍 Raw AI Response:", aiResponse);
+
     // Parse the AI response into structured suggestions
     const suggestions = parseAiSuggestions(aiResponse, auditResult);
+    
+    console.log("🔍 Parsed Suggestions:", JSON.stringify(suggestions, null, 2));
 
     console.log(`✅ Generated ${suggestions.length} AI suggestions for ${pageUrl}`);
 
@@ -64,14 +68,22 @@ export async function POST(req) {
 function createImprovementPrompt(pageUrl, auditResult, pageContent, title, metaDescription, headings) {
   const { contentScore, analysis, suggestions } = auditResult;
   
-  return `Analyze this content audit and provide specific, actionable improvement suggestions.
+  // Add safety checks for undefined values
+  const safePageContent = pageContent || "";
+  const safeTitle = title || "";
+  const safeMetaDescription = metaDescription || "";
+  const safeHeadings = headings || [];
+  
+  return `You are an expert SEO content strategist. Analyze this specific page content and provide actionable improvements that users can copy-paste directly into their website.
 
 PAGE INFORMATION:
 - URL: ${pageUrl}
-- Title: ${title}
-- Meta Description: ${metaDescription}
-- Content Length: ${pageContent.length} characters
-- Headings: ${headings.map(h => h.tag + ': ' + h.text).join(', ')}
+- Current Title: "${safeTitle}"
+- Current Meta Description: "${safeMetaDescription}"
+- Content Length: ${safePageContent.length} characters
+
+CURRENT HEADINGS:
+${safeHeadings.map(h => `- ${(h.tag || 'H1').toUpperCase()}: "${h.text || 'No text'}"`).join('\n')}
 
 CONTENT AUDIT RESULTS:
 - Overall Score: ${contentScore}/100
@@ -82,30 +94,58 @@ CONTENT AUDIT RESULTS:
 - Meta Description: ${analysis.metaDescription.score}/100 (${analysis.metaDescription.value.length} characters)
 - Content Structure: ${analysis.contentStructure.score}/100 (${analysis.contentStructure.value.paragraphCount} paragraphs)
 
-CURRENT ISSUES:
-${suggestions.map(s => `- ${s.title}: ${s.description}`).join('\n')}
+FULL PAGE CONTENT:
+${safePageContent}
 
-CONTENT PREVIEW (first 500 characters):
-${pageContent.substring(0, 500)}...
+TASK: Based on the actual content above, provide specific, copy-paste ready improvements. For each suggestion:
 
-Please provide 3-5 specific, actionable improvement suggestions. For each suggestion include:
-1. A clear title
-2. Detailed description of the problem
-3. Specific AI recommendation on how to fix it
-4. 2-3 concrete examples of what to add/change
-5. Priority level (high/medium/low)
+1. Identify the EXACT problem in the current content
+2. Provide the EXACT text that should be changed/added
+3. Show BEFORE and AFTER examples using actual content from the page
+4. Give specific implementation steps
 
-Format your response as JSON with this structure:
+Focus on:
+- Rewriting complex sentences to be simpler
+- Adding missing headings with specific text
+- Improving the actual title and meta description
+- Adding specific content sections
+- Restructuring existing paragraphs
+
+Format your response as JSON:
 {
   "suggestions": [
     {
-      "title": "Improve Heading Structure",
-      "description": "Your page lacks proper heading hierarchy...",
-      "aiRecommendation": "Add an H1 main heading and organize content with H2 and H3 subheadings...",
+      "title": "Simplify Complex Sentences",
+      "description": "Your content contains several complex sentences that reduce readability.",
+      "aiRecommendation": "Rewrite these specific sentences to be clearer and more engaging.",
       "examples": [
-        "H1: South Bend Web Developer Services",
-        "H2: Custom Website Design",
-        "H3: Responsive Design Features"
+        "BEFORE: 'Our comprehensive SEO optimization services ensure growth for your business'",
+        "AFTER: 'We provide SEO services that help your business grow'",
+        "BEFORE: 'Utilize our professional web development solutions'",
+        "AFTER: 'Use our web development services'"
+      ],
+      "beforeAfter": [
+        {
+          "before": "EXACT complex sentence from the page",
+          "after": "Simplified version that's easier to read"
+        }
+      ],
+      "priority": "high"
+    },
+    {
+      "title": "Add Missing Headings",
+      "description": "Your content lacks proper heading structure for better organization.",
+      "aiRecommendation": "Add these specific headings to organize your content better.",
+      "examples": [
+        "Add H1: 'South Bend Web Developer Services'",
+        "Add H2: 'Our Web Development Process'",
+        "Add H3: 'Discovery and Planning Phase'"
+      ],
+      "beforeAfter": [
+        {
+          "before": "Current paragraph without heading",
+          "after": "H2: Specific Heading Title\n[Current paragraph content]"
+        }
       ],
       "priority": "high"
     }
@@ -115,16 +155,82 @@ Format your response as JSON with this structure:
 
 function parseAiSuggestions(aiResponse, auditResult) {
   try {
-    // Try to extract JSON from the response
+    // Try multiple approaches to extract JSON
+    let jsonString = null;
+    
+    // Approach 1: Look for JSON between curly braces
     const jsonMatch = aiResponse.match(/\{[\s\S]*\}/);
     if (jsonMatch) {
-      const parsed = JSON.parse(jsonMatch[0]);
-      if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
-        return parsed.suggestions;
+      jsonString = jsonMatch[0];
+    }
+    
+    // Approach 2: Look for JSON after "suggestions" keyword
+    if (!jsonString) {
+      const suggestionsMatch = aiResponse.match(/suggestions[\s\S]*\}/);
+      if (suggestionsMatch) {
+        jsonString = '{' + suggestionsMatch[0];
+      }
+    }
+    
+    if (jsonString) {
+      console.log("🔍 Attempting to parse JSON:", jsonString.substring(0, 500) + "...");
+      
+      // Try to parse as-is first
+      try {
+        const parsed = JSON.parse(jsonString);
+        if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+          return cleanSuggestions(parsed.suggestions);
+        }
+      } catch (firstError) {
+        console.log("🔍 First parse attempt failed, trying to clean JSON...");
+        
+        // Try cleaning the JSON
+        try {
+          // Remove problematic characters that break JSON
+          const cleanedJson = jsonString
+            .replace(/[\u0000-\u001F\u007F-\u009F]/g, '') // Remove control characters
+            .replace(/\n/g, ' ')  // Replace newlines with spaces
+            .replace(/\r/g, ' ')  // Replace carriage returns with spaces
+            .replace(/\t/g, ' ')  // Replace tabs with spaces
+            .replace(/\s+/g, ' ') // Replace multiple spaces with single space
+            .trim();
+          
+          console.log("🔍 Cleaned JSON:", cleanedJson.substring(0, 500) + "...");
+          
+          const parsed = JSON.parse(cleanedJson);
+          if (parsed.suggestions && Array.isArray(parsed.suggestions)) {
+            return cleanSuggestions(parsed.suggestions);
+          }
+        } catch (secondError) {
+          console.error("🔍 Second parse attempt also failed:", secondError.message);
+        }
       }
     }
   } catch (error) {
     console.error("Failed to parse AI response as JSON:", error);
+    console.error("Raw response that failed:", aiResponse.substring(0, 1000));
+  }
+  
+  // Helper function to clean suggestions
+  function cleanSuggestions(suggestions) {
+    return suggestions.map(suggestion => ({
+      ...suggestion,
+      examples: suggestion.examples ? suggestion.examples.map(example => {
+        if (typeof example === 'string') {
+          // Remove any curly braces that might be in the string
+          return example.replace(/[{}]/g, '');
+        }
+        return JSON.stringify(example).replace(/[{}]/g, '');
+      }) : [],
+      beforeAfter: suggestion.beforeAfter ? suggestion.beforeAfter.map(change => ({
+        before: typeof change.before === 'string' ? 
+          change.before.replace(/[{}]/g, '') : 
+          JSON.stringify(change.before).replace(/[{}]/g, ''),
+        after: typeof change.after === 'string' ? 
+          change.after.replace(/[{}]/g, '') : 
+          JSON.stringify(change.after).replace(/[{}]/g, '')
+      })) : []
+    }));
   }
 
   // Fallback: create suggestions based on audit results

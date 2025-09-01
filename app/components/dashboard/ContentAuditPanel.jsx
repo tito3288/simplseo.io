@@ -105,7 +105,24 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
 
     setIsGeneratingSuggestions(true);
     try {
-      // Call AI suggestions API
+      // Get fresh page content for AI analysis
+      const pageContent = await getPageContent(user.id, pageUrl, true); // Force refresh
+      
+      if (!pageContent.success) {
+        throw new Error(`Failed to get page content: ${pageContent.error}`);
+      }
+
+      const { title, metaDescription, textContent, headings } = pageContent.data;
+
+      console.log("🔍 Sending to AI:", {
+        pageUrl,
+        title: title?.substring(0, 100),
+        metaDescription: metaDescription?.substring(0, 100),
+        contentLength: textContent?.length,
+        headingsCount: headings?.length
+      });
+
+      // Call AI suggestions API with fresh content
       const suggestionsResponse = await fetch("/api/seo-assistant/content-improvements", {
         method: "POST",
         headers: {
@@ -114,10 +131,10 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
         body: JSON.stringify({
           pageUrl,
           auditResult,
-          pageContent: auditResult.pageContent || "",
-          title: auditResult.title || "",
-          metaDescription: auditResult.metaDescription || "",
-          headings: auditResult.headings || []
+          pageContent: textContent, // Use fresh scraped content
+          title: title, // Use fresh scraped title
+          metaDescription: metaDescription, // Use fresh scraped meta description
+          headings: headings // Use fresh scraped headings
         }),
       });
 
@@ -353,10 +370,29 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                                 {suggestion.examples.map((example, exampleIdx) => (
                                   <li key={exampleIdx} className="flex items-start gap-2">
                                     <span className="text-green-500 mt-1">•</span>
-                                    <span>{example}</span>
+                                    <span>{String(example || '')}</span>
                                   </li>
                                 ))}
                               </ul>
+                            </div>
+                          )}
+                          {suggestion.beforeAfter && suggestion.beforeAfter.length > 0 && (
+                            <div className="mt-3 bg-white p-3 rounded border border-green-100">
+                              <h6 className="text-xs font-medium text-green-800 mb-2">Specific Changes:</h6>
+                              <div className="space-y-3">
+                                {suggestion.beforeAfter.map((change, changeIdx) => (
+                                  <div key={changeIdx} className="space-y-2">
+                                    <div className="bg-red-50 p-2 rounded border border-red-200">
+                                      <h6 className="text-xs font-medium text-red-800 mb-1">BEFORE:</h6>
+                                      <p className="text-xs text-red-700 font-mono">{String(change.before || '')}</p>
+                                    </div>
+                                    <div className="bg-green-50 p-2 rounded border border-green-200">
+                                      <h6 className="text-xs font-medium text-green-800 mb-1">AFTER:</h6>
+                                      <p className="text-xs text-green-700 font-mono">{String(change.after || '')}</p>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
                             </div>
                           )}
                         </div>
