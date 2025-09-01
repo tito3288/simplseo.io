@@ -378,7 +378,7 @@ exports.checkSeoTipProgress = pubsub
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
-      const { implementedAt, pageUrl, userId, preStats } = data;
+      const { implementedAt, pageUrl, userId, preStats, postStats } = data;
 
       console.log(`🔍 Processing document: ${doc.id}`);
       console.log(`📅 Implemented at: ${implementedAt}`);
@@ -442,34 +442,67 @@ exports.checkSeoTipProgress = pubsub
           }
         );
 
-        let postStats;
+        let newPostStats;
         
         if (res.ok) {
           // ✅ Use real data from API
-          postStats = await res.json();
-          console.log(`✅ Fetched real postStats from API:`, postStats);
+          newPostStats = await res.json();
+          console.log(`✅ Fetched real postStats from API:`, newPostStats);
+          
+          // ✅ FIXED: Check if API returned zeros (no data found)
+          if (newPostStats.impressions === 0 && newPostStats.clicks === 0 && 
+              newPostStats.ctr === 0 && newPostStats.position === 0) {
+            
+            // Check if we have existing real postStats data to preserve
+            if (postStats && 
+                typeof postStats.impressions === 'number' && 
+                typeof postStats.clicks === 'number' && 
+                typeof postStats.ctr === 'number' && 
+                typeof postStats.position === 'number' &&
+                (postStats.impressions > 0 || postStats.clicks > 0)) {
+              
+              console.log(`✅ API returned zeros (no new data), preserving existing real postStats:`, postStats);
+              newPostStats = postStats; // Keep existing real data
+            } else {
+              console.log(`⚠️ API returned zeros and no existing real data to preserve`);
+            }
+          }
         } else {
-          // ✅ Fallback to dummy data if API fails
-          console.log(`⚠️ API failed with status ${res.status}, using dummy postStats`);
-          postStats = {
-            impressions: Math.floor(Math.random() * 100) + 50,
-            clicks: Math.floor(Math.random() * 20) + 5,
-            ctr: (Math.random() * 0.05 + 0.02).toFixed(4),
-            position: (Math.random() * 5 + 8).toFixed(2),
-          };
-          console.log("⚠️ Using dummy postStats:", postStats);
+          // ✅ FIXED: Preserve existing real data instead of overwriting with dummy data
+          console.log(`⚠️ API failed with status ${res.status}`);
+          
+          // Check if we have existing real postStats data
+          if (postStats && 
+              typeof postStats.impressions === 'number' && 
+              typeof postStats.clicks === 'number' && 
+              typeof postStats.ctr === 'number' && 
+              typeof postStats.position === 'number') {
+            
+            console.log(`✅ Preserving existing real postStats data:`, postStats);
+            newPostStats = postStats; // Keep existing real data
+          } else {
+            // Only use dummy data if we don't have any real data
+            console.log(`⚠️ No existing real data, using dummy postStats as fallback`);
+            newPostStats = {
+              impressions: Math.floor(Math.random() * 100) + 50,
+              clicks: Math.floor(Math.random() * 20) + 5,
+              ctr: (Math.random() * 0.05 + 0.02).toFixed(4),
+              position: (Math.random() * 5 + 8).toFixed(2),
+            };
+            console.log("⚠️ Using dummy postStats:", newPostStats);
+          }
         }
 
         // ✅ MODIFIED: Always update postStats (continuous monitoring)
         console.log(
           `📊 Updating postStats for ${pageUrl}:`,
-          postStats
+          newPostStats
         );
 
         updates.push(
           doc.ref.set(
             {
-              postStats,
+              postStats: newPostStats,
               updatedAt: new Date().toISOString(),
               lastUpdated: new Date().toISOString(), // Track when it was last updated
             },

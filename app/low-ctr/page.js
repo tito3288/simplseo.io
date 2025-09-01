@@ -32,6 +32,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import ContentAuditPanel from "../components/dashboard/ContentAuditPanel";
 
 // Helper function to create safe document IDs
 const createSafeDocId = (userId, pageUrl) => {
@@ -53,8 +54,8 @@ const createSafeDocId = (userId, pageUrl) => {
   console.log("  raw hash:", hash);
   console.log("  urlHash:", urlHash);
   console.log("  finalId:", finalId);
-  console.log("  expectedId:", "c7uSLI9gpbUSoeRv05zeDkIER763_3b0a68f3");
-  console.log("  match:", finalId === "c7uSLI9gpbUSoeRv05zeDkIER763_3b0a68f3");
+  console.log("  expectedId:", "c7uSLI9gpbUSoeRv05zeDklER763_3b0a68f3");
+  console.log("  match:", finalId === "c7uSLI9gpbUSoeRv05zeDklER763_3b0a68f3");
   
   return finalId;
 };
@@ -466,6 +467,25 @@ export default function LowCtrPage() {
         </CardContent>
       </Card>
 
+      {/* Content Audit Section */}
+      <Card className="mb-6">
+        <CardHeader>
+          <CardTitle>Content Quality Audit</CardTitle>
+          <CardDescription>
+            Analyze content quality, readability, and structure to improve SEO performance
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {lowCtrPages.map((page, idx) => (
+            <ContentAuditPanel
+              key={idx}
+              pageUrl={page.page}
+              pageData={page}
+            />
+          ))}
+        </CardContent>
+      </Card>
+
 
       <div className="mb-6">
         <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
@@ -482,6 +502,28 @@ export default function LowCtrPage() {
               alongside your AI-generated title and description.
             </AlertDescription>
           </Alert>
+
+          {/* Intent Mismatch Card */}
+          <Card className="mb-6">
+            <CardHeader>
+              <CardTitle>Search Intent Analysis</CardTitle>
+              <CardDescription>
+                Check if your content matches what users are actually searching for
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-muted-foreground mb-4">
+                Sometimes low CTR happens because your content doesn&apos;t match the search intent. 
+                Our intent mismatch analysis can help identify and fix these issues.
+              </p>
+              <Button 
+                onClick={() => router.push("/intent-mismatch")}
+                className="bg-[#00BF63] hover:bg-[#00BF63]/90"
+              >
+                Analyze Search Intent Mismatches
+              </Button>
+            </CardContent>
+          </Card>
 
           <Card className="mb-6">
             <CardHeader>
