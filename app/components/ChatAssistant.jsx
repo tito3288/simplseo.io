@@ -1,5 +1,5 @@
 import React, { useState, useRef, useEffect } from "react";
-import { X, Send } from "lucide-react";
+import { X, Send, Maximize2, Minimize2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -17,11 +17,57 @@ const ChatAssistant = ({
 }) => {
   const { data } = useOnboarding();
   const firstName = data?.name ? data.name.split(" ")[0] : "";
+  // Get current page context for personalized welcome message
+  const getPageContext = () => {
+    if (typeof window === 'undefined') return null;
+    
+    const pathname = window.location.pathname;
+    const pageContexts = {
+      '/dashboard': {
+        title: 'Dashboard',
+        message: "I see you're on your Dashboard! This shows your SEO progress and recommendations. Need help understanding what you're seeing?",
+        help: "I can explain any metric, help you understand the data, or guide you on what to do next."
+      },
+      '/intent-mismatch': {
+        title: 'Intent Mismatch Analysis',
+        message: "I see you're on the Intent Mismatch page! This finds when your content doesn't match what people are searching for. Need help understanding what you're seeing?",
+        help: "I can explain the scores, help you fix content issues, or show you how to make your pages match what people want."
+      },
+      '/low-ctr': {
+        title: 'Low CTR Fixes',
+        message: "I see you're on the Low CTR page! These pages get seen but not clicked. Need help understanding what you're seeing?",
+        help: "I can help you write better titles, improve descriptions, or fix why people aren't clicking."
+      },
+      '/top-keywords': {
+        title: 'Top Keywords',
+        message: "I see you're on the Top Keywords page! This shows your best-performing search terms. Need help understanding what you're seeing?",
+        help: "I can explain which keywords to focus on, how to improve rankings, or find new opportunities."
+      },
+      '/easy-wins': {
+        title: 'Easy Wins',
+        message: "I see you're on the Easy Wins page! These are quick SEO fixes you can do right now. Need help understanding what you're seeing?",
+        help: "I can help you pick the best wins, guide you through them, or explain what results to expect."
+      },
+      '/chatbot': {
+        title: 'SEO Mentor Chat',
+        message: "I see you're in the SEO Mentor chat! This is your personal SEO help space. What would you like to work on?",
+        help: "I can answer any SEO question, analyze your data, or guide you through optimizations."
+      }
+    };
+    
+    return pageContexts[pathname] || {
+      title: 'SEO Assistant',
+      message: "I'm here to help with all your SEO needs! Need help understanding what you're seeing?",
+      help: "I can answer questions, provide recommendations, or guide you through any SEO challenge."
+    };
+  };
+
+  const pageContext = getPageContext();
   const defaultWelcome = {
     id: "welcome",
     role: "assistant",
     content:
-      `**Hey${firstName ? ` ${firstName}` : ""}! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started`,
+      `**Hey${firstName ? ` ${firstName}` : ""}! I'm your personal SEO Mentor**  \n\n${pageContext.message}\n\n${pageContext.help}\n\nJust type your question below to get started!`,
     timestamp: new Date(),
   };
   const [messages, setMessages] = useState(() => {
@@ -36,9 +82,13 @@ const ChatAssistant = ({
   });
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [isExpanded, setIsExpanded] = useState(false);
+  const [isResizing, setIsResizing] = useState(false);
+  const [chatWidth, setChatWidth] = useState(384); // Default width (w-96)
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
+  const resizeRef = useRef(null);
 
   // Load saved conversation (if within 1 hour)
   useEffect(() => {
@@ -167,6 +217,48 @@ const ChatAssistant = ({
     inputRef.current?.focus();
   }, []);
 
+  // Resize functionality
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!isResizing) return;
+      
+      // Calculate width based on distance from right edge of screen
+      // When dragging left (towards screen edge), chat gets smaller
+      // When dragging right (away from screen edge), chat gets bigger
+      const rightEdge = window.innerWidth - 24; // 24px margin from right edge
+      const newWidth = Math.min(Math.max(320, rightEdge - e.clientX), window.innerWidth - 48);
+      setChatWidth(newWidth);
+    };
+
+    const handleMouseUp = () => {
+      setIsResizing(false);
+    };
+
+    if (isResizing) {
+      document.addEventListener('mousemove', handleMouseMove);
+      document.addEventListener('mouseup', handleMouseUp);
+    }
+
+    return () => {
+      document.removeEventListener('mousemove', handleMouseMove);
+      document.removeEventListener('mouseup', handleMouseUp);
+    };
+  }, [isResizing]);
+
+  const handleResizeStart = (e) => {
+    e.preventDefault();
+    setIsResizing(true);
+  };
+
+  const toggleExpanded = () => {
+    setIsExpanded(!isExpanded);
+    if (!isExpanded) {
+      setChatWidth(Math.min(800, window.innerWidth - 48));
+    } else {
+      setChatWidth(384);
+    }
+  };
+
   const handleUploadImage = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -257,31 +349,47 @@ const ChatAssistant = ({
 
   const endConversation = () => {
     localStorage.removeItem("seoChatMessages");
+    const pageContext = getPageContext();
     setMessages([
       {
         id: "welcome",
         role: "assistant",
         content:
-          `**Welcome${firstName ? ` ${firstName}` : ""}! I’m your personal SEO Mentor**  \nI can answer questions, give you tips, or help rewrite titles and descriptions — whatever you need.\n\nJust type your question below to get started 🚀`,
+          `**Hey${firstName ? ` ${firstName}` : ""}! I'm your personal SEO Mentor**  \n\n${pageContext.message}\n\n${pageContext.help}\n\nJust type your question below to get started! 🚀`,
         timestamp: new Date(),
       },
     ]);
   };
 
   return (
-    <div className="flex flex-col h-[500px] overflow-hidden rounded-xl bg-white/1 backdrop-blur-md border border-white/10 shadow-md">
+    <div 
+      className="flex flex-col h-[500px] overflow-hidden rounded-xl bg-white/1 backdrop-blur-md border border-white/10 shadow-md relative"
+      style={{ width: `${chatWidth}px` }}
+    >
       <div className="p-3 border-b border-border flex justify-between items-center bg-[#00bf63]/8">
         <div className="flex items-center gap-2">
           <h2 className="font-medium text-sm">SEO Mentor</h2>
         </div>
-        <Button
-          variant="ghost"
-          size="icon"
-          onClick={onClose} // X now just minimizes
-          className="h-6 w-6"
-        >
-          <X className="h-3 w-3" />
-        </Button>
+        <div className="flex items-center gap-1">
+          {/* Expand/Minimize Button - Desktop Only */}
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={toggleExpanded}
+            className="h-6 w-6 hidden md:flex"
+            title={isExpanded ? "Minimize" : "Expand"}
+          >
+            {isExpanded ? <Minimize2 className="h-3 w-3" /> : <Maximize2 className="h-3 w-3" />}
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon"
+            onClick={onClose}
+            className="h-6 w-6"
+          >
+            <X className="h-3 w-3" />
+          </Button>
+        </div>
       </div>
 
       <ScrollArea className="flex-1 p-3 overflow-y-auto">
@@ -392,6 +500,18 @@ const ChatAssistant = ({
           >
             End Conversation
           </Button>
+        </div>
+      </div>
+
+      {/* Resize Handle - Desktop Only - Top Left Corner */}
+      <div 
+        ref={resizeRef}
+        className="absolute top-0 left-0 w-4 h-4 cursor-nw-resize hidden md:block hover:bg-[#00bf63]/20 transition-colors rounded-br-lg"
+        onMouseDown={handleResizeStart}
+        title="Drag to resize"
+      >
+        <div className="w-full h-full flex items-center justify-center">
+          <div className="w-2 h-2 bg-[#00bf63]/40 rounded-full"></div>
         </div>
       </div>
     </div>
