@@ -48,5 +48,25 @@ service cloud.firestore {
         (docId.matches(request.auth.uid + '_.*'))
       );
     }
+    
+    // Allow users to read/write their own content audit results
+    match /contentAuditResults/{docId} {
+      allow read, write: if request.auth != null && (
+        // New format: check userId field
+        (resource.data.userId == request.auth.uid) ||
+        // Old format: check if document ID starts with user ID
+        (docId.matches(request.auth.uid + '_.*'))
+      );
+    }
+    
+    // Allow users to read/write their own AI suggestions
+    match /aiSuggestions/{docId} {
+      allow read, write: if request.auth != null && (
+        // New format: check userId field
+        (resource.data.userId == request.auth.uid) ||
+        // Old format: check if document ID starts with user ID
+        (docId.matches(request.auth.uid + '_.*'))
+      );
+    }
   }
 } 

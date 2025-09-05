@@ -10,7 +10,6 @@ import MainLayout from "../components/MainLayout";
 import SeoPerformanceCard from "../components/dashboard/SeoPerformanceCard";
 import SeoImpactLeaderboard from "../components/dashboard/SeoImpactLeaderboard";
 import { Button } from "@/components/ui/button";
-import InternalLinkSuggestion from "../components/dashboard/InternalLinkSuggestion";
 import { fetchWpPages } from "../lib/fetchWpPages";
 import {
   Card,
@@ -91,6 +90,7 @@ export default function LowCtrPage() {
   const [aiMeta, setAiMeta] = useState([]);
   const [sitemapUrls, setSitemapUrls] = useState([]);
   const [implementedPages, setImplementedPages] = useState([]);
+  const [pageImplementationDates, setPageImplementationDates] = useState({});
   const [loading, setLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState(28); // Default to 28 days
   const shouldShowLoader = useMinimumLoading(loading, 3000);
@@ -153,7 +153,7 @@ export default function LowCtrPage() {
     loadWpPages();
   }, []);
 
-  // ✅ Fetch implemented pages that have 0 clicks after 30 days
+  // ✅ Fetch implemented pages and their implementation dates
   useEffect(() => {
     const fetchImplementedPages = async () => {
       if (!user?.id) return;
@@ -168,16 +168,29 @@ export default function LowCtrPage() {
       const now = Date.now();
       const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
 
-      const eligiblePages = snapshot.docs
-        .map(doc => doc.data())
-        .filter(data => {
-          if (!data.postStats || !data.implementedAt) return false;
-          
-          const daysSince = (now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24);
-          return daysSince >= 30 && data.postStats.clicks === 0;
-        })
-        .map(data => data.pageUrl);
+      const pageData = {};
+      const eligiblePages = [];
 
+      snapshot.docs.forEach(doc => {
+        const data = doc.data();
+        if (data.postStats && data.implementedAt) {
+          const daysSince = (now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24);
+          
+          // Store implementation date for each page
+          pageData[data.pageUrl] = {
+            implementedAt: data.implementedAt,
+            daysSince: daysSince,
+            hasZeroClicks: data.postStats.clicks === 0
+          };
+
+          // Only add to eligible pages if 30+ days and 0 clicks
+          if (daysSince >= 30 && data.postStats.clicks === 0) {
+            eligiblePages.push(data.pageUrl);
+          }
+        }
+      });
+
+      setPageImplementationDates(pageData);
       setImplementedPages(eligiblePages);
     };
 
@@ -194,6 +207,15 @@ export default function LowCtrPage() {
     () => new Set(lowCtrPages.map((p) => p.page)),
     [lowCtrPages]
   );
+
+  // Helper function to check if a page is eligible for Content Quality Audit
+  const isPageEligibleForContentAudit = (pageUrl) => {
+    const pageData = pageImplementationDates[pageUrl];
+    if (!pageData) return false;
+    
+    // Page must be implemented for 30+ days and have 0 clicks
+    return pageData.daysSince >= 30 && pageData.hasZeroClicks;
+  };
 
   const fetchLowCtrPages = async (siteUrl, token) => {
     const today = new Date();
@@ -468,7 +490,7 @@ export default function LowCtrPage() {
       </Card>
 
       {/* Content Audit Section */}
-      <Card className="mb-6">
+      {/* <Card className="mb-6">
         <CardHeader>
           <CardTitle>Content Quality Audit</CardTitle>
           <CardDescription>
@@ -484,14 +506,15 @@ export default function LowCtrPage() {
             />
           ))}
         </CardContent>
-      </Card>
+      </Card> */}
 
 
       <div className="mb-6">
         <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
       </div>
 
-      {implementedPages.length > 0 && (
+
+      {Object.keys(pageImplementationDates).length > 0 && (
         <>
           <Alert className="mb-6 border-primary/20 bg-primary/5">
             <AlertCircle className="h-4 w-4" />
@@ -520,31 +543,54 @@ export default function LowCtrPage() {
                 onClick={() => router.push("/intent-mismatch")}
                 className="bg-[#00BF63] hover:bg-[#00BF63]/90"
               >
-                Analyze Search Intent Mismatches
+                Fix Intent Mismatches
               </Button>
             </CardContent>
           </Card>
 
+
+          {/* Content Quality Audit Card */}
           <Card className="mb-6">
             <CardHeader>
-              <CardTitle>Suggested Internal Links</CardTitle>
+              <CardTitle>Content Quality Audit</CardTitle>
               <CardDescription>
-                These pages haven&apos;t gotten any clicks after 30 days. Try linking to
-                them from other pages on your site.
+                These pages haven&apos;t gotten any clicks after 30 days. Analyze and improve 
+                their content quality to boost SEO performance and rankings.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
-              {lowCtrPages.map((page) => (
-                <InternalLinkSuggestion
-                  key={page.page}
-                  userId={user.id}
-                  page={page.page}
-                  targetPage={page.page}
-                  lowCtrUrls={lowCtrUrls}
-                  sitemapUrls={relevantPages}
-                  implementedPages={implementedPages}
-                />
-              ))}
+              {(() => {
+                const eligiblePages = lowCtrPages.filter((page) => isPageEligibleForContentAudit(page.page));
+                
+                if (eligiblePages.length === 0) {
+                  return (
+                    <div className="text-center py-8">
+                      <p className="text-muted-foreground mb-2">
+                        No pages are eligible for Content Quality Audit yet.
+                      </p>
+                      <p className="text-sm text-muted-foreground">
+                        Pages become eligible 30 days after implementing AI suggestions and having 0 clicks.
+                      </p>
+                    </div>
+                  );
+                }
+                
+                return eligiblePages.map((page) => {
+                  const pageData = pageImplementationDates[page.page];
+                  return (
+                    <div key={page.page} className="mb-4">
+                      <div className="text-sm text-muted-foreground mb-2">
+                        Implemented {Math.floor(pageData?.daysSince || 0)} days ago • 
+                        {pageData?.hasZeroClicks ? ' No clicks yet' : ' Has clicks'}
+                      </div>
+                      <ContentAuditPanel
+                        pageUrl={page.page}
+                        pageData={page}
+                      />
+                    </div>
+                  );
+                });
+              })()}
             </CardContent>
           </Card>
         </>

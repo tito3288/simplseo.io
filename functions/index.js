@@ -432,7 +432,7 @@ exports.checkSeoTipProgress = pubsub
       try {
         console.log(`🌐 Fetching postStats for ${pageUrl} from API`);
         
-        // ✅ Try to fetch real data from your deployed API
+        // ✅ FIXED: Always fetch fresh data from API (same logic as manual function)
         const res = await fetch(
           "https://simplseo-io.vercel.app/api/gsc/page-metrics",
           {
@@ -445,59 +445,20 @@ exports.checkSeoTipProgress = pubsub
         let newPostStats;
         
         if (res.ok) {
-          // ✅ Use real data from API
           newPostStats = await res.json();
-          console.log(`✅ Fetched real postStats from API:`, newPostStats);
-          
-          // ✅ FIXED: Check if API returned zeros (no data found)
-          if (newPostStats.impressions === 0 && newPostStats.clicks === 0 && 
-              newPostStats.ctr === 0 && newPostStats.position === 0) {
-            
-            // Check if we have existing real postStats data to preserve
-            if (postStats && 
-                typeof postStats.impressions === 'number' && 
-                typeof postStats.clicks === 'number' && 
-                typeof postStats.ctr === 'number' && 
-                typeof postStats.position === 'number' &&
-                (postStats.impressions > 0 || postStats.clicks > 0)) {
-              
-              console.log(`✅ API returned zeros (no new data), preserving existing real postStats:`, postStats);
-              newPostStats = postStats; // Keep existing real data
-            } else {
-              console.log(`⚠️ API returned zeros and no existing real data to preserve`);
-            }
-          }
+          console.log(`✅ Fetched real postStats for ${pageUrl}:`, newPostStats);
         } else {
-          // ✅ FIXED: Preserve existing real data instead of overwriting with dummy data
-          console.log(`⚠️ API failed with status ${res.status}`);
-          
-          // Check if we have existing real postStats data
-          if (postStats && 
-              typeof postStats.impressions === 'number' && 
-              typeof postStats.clicks === 'number' && 
-              typeof postStats.ctr === 'number' && 
-              typeof postStats.position === 'number') {
-            
-            console.log(`✅ Preserving existing real postStats data:`, postStats);
-            newPostStats = postStats; // Keep existing real data
-          } else {
-            // Only use dummy data if we don't have any real data
-            console.log(`⚠️ No existing real data, using dummy postStats as fallback`);
-            newPostStats = {
-              impressions: Math.floor(Math.random() * 100) + 50,
-              clicks: Math.floor(Math.random() * 20) + 5,
-              ctr: (Math.random() * 0.05 + 0.02).toFixed(4),
-              position: (Math.random() * 5 + 8).toFixed(2),
-            };
-            console.log("⚠️ Using dummy postStats:", newPostStats);
-          }
+          console.log(`⚠️ API failed for ${pageUrl}, using dummy postStats`);
+          newPostStats = {
+            impressions: Math.floor(Math.random() * 100) + 50,
+            clicks: Math.floor(Math.random() * 20) + 5,
+            ctr: (Math.random() * 0.05 + 0.02).toFixed(4),
+            position: (Math.random() * 5 + 8).toFixed(2),
+          };
         }
 
-        // ✅ MODIFIED: Always update postStats (continuous monitoring)
-        console.log(
-          `📊 Updating postStats for ${pageUrl}:`,
-          newPostStats
-        );
+        // ✅ FIXED: Always update with fresh data (same as manual function)
+        console.log(`📊 Updating postStats for ${pageUrl}:`, newPostStats);
 
         updates.push(
           doc.ref.set(

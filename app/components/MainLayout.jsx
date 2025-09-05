@@ -90,7 +90,7 @@ const MainLayout = ({
     // },
     {
       path: "/chatbot",
-      label: "Chatbot",
+      label: "SEO Mentor",
       icon: <MessageSquare className="w-5 h-5" />,
     },
     {

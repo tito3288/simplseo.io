@@ -1,12 +1,13 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { ChevronDown, ChevronRight, FileText, TrendingUp, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
 import { getPageContent } from "../../lib/pageScraper";
 import { useAuth } from "../../contexts/AuthContext";
+import { saveContentAuditResult, getContentAuditResult, saveAiSuggestions, getAiSuggestions } from "../../lib/firestoreHelpers";
 import SquashBounceLoader from "../ui/squash-bounce-loader";
 import { toast } from "sonner";
 
@@ -17,8 +18,39 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
   const [auditResult, setAuditResult] = useState(null);
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
+  const [isLoadingSavedData, setIsLoadingSavedData] = useState(true);
 
   const cleanUrl = pageUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  // Load saved data on component mount
+  useEffect(() => {
+    const loadSavedData = async () => {
+      if (!user?.id) return;
+
+      try {
+        setIsLoadingSavedData(true);
+        
+        // Load saved audit result
+        const savedAuditResult = await getContentAuditResult(user.id, pageUrl);
+        if (savedAuditResult) {
+          setAuditResult(savedAuditResult);
+          setIsExpanded(true);
+        }
+
+        // Load saved AI suggestions
+        const savedAiSuggestions = await getAiSuggestions(user.id, pageUrl);
+        if (savedAiSuggestions) {
+          setAiSuggestions(savedAiSuggestions);
+        }
+      } catch (error) {
+        console.error("Error loading saved data:", error);
+      } finally {
+        setIsLoadingSavedData(false);
+      }
+    };
+
+    loadSavedData();
+  }, [user?.id, pageUrl]);
 
   const getScoreBadge = (score) => {
     if (score >= 80) {
@@ -86,6 +118,9 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
       setAuditResult(result);
       setIsExpanded(true);
       
+      // Save audit result to Firebase
+      await saveContentAuditResult(user.id, pageUrl, result);
+      
       toast.success("Content audit completed!", {
         description: `Score: ${result.contentScore}/100`
       });
@@ -145,6 +180,9 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
       const suggestions = await suggestionsResponse.json();
       setAiSuggestions(suggestions);
       
+      // Save AI suggestions to Firebase
+      await saveAiSuggestions(user.id, pageUrl, suggestions);
+      
       toast.success("AI suggestions generated!", {
         description: `${suggestions.suggestions.length} improvement suggestions ready`
       });
@@ -186,7 +224,12 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
       </CardHeader>
 
       <CardContent>
-        {!auditResult ? (
+        {isLoadingSavedData ? (
+          <div className="text-center py-4">
+            <SquashBounceLoader size="sm" className="mb-2" />
+            <p className="text-sm text-muted-foreground">Loading saved data...</p>
+          </div>
+        ) : !auditResult ? (
           <div className="text-center py-4">
             <p className="text-sm text-muted-foreground mb-4">
               Analyze content quality, readability, and structure to improve SEO performance.
