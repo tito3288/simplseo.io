@@ -1082,13 +1082,13 @@ export default function IntentMismatch() {
     }
   };
 
-  // Helper function to style quoted keywords in green
+  // Helper function to style quoted keywords with theme colors
   const styleQuotedKeywords = (text) => {
     if (!text) return text;
     
     return text.split("'").map((part, index) => 
       index % 2 === 1 ? (
-        <span key={index} className="text-green-600 font-medium">&apos;{part}&apos;</span>
+        <span key={index} className="text-[#00bf63] font-medium">&apos;{part}&apos;</span>
       ) : (
         part
       )
@@ -1330,6 +1330,15 @@ Can you analyze my page structure and give me specific, actionable advice for im
         </Alert>
       )}
 
+        {/* Info Alert */}
+       <Alert className="mt-6 mb-5">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertDescription>
+          Intent mismatches occur when your page ranks for a keyword but doesn&apos;t fully satisfy what the searcher is looking for. 
+          This can lead to high bounce rates and poor user experience. Use the &quot;Fix This&quot; button to get AI-powered suggestions for improving your content.
+        </AlertDescription>
+      </Alert>
+
       {/* Filter and Status */}
       <div className="mb-6 flex items-center justify-between">
         <div className="flex items-center gap-4">
@@ -1358,6 +1367,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
           </div>
         )}
       </div>
+
+      
 
       {/* Results */}
       {shouldShowLoader ? (
@@ -1418,7 +1429,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                      dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
                    ) &&
                    !mismatch.locationIssueFixed && (
-                    <div className="m-4 p-4 border border-gray-100 bg-gradient-to-r from-yellow-50 to-orange-50 rounded-lg transition-all duration-300 ease-in-out">
+                    <div className="m-4 p-4 border border-border bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-lg transition-all duration-300 ease-in-out">
                       <LocationIssueAlert
                         keyword={cleanKeyword}
                         locationIssues={locationIssues}
@@ -1436,7 +1447,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                      dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
                    ) &&
                    !mismatch.locationIssueFixed && (
-                    <div className="border-b border-gray-100 mx-4 transition-all duration-300 ease-in-out"></div>
+                    <div className="border-b border-border mx-4 transition-all duration-300 ease-in-out"></div>
                   )}
                   
                   <CardContent className="pt-4">
@@ -1444,7 +1455,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                   {/* Left Column - Keyword & Page */}
                   <div className="space-y-3">
                     <div>
-                      <h3 className="font-semibold text-lg text-gray-900 mb-1">
+                      <h3 className="font-semibold text-lg text-foreground mb-1">
                         {mismatch.keyword.replace(/^\[|\]$/g, '')}
                       </h3>
                       <a 
@@ -1470,8 +1481,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
 
                   {/* Middle Column - Mismatch Reason */}
                   <div className="space-y-2">
-                    <h4 className="font-medium text-gray-900 text-sm">Mismatch Reason</h4>
-                    <div className="text-sm text-gray-600 leading-relaxed">
+                    <h4 className="font-medium text-foreground text-sm">Mismatch Reason</h4>
+                    <div className="text-sm text-muted-foreground leading-relaxed">
                       {mismatch.reason.length > 150 ? (
                         <div>
                           <p>
@@ -1503,8 +1514,8 @@ Can you analyze my page structure and give me specific, actionable advice for im
                   {/* Right Column - Suggested Fix & Action */}
                   <div className="space-y-3">
                     <div>
-                      <h4 className="font-medium text-gray-900 text-sm mb-2">Suggested Fix</h4>
-                      <div className="text-sm text-gray-600 leading-relaxed">
+                      <h4 className="font-medium text-foreground text-sm mb-2">Suggested Fix</h4>
+                      <div className="text-sm text-muted-foreground leading-relaxed">
                         {mismatch.suggestion.length > 120 ? (
                           <div>
                             <p>
@@ -1557,14 +1568,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
           </>
         )}
 
-      {/* Info Alert */}
-      <Alert className="mt-6">
-        <AlertTriangle className="h-4 w-4" />
-        <AlertDescription>
-          Intent mismatches occur when your page ranks for a keyword but doesn&apos;t fully satisfy what the searcher is looking for. 
-          This can lead to high bounce rates and poor user experience. Use the &quot;Fix This&quot; button to get AI-powered suggestions for improving your content.
-        </AlertDescription>
-      </Alert>
+ 
     </MainLayout>
   );
 }

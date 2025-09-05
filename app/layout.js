@@ -6,6 +6,7 @@ import { Toaster } from "@/components/ui/sonner";
 
 import { AuthProvider } from "./contexts/AuthContext";
 import { OnboardingProvider } from "./contexts/OnboardingContext";
+import { ThemeProvider } from "./contexts/ThemeContext";
 
 // ✅ Import Next.js Script component
 import Script from "next/script";
@@ -43,12 +44,14 @@ export default function RootLayout({ children }) {
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <OnboardingProvider>
-            {children}
-            <Toaster />
-          </OnboardingProvider>
-        </AuthProvider>
+        <ThemeProvider>
+          <AuthProvider>
+            <OnboardingProvider>
+              {children}
+              <Toaster />
+            </OnboardingProvider>
+          </AuthProvider>
+        </ThemeProvider>
       </body>
     </html>
   );

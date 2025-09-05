@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 import { useOnboarding } from "../contexts/OnboardingContext";
+import { useTheme } from "../contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -14,6 +15,8 @@ import {
   Menu,
   X,
   AlertTriangle,
+  Moon,
+  Sun,
 } from "lucide-react";
 import ChatAssistant from "../components/ChatAssistant";
 import {
@@ -35,6 +38,7 @@ const MainLayout = ({
 }) => {
   const { logout, user, isLoading } = useAuth();
   const { data } = useOnboarding();
+  const { isDarkMode, toggleTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
@@ -155,7 +159,7 @@ const MainLayout = ({
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top Nav */}
-      <header className="bg-white border-b border-border shadow-sm">
+      <header className="bg-background border-b border-border shadow-sm">
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button
@@ -198,6 +202,21 @@ const MainLayout = ({
           </nav>
 
           <div className="flex items-center gap-2">
+            {/* Dark Mode Toggle */}
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={toggleTheme}
+              className="hover:bg-muted"
+              title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+            >
+              {isDarkMode ? (
+                <Sun className="w-5 h-5" />
+              ) : (
+                <Moon className="w-5 h-5" />
+              )}
+            </Button>
+
             <div className="hidden sm:flex items-center gap-2">
               <div className="text-sm text-muted-foreground">
                 <span className="block text-foreground font-medium">
@@ -231,6 +250,20 @@ const MainLayout = ({
                   </Button>
                 </Link>
               ))}
+              <Button
+                variant="ghost"
+                className="w-full justify-start"
+                onClick={toggleTheme}
+              >
+                {isDarkMode ? (
+                  <Sun className="w-5 h-5" />
+                ) : (
+                  <Moon className="w-5 h-5" />
+                )}
+                <span className="ml-2">
+                  {isDarkMode ? "Light Mode" : "Dark Mode"}
+                </span>
+              </Button>
               <Button
                 variant="ghost"
                 className="w-full justify-start"
@@ -309,7 +342,7 @@ const MainLayout = ({
                 {/* Tooltip that appears during animation */}
                 {(isAnimating || showTooltip) && (
                   <div 
-                    className="fixed bottom-25 right-6 bg-[#00bf63]/8 backdrop-blur-md text-black text-sm px-3 py-2 rounded-lg shadow-lg z-50"
+                    className="fixed bottom-25 right-6 bg-[#00bf63]/8 backdrop-blur-md text-foreground text-sm px-3 py-2 rounded-lg shadow-lg z-50"
                     style={{
                       animation: isAnimating ? 'bounce-squash 1s ease-in-out' : 'none'
                     }}
@@ -317,7 +350,7 @@ const MainLayout = ({
                     <div className="flex items-center gap-2">
                       <span>Need SEO help or a bad joke? 🤔</span>
                     </div>
-                    <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white-900"></div>
+                    <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#00bf63]/8"></div>
                   </div>
                 )}
               </div>

@@ -185,15 +185,15 @@ export default function Chatbot() {
 
   return (
     <MainLayout>
-      <div className="flex h-screen w-full bg-gray-50 z-2">
+      <div className="flex h-screen w-full bg-background z-2">
                 {/* Left Sidebar - Collapsible with smooth animation */}
-        <div className={`bg-white border-r border-gray-200 flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out ${
+        <div className={`bg-card border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out ${
           isMobile 
             ? (isSidebarCollapsed ? 'w-0' : 'w-80') 
             : (isSidebarCollapsed ? 'w-16' : 'w-80')
         } ${isMobile ? 'absolute left-0 top-0 h-full z-20' : 'relative'} ${isMobile && isSidebarCollapsed ? 'overflow-hidden' : ''}`}>
           {/* Header */}
-          <div className={`border-b border-gray-200 transition-all duration-300 ${
+          <div className={`border-b border-border transition-all duration-300 ${
             isSidebarCollapsed ? 'p-4' : 'p-6'
           }`}>
             <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-6`}>
@@ -201,17 +201,17 @@ export default function Chatbot() {
                 <div className="flex items-center space-x-2">
                   <div className="w-6 h-6 bg-green-500 rounded-full flex items-center justify-center">
                   </div>
-                  <span className="text-lg font-medium text-gray-700">SimplSEO Mentor</span>
+                  <span className="text-lg font-medium text-foreground">SimplSEO Mentor</span>
                 </div>
               )}
               <button 
                 onClick={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
-                className="p-1 hover:bg-gray-200 rounded transition-colors"
+                className="p-1 hover:bg-muted rounded transition-colors"
               >
                 {isSidebarCollapsed ? (
-                  <PanelLeftOpen className="w-5 h-5 text-gray-600" />
+                  <PanelLeftOpen className="w-5 h-5 text-muted-foreground" />
                 ) : (
-                  <PanelLeftClose className="w-5 h-5 text-gray-600" />
+                  <PanelLeftClose className="w-5 h-5 text-muted-foreground" />
                 )}
               </button>
             </div>
@@ -231,14 +231,14 @@ export default function Chatbot() {
           <div className={`py-2 transition-all duration-300 ${
             isSidebarCollapsed ? 'px-2' : 'px-4'
           }`}>
-            <button className={`w-full text-left rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-between ${
+            <button className={`w-full text-left rounded-lg hover:bg-muted transition-colors flex items-center justify-between ${
               isSidebarCollapsed ? 'px-2 py-2' : 'px-3 py-2'
             }`}>
               <div className="flex items-center space-x-3">
-                <Wand2 className="w-5 h-5 text-gray-600 flex-shrink-0" />
-                {!isSidebarCollapsed && <span className="text-gray-700">Advanced Tools</span>}
+                <Wand2 className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                {!isSidebarCollapsed && <span className="text-foreground">Advanced Tools</span>}
               </div>
-              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-gray-500" />}
+              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </button>
           </div>
 
@@ -246,34 +246,34 @@ export default function Chatbot() {
           <div className={`py-2 transition-all duration-300 ${
             isSidebarCollapsed ? 'px-2' : 'px-4'
           }`}>
-            <button className={`w-full text-left rounded-lg hover:bg-gray-100 transition-colors flex items-center justify-between ${
+            <button className={`w-full text-left rounded-lg hover:bg-muted transition-colors flex items-center justify-between ${
               isSidebarCollapsed ? 'px-2 py-2' : 'px-3 py-2'
             }`}>
               <div className="flex items-center space-x-3">
-                <User className="w-5 h-5 text-gray-600 flex-shrink-0" />
-                {!isSidebarCollapsed && <span className="text-gray-700">AI Assistants</span>}
+                <User className="w-5 h-5 text-muted-foreground flex-shrink-0" />
+                {!isSidebarCollapsed && <span className="text-foreground">AI Assistants</span>}
               </div>
-              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-gray-500" />}
+              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </button>
           </div>
 
           {/* Chat History Panel */}
-          <div className={`flex-1 mb-4 bg-gray-50 rounded-lg border border-gray-200 transition-all duration-300 ${
+          <div className={`flex-1 mb-4 bg-muted rounded-lg border border-border transition-all duration-300 ${
             isSidebarCollapsed ? 'mx-2 p-2' : 'mx-4 p-4'
           }`}>
             <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
               <div className="flex items-center space-x-2">
-                <MessageSquare className="w-5 h-5 text-gray-600 flex-shrink-0" />
+                <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                 {!isSidebarCollapsed && (
                   <>
-                    <span className="text-sm font-medium text-gray-700">Chat History</span>
-                    <span className="text-xs text-gray-400 bg-gray-100 px-2 py-1 rounded-full">0</span>
+                    <span className="text-sm font-medium text-foreground">Chat History</span>
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">0</span>
                   </>
                 )}
               </div>
               {!isSidebarCollapsed && (
-                <button className="p-1 hover:bg-gray-200 rounded">
-                  <ChevronUp className="w-4 h-4 text-gray-500" />
+                <button className="p-1 hover:bg-muted rounded">
+                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
                 </button>
               )}
             </div>
@@ -285,7 +285,7 @@ export default function Chatbot() {
                     {recentChats.map((chat, index) => (
                       <div 
                         key={index}
-                        className="text-sm text-gray-600 hover:text-gray-900 cursor-pointer py-1 truncate"
+                        className="text-sm text-muted-foreground hover:text-foreground cursor-pointer py-1 truncate"
                         onClick={() => toast.success(`Loading: ${chat}`)}
                       >
                         {chat}
@@ -295,7 +295,7 @@ export default function Chatbot() {
                 ) : (
                   <div className="text-center py-8">
                     <div className="text-4xl mb-2">😔</div>
-                    <p className="text-sm text-gray-400">No chat history here</p>
+                    <p className="text-sm text-muted-foreground">No chat history here</p>
                   </div>
                 )}
               </>
@@ -303,7 +303,7 @@ export default function Chatbot() {
           </div>
 
           {/* User Profile */}
-          <div className={`border-t border-gray-200 transition-all duration-300 ${
+          <div className={`border-t border-border transition-all duration-300 ${
             isSidebarCollapsed ? 'p-2' : 'p-4'
           }`}>
             <div className={`flex items-center cursor-pointer ${
@@ -314,21 +314,21 @@ export default function Chatbot() {
               </div>
               {!isSidebarCollapsed && (
                 <div className="flex-1">
-                  <div className="text-sm font-medium text-gray-900">{data?.name || user?.email || 'User'}</div>
-                  <div className="text-xs text-gray-500">SEO Assistant</div>
+                  <div className="text-sm font-medium text-foreground">{data?.name || user?.email || 'User'}</div>
+                  <div className="text-xs text-muted-foreground">SEO Assistant</div>
                 </div>
               )}
-              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-gray-400" />}
+              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </div>
           </div>
         </div>
 
         {/* Main Chat Area - Takes remaining width, no margins */}
-        <div className="flex-1 flex flex-col bg-gray-50 relative z-0">
+        <div className="flex-1 flex flex-col bg-background relative z-0">
           {/* Mobile Backdrop Overlay - Only visible when sidebar is open on mobile */}
           {isMobile && !isSidebarCollapsed && (
             <div 
-              className="fixed inset-0 backdrop-blur-sm bg-white/10 z-10"
+              className="fixed inset-0 backdrop-blur-sm bg-background/10 z-10"
               onClick={() => setIsSidebarCollapsed(true)}
             />
           )}
@@ -337,9 +337,9 @@ export default function Chatbot() {
           {isMobile && isSidebarCollapsed && (
             <button
               onClick={() => setIsSidebarCollapsed(false)}
-              className="absolute top-4 left-4 z-10 p-2 bg-white rounded-lg shadow-lg border border-gray-200 hover:bg-gray-50 transition-colors"
+              className="absolute top-4 left-4 z-10 p-2 bg-card rounded-lg shadow-lg border border-border hover:bg-muted transition-colors"
             >
-              <PanelLeftOpen className="w-5 h-5 text-gray-600" />
+              <PanelLeftOpen className="w-5 h-5 text-muted-foreground" />
             </button>
           )}
 
@@ -349,7 +349,7 @@ export default function Chatbot() {
 
                 <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6 sm:mb-8">
                   <SquashBounceLoader size="lg" className="text-green-500" />
-                  <h1 className="text-2xl sm:text-3xl font-semibold text-gray-900 px-4">{currentTitle}</h1>
+                  <h1 className="text-2xl sm:text-3xl font-semibold text-foreground px-4">{currentTitle}</h1>
                 </div>
               
               {/* Input Field */}
@@ -360,7 +360,7 @@ export default function Chatbot() {
                   onChange={(e) => setInput(e.target.value)}
                   onKeyDown={handleKeyDown}
                   placeholder={`How can I help you today ${data?.name?.split(' ')[0] || 'there'}?`}
-                  className="w-full min-h-[100px] sm:min-h-[120px] pr-24 sm:pr-32 resize-none text-base sm:text-lg placeholder:text-sm sm:placeholder:text-base border-gray-200 focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-gray-200 rounded-lg transition-all duration-200"
+                  className="w-full min-h-[100px] sm:min-h-[120px] pr-24 sm:pr-32 resize-none text-base sm:text-lg placeholder:text-sm sm:placeholder:text-base border-border focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-border rounded-lg transition-all duration-200"
                   disabled={isThinking}
                 />
                 
@@ -419,14 +419,14 @@ export default function Chatbot() {
 
           {/* Messages Area - Only shows when there are messages */}
           {messages.length > 0 && (
-            <div className="flex-1 overflow-y-auto px-6 py-4 border-t border-gray-200 bg-white">
+            <div className="flex-1 overflow-y-auto px-6 py-4 border-t border-border bg-card">
               <div className="space-y-4">
                 {messages.map((message) => (
                   <div
                     key={message.id}
                     className={`flex ${message.role === "user" ? "justify-end" : "justify-start"}`}
                   >
-                    <Card className={`max-w-[80%] ${message.role === "user" ? "bg-blue-600 text-white" : "bg-gray-100"}`}>
+                    <Card className={`max-w-[80%] ${message.role === "user" ? "bg-blue-600 text-white" : "bg-muted"}`}>
                       <CardContent className="p-4">
                         <p className="whitespace-pre-wrap">{message.content}</p>
                       </CardContent>
@@ -436,15 +436,15 @@ export default function Chatbot() {
                 
                 {isThinking && (
                   <div className="flex justify-start">
-                    <Card className="bg-gray-100">
+                    <Card className="bg-muted">
                       <CardContent className="p-4">
                         <div className="flex items-center space-x-2">
                           <div className="flex space-x-1">
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce"></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                            <div className="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                            <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
                           </div>
-                          <span className="text-sm text-gray-600">Thinking...</span>
+                          <span className="text-sm text-muted-foreground">Thinking...</span>
                         </div>
                       </CardContent>
                     </Card>

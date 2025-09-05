@@ -514,7 +514,7 @@ export default function LowCtrPage() {
       </div>
 
 
-      {Object.keys(pageImplementationDates).length > 0 && (
+      {implementedPages.length > 0 && (
         <>
           <Alert className="mb-6 border-primary/20 bg-primary/5">
             <AlertCircle className="h-4 w-4" />
