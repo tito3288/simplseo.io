@@ -34,9 +34,11 @@ import {
   PanelLeftClose,
   PanelLeftOpen,
   Lightbulb,
-  TrendingUp
+  TrendingUp,
+  X
 } from "lucide-react";
 import { toast } from "sonner";
+import ReactMarkdown from "react-markdown";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { fetchChatbotData } from "../lib/chatbotDataFetcher";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
@@ -78,6 +80,39 @@ export default function Chatbot() {
   const [currentTitle, setCurrentTitle] = useState("");
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [activeDropdown, setActiveDropdown] = useState(null);
+
+  // Prewritten prompts for each action button
+  const actionPrompts = {
+    write: [
+      "Write me an improved meta title and description for my top underperforming page.",
+      "Draft a blog outline to target a keyword I'm ranking on page 2.",
+      "Rewrite one of my existing pages to better match search intent.",
+      "Write SEO-friendly alt text for images on my site.",
+      "Create an internal linking paragraph that connects my top page to a low-CTR page."
+    ],
+    learn: [
+      "Explain why my impressions are increasing but clicks are not.",
+      "Teach me what bounce rate means using my site's data as an example.",
+      "What's the difference between indexed and not indexed pages on my site?",
+      "Explain how to use keywords I already rank for to improve my SEO.",
+      "What is search intent and how does it apply to my top pages?"
+    ],
+    ideas: [
+      "Give me 5 blog post ideas based on keywords I almost rank for.",
+      "Suggest FAQ questions for my website that could rank in Google.",
+      "What seasonal or trending keywords could I target in my niche?",
+      "Suggest content improvements for my homepage.",
+      "What related topics are missing from my website?"
+    ],
+    track: [
+      "Show me my top 5 pages that improved the most in the past 30 days.",
+      "Track how my click-through rate changes after updating meta titles.",
+      "Which keywords moved from page 2 to page 1 this month?",
+      "Highlight pages that dropped in ranking and why.",
+      "Give me a weekly summary of my SEO performance."
+    ]
+  };
 
   useEffect(() => {
     if (typeof window !== "undefined" && !authLoading && !user) {
@@ -284,6 +319,39 @@ export default function Chatbot() {
     }
   };
 
+  // Handle action button clicks
+  const handleActionClick = (action) => {
+    if (activeDropdown === action) {
+      setActiveDropdown(null);
+    } else {
+      setActiveDropdown(action);
+    }
+  };
+
+  // Handle prompt selection
+  const handlePromptSelect = (prompt) => {
+    setInput(prompt);
+    setActiveDropdown(null);
+    // Focus the textarea after setting the input
+    setTimeout(() => {
+      textareaRef.current?.focus();
+    }, 100);
+  };
+
+  // Close dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (activeDropdown && !event.target.closest('.action-dropdown')) {
+        setActiveDropdown(null);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [activeDropdown]);
+
   if (authLoading) {
     return null;
   }
@@ -358,7 +426,7 @@ export default function Chatbot() {
           </div>
 
           {/* Advanced Tools Section */}
-          <div className={`py-2 transition-all duration-300 ${
+          {/* <div className={`py-2 transition-all duration-300 ${
             isSidebarCollapsed ? 'px-2' : 'px-4'
           }`}>
             <button className={`w-full text-left rounded-lg hover:bg-muted transition-colors flex items-center justify-between ${
@@ -370,10 +438,10 @@ export default function Chatbot() {
               </div>
               {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </button>
-          </div>
+          </div> */}
 
           {/* AI Assistants Section */}
-          <div className={`py-2 transition-all duration-300 ${
+          {/* <div className={`py-2 transition-all duration-300 ${
             isSidebarCollapsed ? 'px-2' : 'px-4'
           }`}>
             <button className={`w-full text-left rounded-lg hover:bg-muted transition-colors flex items-center justify-between ${
@@ -385,10 +453,10 @@ export default function Chatbot() {
               </div>
               {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </button>
-          </div>
+          </div> */}
 
           {/* Chat History Panel */}
-          <div className={`flex-1 mb-4 bg-muted rounded-lg border border-border transition-all duration-300 ${
+          <div className={`flex-1 mb-4 mt-4 bg-muted rounded-lg border border-border transition-all duration-300 ${
             isSidebarCollapsed ? 'mx-2 p-2' : 'mx-4 p-4'
           }`}>
             <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
@@ -484,65 +552,229 @@ export default function Chatbot() {
                     <h1 className="text-2xl sm:text-3xl font-semibold text-foreground px-4">{currentTitle}</h1>
                   </div>
                   
-                  {/* Input Field - Larger and better centered */}
-                  <div className="relative mb-6 sm:mb-8 w-full">
-                    <Textarea
-                      ref={textareaRef}
-                      value={input}
-                      onChange={(e) => setInput(e.target.value)}
-                      onKeyDown={handleKeyDown}
-                      placeholder={`How can I help you today ${data?.name?.split(' ')[0] || 'there'}?`}
-                      className="w-full min-h-[100px] sm:min-h-[120px] pr-24 sm:pr-32 resize-none text-base sm:text-lg placeholder:text-sm sm:placeholder:text-base border-border focus:border-blue-500 focus:ring-0 focus-visible:ring-0 focus-visible:border-border rounded-lg transition-all duration-200"
-                      disabled={isThinking}
-                    />
-                    
-                    {/* Input Controls - Left side */}
-                    <div className="absolute bottom-2 sm:bottom-3 left-2 sm:left-3 flex items-center gap-1 sm:gap-2">
-                      <Button variant="ghost" size="sm" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
-                        <Plus className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
-                      <Button variant="ghost" size="sm" className="h-7 w-7 sm:h-8 sm:w-8 p-0">
-                        <Search className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
-                    </div>
-                    
-                    {/* Model Selection & Send - Right side */}
-                    <div className="absolute bottom-2 sm:bottom-3 right-2 sm:right-3 flex items-center gap-1 sm:gap-2">
-                      <Select>
-                        <SelectTrigger className="w-32 sm:w-40 h-7 sm:h-8 text-sm">
-                          <SelectValue placeholder="SEO Assistant" />
-                        </SelectTrigger>
-                      </Select>
+                  {/* Input Field - Same layout as conversation */}
+                  <div className="mb-6 sm:mb-8 w-full">
+                    <div className="border border-border rounded-lg bg-card">
+                      {/* Textarea */}
+                      <Textarea
+                        ref={textareaRef}
+                        value={input}
+                        onChange={(e) => setInput(e.target.value)}
+                        onKeyDown={handleKeyDown}
+                        placeholder={`How can I help you today ${data?.name?.split(' ')[0] || 'there'}?`}
+                        className="w-full min-h-[100px] sm:min-h-[120px] max-h-[200px] resize-none text-base sm:text-lg placeholder:text-sm sm:placeholder:text-base border-0 focus:ring-0 focus-visible:ring-0 rounded-none transition-all duration-200"
+                        disabled={isThinking}
+                      />
                       
-                      <Button 
-                        onClick={handleSendMessage}
-                        disabled={!input.trim() || isThinking}
-                        className="h-7 w-7 sm:h-8 sm:w-8 p-0 bg-green-500 hover:bg-green-600"
-                      >
-                        <ArrowUp className="h-3 w-3 sm:h-4 sm:w-4" />
-                      </Button>
+                      {/* Bottom Controls Row */}
+                      <div className="flex items-center justify-between p-2 bg-card">
+                        {/* Left side buttons */}
+                        <div className="flex items-center gap-1">
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                            <Plus className="h-3 w-3" />
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
+                            <Search className="h-3 w-3" />
+                          </Button>
+                        </div>
+                        
+                        {/* Right side controls */}
+                        <div className="flex items-center gap-2">
+                          <Select>
+                            <SelectTrigger className="w-32 sm:w-40 h-7 text-sm">
+                              <SelectValue placeholder="SEO Assistant" />
+                            </SelectTrigger>
+                          </Select>
+                          
+                          <Button 
+                            onClick={handleSendMessage}
+                            disabled={!input.trim() || isThinking}
+                            className="h-7 w-7 p-0 bg-green-500 hover:bg-green-600"
+                          >
+                            <ArrowUp className="h-3 w-3" />
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
 
-                  {/* Action Buttons */}
-                  <div className="flex flex-wrap justify-center gap-2 sm:gap-4 px-4">
-                    <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
-                      <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>Write</span>
-                    </Button>
-                    <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
-                      <GraduationCap className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>Learn</span>
-                    </Button>
-                    <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
-                      <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>Ideas</span>
-                    </Button>
-                    <Button variant="outline" className="flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2">
-                      <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
-                      <span>Track</span>
-                    </Button>
-                  </div>
+                       {/* Action Buttons with Dropdowns */}
+                       <div className="flex flex-row flex-wrap justify-center gap-2 sm:gap-4 px-4 relative">
+                         {/* Mobile Dropdown Container - Centered */}
+                         <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-[95vw] sm:hidden z-50">
+                           {activeDropdown && (
+                             <div className="mt-2 bg-card border border-border rounded-lg shadow-lg">
+                               <div className="p-2">
+                                 <div className="flex justify-between items-center mb-2">
+                                   <h3 className="text-sm font-medium text-muted-foreground capitalize">{activeDropdown} Prompts</h3>
+                                   <button
+                                     onClick={() => setActiveDropdown(null)}
+                                     className="p-1 hover:bg-muted rounded-full transition-colors"
+                                   >
+                                     <X className="w-4 h-4" />
+                                   </button>
+                                 </div>
+                                 {actionPrompts[activeDropdown]?.map((prompt, index) => (
+                                   <button
+                                     key={index}
+                                     className="w-full text-left p-3 hover:bg-muted rounded-lg text-sm transition-colors"
+                                     onClick={() => handlePromptSelect(prompt)}
+                                   >
+                                     {prompt}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                         {/* Write Button */}
+                         <div className="relative action-dropdown">
+                           <Button 
+                             variant="outline" 
+                             className={`flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2 ${activeDropdown === 'write' ? 'bg-muted' : ''}`}
+                             onClick={() => handleActionClick('write')}
+                           >
+                             <Pencil className="w-3 h-3 sm:w-4 sm:h-4" />
+                             <span>Write</span>
+                             <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
+                           </Button>
+                           {activeDropdown === 'write' && (
+                             <div className="hidden sm:block absolute top-full left-0 mt-2 w-[36rem] bg-card border border-border rounded-lg shadow-lg z-50">
+                               <div className="p-2">
+                                 <div className="flex justify-between items-center mb-2">
+                                   <h3 className="text-sm font-medium text-muted-foreground">Write Prompts</h3>
+                                   <button
+                                     onClick={() => setActiveDropdown(null)}
+                                     className="p-1 hover:bg-muted rounded-full transition-colors"
+                                   >
+                                     <X className="w-4 h-4" />
+                                   </button>
+                                 </div>
+                                 {actionPrompts.write.map((prompt, index) => (
+                                   <button
+                                     key={index}
+                                     className="w-full text-left p-3 hover:bg-muted rounded-lg text-sm transition-colors"
+                                     onClick={() => handlePromptSelect(prompt)}
+                                   >
+                                     {prompt}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Learn Button */}
+                         <div className="relative action-dropdown">
+                           <Button 
+                             variant="outline" 
+                             className={`flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2 ${activeDropdown === 'learn' ? 'bg-muted' : ''}`}
+                             onClick={() => handleActionClick('learn')}
+                           >
+                             <GraduationCap className="w-3 h-3 sm:w-4 sm:h-4" />
+                             <span>Learn</span>
+                             <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
+                           </Button>
+                           {activeDropdown === 'learn' && (
+                             <div className="hidden sm:block absolute top-full left-0 mt-2 w-[36rem] bg-card border border-border rounded-lg shadow-lg z-50">
+                               <div className="p-2">
+                                 <div className="flex justify-between items-center mb-2">
+                                   <h3 className="text-sm font-medium text-muted-foreground">Learn Prompts</h3>
+                                   <button
+                                     onClick={() => setActiveDropdown(null)}
+                                     className="p-1 hover:bg-muted rounded-full transition-colors"
+                                   >
+                                     <X className="w-4 h-4" />
+                                   </button>
+                                 </div>
+                                 {actionPrompts.learn.map((prompt, index) => (
+                                   <button
+                                     key={index}
+                                     className="w-full text-left p-3 hover:bg-muted rounded-lg text-sm transition-colors"
+                                     onClick={() => handlePromptSelect(prompt)}
+                                   >
+                                     {prompt}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Ideas Button */}
+                         <div className="relative action-dropdown">
+                           <Button 
+                             variant="outline" 
+                             className={`flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2 ${activeDropdown === 'ideas' ? 'bg-muted' : ''}`}
+                             onClick={() => handleActionClick('ideas')}
+                           >
+                             <Lightbulb className="w-3 h-3 sm:w-4 sm:h-4" />
+                             <span>Ideas</span>
+                             <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
+                           </Button>
+                           {activeDropdown === 'ideas' && (
+                             <div className="hidden sm:block absolute top-full left-0 mt-2 w-[36rem] bg-card border border-border rounded-lg shadow-lg z-50">
+                               <div className="p-2">
+                                 <div className="flex justify-between items-center mb-2">
+                                   <h3 className="text-sm font-medium text-muted-foreground">Ideas Prompts</h3>
+                                   <button
+                                     onClick={() => setActiveDropdown(null)}
+                                     className="p-1 hover:bg-muted rounded-full transition-colors"
+                                   >
+                                     <X className="w-4 h-4" />
+                                   </button>
+                                 </div>
+                                 {actionPrompts.ideas.map((prompt, index) => (
+                                   <button
+                                     key={index}
+                                     className="w-full text-left p-3 hover:bg-muted rounded-lg text-sm transition-colors"
+                                     onClick={() => handlePromptSelect(prompt)}
+                                   >
+                                     {prompt}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+
+                         {/* Track Button */}
+                         <div className="relative action-dropdown">
+                           <Button 
+                             variant="outline" 
+                             className={`flex items-center space-x-2 text-sm sm:text-base px-3 sm:px-4 py-2 ${activeDropdown === 'track' ? 'bg-muted' : ''}`}
+                             onClick={() => handleActionClick('track')}
+                           >
+                             <TrendingUp className="w-3 h-3 sm:w-4 sm:h-4" />
+                             <span>Track</span>
+                             <ChevronDown className="w-3 h-3 sm:w-4 sm:h-4" />
+                           </Button>
+                           {activeDropdown === 'track' && (
+                             <div className="hidden sm:block absolute top-full left-0 mt-2 w-[36rem] bg-card border border-border rounded-lg shadow-lg z-50">
+                               <div className="p-2">
+                                 <div className="flex justify-between items-center mb-2">
+                                   <h3 className="text-sm font-medium text-muted-foreground">Track Prompts</h3>
+                                   <button
+                                     onClick={() => setActiveDropdown(null)}
+                                     className="p-1 hover:bg-muted rounded-full transition-colors"
+                                   >
+                                     <X className="w-4 h-4" />
+                                   </button>
+                                 </div>
+                                 {actionPrompts.track.map((prompt, index) => (
+                                   <button
+                                     key={index}
+                                     className="w-full text-left p-3 hover:bg-muted rounded-lg text-sm transition-colors"
+                                     onClick={() => handlePromptSelect(prompt)}
+                                   >
+                                     {prompt}
+                                   </button>
+                                 ))}
+                               </div>
+                             </div>
+                           )}
+                         </div>
+                       </div>
                 </div>
               </div>
             ) : (
@@ -561,7 +793,13 @@ export default function Chatbot() {
                               ? "bg-green-600 text-white ml-2 sm:ml-4" 
                               : "bg-muted mr-2 sm:mr-4"
                           }`}>
-                            <p className="whitespace-pre-wrap text-sm leading-relaxed">{message.content}</p>
+                            {message.role === "user" ? (
+                              <p className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">{message.content}</p>
+                            ) : (
+                              <div className="text-sm sm:text-base leading-relaxed prose prose-sm sm:prose-base max-w-none dark:prose-invert prose-p:mb-6 prose-headings:mb-4 prose-headings:mt-8 prose-ul:mb-6 prose-ol:mb-6 prose-li:mb-3 prose-strong:font-semibold prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground prose-blockquote:pl-4 prose-blockquote:italic prose-h1:text-xl prose-h1:font-bold prose-h2:text-lg prose-h2:font-semibold prose-h3:text-base prose-h3:font-semibold [&_p]:mb-4 [&_p:last-child]:mb-0 [&_h1]:mb-4 [&_h2]:mb-4 [&_h3]:mb-4 [&_h4]:mb-4 [&_h5]:mb-4 [&_h6]:mb-4 [&_ul]:mb-4 [&_ol]:mb-4 [&_li]:mb-2 [&_blockquote]:mb-4 [&_hr]:my-6 [&_pre]:mb-4 [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_strong]:font-semibold [&_em]:italic" style={{ lineHeight: '1.7' }}>
+                                <ReactMarkdown>{message.content}</ReactMarkdown>
+                              </div>
+                            )}
                           </div>
                         </div>
                       </div>
