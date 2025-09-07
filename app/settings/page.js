@@ -146,7 +146,7 @@ export default function Settings() {
 
   const handleExportData = () => {
     toast.success("Data export started", {
-      description: "You'll receive an email when your data is ready for download."
+      description: "You&apos;ll receive an email when your data is ready for download."
     });
   };
 
@@ -358,7 +358,7 @@ export default function Settings() {
                     Notification Preferences
                   </CardTitle>
                   <CardDescription>
-                    Choose what notifications you'd like to receive via email and real-time alerts.
+                    Choose what notifications you&apos;d like to receive via email and real-time alerts.
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
