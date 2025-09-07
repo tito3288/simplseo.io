@@ -8,6 +8,7 @@ import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
+import { Input } from "@/components/ui/input";
 import { 
   Select, 
   SelectContent, 
@@ -35,7 +36,9 @@ import {
   PanelLeftOpen,
   Lightbulb,
   TrendingUp,
-  X
+  X,
+  Edit3,
+  Trash2
 } from "lucide-react";
 import { toast } from "sonner";
 import ReactMarkdown from "react-markdown";
@@ -50,6 +53,10 @@ export default function Chatbot() {
   const [messages, setMessages] = useState([]);
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
 
@@ -58,15 +65,128 @@ export default function Chatbot() {
   const [isLoadingData, setIsLoadingData] = useState(true);
   const shouldShowLoader = useMinimumLoading(isLoadingData, 2000);
 
-  const recentChats = [
-    "React Hook Dependency Warning",
-    "Community Impact Page Strategy", 
-    "Community Center Services Overview",
-    "Website Content Enhancement Strategy",
-    "Dental Website FAQ Development",
-    "Generating Relevant Anchor Text",
-    "Introducing SEO Assistant"
-  ];
+  // Conversation management functions
+  const loadConversations = async () => {
+    if (!user?.id) return;
+    
+    setIsLoadingConversations(true);
+    try {
+      const response = await fetch(`/api/conversations?userId=${user.id}&search=${encodeURIComponent(searchTerm)}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setConversations(data.conversations);
+      }
+    } catch (error) {
+      console.error("Error loading conversations:", error);
+    } finally {
+      setIsLoadingConversations(false);
+    }
+  };
+
+  const saveConversation = async (messagesToSave) => {
+    if (!user?.id || !messagesToSave.length) return;
+
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          messages: messagesToSave,
+          source: 'main-chatbot'
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        setCurrentConversationId(data.conversationId);
+        await loadConversations(); // Refresh the list
+        return data.conversationId;
+      }
+    } catch (error) {
+      console.error("Error saving conversation:", error);
+    }
+  };
+
+  const loadConversation = async (conversationId) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`);
+      const data = await response.json();
+      
+      if (data.success) {
+        setMessages(data.conversation.messages);
+        setCurrentConversationId(conversationId);
+        toast.success("Conversation loaded!");
+      }
+    } catch (error) {
+      console.error("Error loading conversation:", error);
+      toast.error("Failed to load conversation");
+    }
+  };
+
+  const updateConversation = async (conversationId, messagesToUpdate) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'addMessage',
+          messages: messagesToUpdate
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadConversations(); // Refresh the list
+      }
+    } catch (error) {
+      console.error("Error updating conversation:", error);
+    }
+  };
+
+  const deleteConversation = async (conversationId) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'DELETE'
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadConversations(); // Refresh the list
+        if (currentConversationId === conversationId) {
+          setMessages([]);
+          setCurrentConversationId(null);
+        }
+        toast.success("Conversation deleted!");
+      }
+    } catch (error) {
+      console.error("Error deleting conversation:", error);
+      toast.error("Failed to delete conversation");
+    }
+  };
+
+  const renameConversation = async (conversationId, newTitle) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'rename',
+          title: newTitle
+        })
+      });
+
+      const data = await response.json();
+      if (data.success) {
+        await loadConversations(); // Refresh the list
+        toast.success("Conversation renamed!");
+      }
+    } catch (error) {
+      console.error("Error renaming conversation:", error);
+      toast.error("Failed to rename conversation");
+    }
+  };
 
   const rotatingTitles = [
     "What SEO mess are we cleaning up today?",
@@ -168,6 +288,13 @@ export default function Chatbot() {
     setCurrentTitle(rotatingTitles[randomIndex]);
   }, []);
 
+  // Load conversations when user is available
+  useEffect(() => {
+    if (user?.id && !isLoadingData) {
+      loadConversations();
+    }
+  }, [user?.id, isLoadingData, searchTerm]);
+
   // ✅ NEW: Load saved conversation (no automatic welcome message)
   useEffect(() => {
     const loadSavedConversation = () => {
@@ -240,7 +367,8 @@ export default function Chatbot() {
       id: Date.now().toString(),
       role: "user",
       content: input,
-      timestamp: new Date()
+      timestamp: new Date(),
+      source: "main-chatbot"
     };
 
     setMessages(prev => [...prev, userMessage]);
@@ -280,7 +408,8 @@ export default function Chatbot() {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: aiResponse.response || "I'm sorry, I couldn't generate a response. Please try again.",
-        timestamp: new Date()
+        timestamp: new Date(),
+        source: "main-chatbot"
       };
       
       setMessages(prev => [...prev, aiMessage]);
@@ -291,6 +420,19 @@ export default function Chatbot() {
         timestamp: new Date().getTime()
       };
       localStorage.setItem("chatbotMessages-v1", JSON.stringify(conversation));
+
+      // Save to Firebase
+      const updatedMessages = [...messages, userMessage, aiMessage];
+      if (currentConversationId) {
+        // Update existing conversation
+        await updateConversation(currentConversationId, updatedMessages);
+      } else {
+        // Create new conversation
+        const conversationId = await saveConversation(updatedMessages);
+        if (conversationId) {
+          setCurrentConversationId(conversationId);
+        }
+      }
       
     } catch (error) {
       console.error("❌ Chatbot API error:", error);
@@ -300,7 +442,8 @@ export default function Chatbot() {
         id: (Date.now() + 1).toString(),
         role: "assistant",
         content: "I'm sorry, I'm having trouble connecting right now. Please try again in a moment! 🤖",
-        timestamp: new Date()
+        timestamp: new Date(),
+        source: "main-chatbot"
       };
       
       setMessages(prev => [...prev, fallbackMessage]);
@@ -416,6 +559,7 @@ export default function Chatbot() {
               }`}
               onClick={() => {
                 setMessages([]);
+                setCurrentConversationId(null);
                 localStorage.removeItem("chatbotMessages-v1");
                 toast.success("New conversation started!");
               }}
@@ -465,7 +609,7 @@ export default function Chatbot() {
                 {!isSidebarCollapsed && (
                   <>
                     <span className="text-sm font-medium text-foreground">Chat History</span>
-                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">0</span>
+                    <span className="text-xs text-muted-foreground bg-muted px-2 py-1 rounded-full">{conversations.length}</span>
                   </>
                 )}
               </div>
@@ -478,22 +622,76 @@ export default function Chatbot() {
             
             {!isSidebarCollapsed && (
               <>
-                {recentChats.length > 0 ? (
-                  <div className="space-y-2">
-                    {recentChats.map((chat, index) => (
+                {/* Search Bar */}
+                <div className="mb-3">
+                  <Input
+                    placeholder="Search conversations..."
+                    value={searchTerm}
+                    onChange={(e) => setSearchTerm(e.target.value)}
+                    className="h-8 text-xs"
+                  />
+                </div>
+
+                {/* Conversations List */}
+                {isLoadingConversations ? (
+                  <div className="text-center py-4">
+                    <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
+                    <p className="text-xs text-muted-foreground">Loading conversations...</p>
+                  </div>
+                ) : conversations.length > 0 ? (
+                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                    {conversations.map((conversation) => (
                       <div 
-                        key={index}
-                        className="text-sm text-muted-foreground hover:text-foreground cursor-pointer py-1 truncate"
-                        onClick={() => toast.success(`Loading: ${chat}`)}
+                        key={conversation.id}
+                        className={`text-xs p-2 rounded cursor-pointer transition-colors group ${
+                          currentConversationId === conversation.id 
+                            ? 'bg-green-100 dark:bg-green-900/20 text-green-700 dark:text-green-300' 
+                            : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                        }`}
+                        onClick={() => loadConversation(conversation.id)}
                       >
-                        {chat}
+                        <div className="flex items-start justify-between">
+                          <div className="flex-1 min-w-0">
+                            <p className="font-medium truncate">{conversation.title}</p>
+                            <p className="text-xs opacity-70">
+                              {new Date(conversation.updatedAt).toLocaleDateString()}
+                            </p>
+                          </div>
+                          <div className="flex items-center space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                const newTitle = prompt("Rename conversation:", conversation.title);
+                                if (newTitle && newTitle !== conversation.title) {
+                                  renameConversation(conversation.id, newTitle);
+                                }
+                              }}
+                              className="p-1 hover:bg-muted rounded"
+                              title="Rename"
+                            >
+                              <Edit3 className="w-3 h-3" />
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                if (confirm("Delete this conversation?")) {
+                                  deleteConversation(conversation.id);
+                                }
+                              }}
+                              className="p-1 hover:bg-muted rounded text-red-500"
+                              title="Delete"
+                            >
+                              <Trash2 className="w-3 h-3" />
+                            </button>
+                          </div>
+                        </div>
                       </div>
                     ))}
                   </div>
                 ) : (
                   <div className="text-center py-8">
-                    <div className="text-4xl mb-2">😔</div>
-                    <p className="text-sm text-muted-foreground">No chat history here</p>
+                    <p className="text-sm text-muted-foreground">No conversations yet</p>
+                    <p className="text-xs text-muted-foreground mt-1">Start chatting to see your history here!</p>
                   </div>
                 )}
               </>

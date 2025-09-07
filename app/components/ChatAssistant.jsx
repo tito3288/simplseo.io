@@ -4,6 +4,7 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOnboarding } from "../contexts/OnboardingContext";
+import { useAuth } from "../contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
 
 const ChatAssistant = ({
@@ -16,6 +17,7 @@ const ChatAssistant = ({
   impressionTrends = [],
 }) => {
   const { data } = useOnboarding();
+  const { user } = useAuth();
   const firstName = data?.name ? data.name.split(" ")[0] : "";
   // Get current page context for personalized welcome message
   const getPageContext = () => {
@@ -52,6 +54,11 @@ const ChatAssistant = ({
         title: 'SEO Mentor Chat',
         message: "I see you're in the SEO Mentor chat! This is your personal SEO help space. What would you like to work on?",
         help: "I can answer any SEO question, analyze your data, or guide you through optimizations."
+      },
+      '/settings': {
+        title: 'Settings',
+        message: "I see you're in your Settings! This is where you can customize your SEO experience. Need help understanding any settings?",
+        help: "I can explain what each setting does, help you configure your preferences, or guide you through account management."
       }
     };
     
@@ -70,16 +77,128 @@ const ChatAssistant = ({
       `**Hey${firstName ? ` ${firstName}` : ""}! I'm your personal SEO Mentor**  \n\n${pageContext.message}\n\n${pageContext.help}\n\nJust type your question below to get started!`,
     timestamp: new Date(),
   };
-  const [messages, setMessages] = useState(() => {
-    const stored = localStorage.getItem("seoChatMessages-v4");
-    if (stored) {
-      const { messages, timestamp } = JSON.parse(stored);
-      const now = new Date().getTime();
-      const oneHour = 60 * 60 * 1000;
-      if (now - timestamp < oneHour) return messages;
+  const [messages, setMessages] = useState([]);
+  const [conversations, setConversations] = useState([]);
+  const [currentConversationId, setCurrentConversationId] = useState(null);
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(true);
+
+  // Conversation management functions
+  const loadConversations = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch(`/api/conversations?userId=${user.id}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setConversations(result.conversations);
+      }
+    } catch (error) {
+      console.error("Error loading conversations:", error);
     }
-    return [defaultWelcome]; // fallback
-  });
+  };
+
+  const saveConversation = async (messagesToSave) => {
+    if (!user?.id || !messagesToSave.length) return;
+
+    try {
+      const response = await fetch('/api/conversations', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          userId: user.id,
+          messages: messagesToSave,
+          source: 'corner-bubble'
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        setCurrentConversationId(result.conversationId);
+        await loadConversations();
+        return result.conversationId;
+      }
+    } catch (error) {
+      console.error("Error saving conversation:", error);
+    }
+  };
+
+  const updateConversation = async (conversationId, messagesToUpdate) => {
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'addMessage',
+          messages: messagesToUpdate
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        await loadConversations();
+      }
+    } catch (error) {
+      console.error("Error updating conversation:", error);
+    }
+  };
+
+  const endConversationInCorner = async (conversationId) => {
+    if (!conversationId) return;
+    
+    try {
+      const response = await fetch(`/api/conversations/${conversationId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          action: 'cornerEnd',
+          cornerEnded: true
+        })
+      });
+
+      const result = await response.json();
+      if (result.success) {
+        await loadConversations();
+      }
+    } catch (error) {
+      console.error("Error ending conversation in corner:", error);
+    }
+  };
+
+  const loadMostRecentConversation = async () => {
+    if (!user?.id) return false;
+    
+    try {
+      const response = await fetch(`/api/conversations?userId=${user.id}`);
+      const result = await response.json();
+      
+      if (result.success && result.conversations.length > 0) {
+        // Find the most recent conversation that was started in the corner bubble
+        // and hasn't been ended in the corner bubble
+        const cornerConversation = result.conversations.find(conv => 
+          (conv.source === 'corner-bubble' || 
+           (conv.messages && conv.messages.length > 0 && conv.messages[0].source === 'corner-bubble')) &&
+          !conv.cornerEnded // Not ended in corner bubble
+        );
+        
+        if (cornerConversation) {
+          // Load the full conversation
+          const conversationResponse = await fetch(`/api/conversations/${cornerConversation.id}`);
+          const conversationResult = await conversationResponse.json();
+          
+          if (conversationResult.success) {
+            setMessages(conversationResult.conversation.messages);
+            setCurrentConversationId(cornerConversation.id);
+            return true; // Successfully loaded a corner conversation
+          }
+        }
+      }
+    } catch (error) {
+      console.error("Error loading most recent conversation:", error);
+    }
+    return false; // No corner conversation loaded
+  };
   const [input, setInput] = useState("");
   const [isThinking, setIsThinking] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
@@ -90,21 +209,25 @@ const ChatAssistant = ({
   const fileInputRef = useRef(null);
   const resizeRef = useRef(null);
 
-  // Load saved conversation (if within 1 hour)
+  // Load conversations and most recent conversation when component mounts
   useEffect(() => {
-    const stored = localStorage.getItem("seoChatMessages-v4");
-    if (stored) {
-      const { messages, timestamp } = JSON.parse(stored);
-      const now = new Date().getTime();
-      const oneHour = 60 * 60 * 1000;
-
-      if (now - timestamp < oneHour) {
-        setMessages(messages);
-      } else {
-        localStorage.removeItem("seoChatMessages");
-      }
+    if (user?.id && !isInitialized) {
+      const initializeChat = async () => {
+        setIsLoadingConversation(true);
+        await loadConversations();
+        const conversationLoaded = await loadMostRecentConversation();
+        
+        // If no conversation was loaded, show welcome message
+        if (!conversationLoaded) {
+          setMessages([defaultWelcome]);
+        }
+        
+        setIsInitialized(true);
+        setIsLoadingConversation(false);
+      };
+      initializeChat();
     }
-  }, []);
+  }, [user?.id, isInitialized]);
 
   // Check for stored chat context when component mounts
   useEffect(() => {
@@ -119,6 +242,7 @@ const ChatAssistant = ({
             role: "user",
             content: context.message,
             timestamp: new Date(),
+            source: "corner-bubble",
           };
           
           setMessages(prev => [...prev, contextMessage]);
@@ -180,9 +304,23 @@ const ChatAssistant = ({
         role: "assistant",
         content: reply,
         timestamp: new Date(),
+        source: "corner-bubble",
       };
 
       setMessages(prev => [...prev, assistantMessage]);
+
+      // Save to Firebase
+      const updatedMessages = [...messages, contextMessage, assistantMessage];
+      if (currentConversationId) {
+        // Update existing conversation
+        await updateConversation(currentConversationId, updatedMessages);
+      } else {
+        // Create new conversation
+        const conversationId = await saveConversation(updatedMessages);
+        if (conversationId) {
+          setCurrentConversationId(conversationId);
+        }
+      }
     } catch (error) {
       console.error("OpenAI error:", error);
       setMessages(prev => [
@@ -193,6 +331,7 @@ const ChatAssistant = ({
           content:
             "Sorry, something went wrong while trying to give you SEO advice. Try again shortly.",
           timestamp: new Date(),
+          source: "corner-bubble",
         },
       ]);
     } finally {
@@ -200,14 +339,7 @@ const ChatAssistant = ({
     }
   };
 
-  // Save conversation on every update
-  useEffect(() => {
-    const payload = {
-      messages,
-      timestamp: new Date().getTime(),
-    };
-    localStorage.setItem("seoChatMessages", JSON.stringify(payload));
-  }, [messages]);
+  // Note: Conversations are now saved to Firebase instead of localStorage
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -285,6 +417,7 @@ const ChatAssistant = ({
       role: "user",
       content: input,
       timestamp: new Date(),
+      source: "corner-bubble",
     };
 
     setMessages((prev) => [...prev, userMessage]);
@@ -320,9 +453,23 @@ const ChatAssistant = ({
         role: "assistant",
         content: reply,
         timestamp: new Date(),
+        source: "corner-bubble",
       };
 
       setMessages((prev) => [...prev, assistantMessage]);
+
+      // Save to Firebase
+      const updatedMessages = [...messages, userMessage, assistantMessage];
+      if (currentConversationId) {
+        // Update existing conversation
+        await updateConversation(currentConversationId, updatedMessages);
+      } else {
+        // Create new conversation
+        const conversationId = await saveConversation(updatedMessages);
+        if (conversationId) {
+          setCurrentConversationId(conversationId);
+        }
+      }
     } catch (error) {
       console.error("OpenAI error:", error);
       setMessages((prev) => [
@@ -333,6 +480,7 @@ const ChatAssistant = ({
           content:
             "Sorry, something went wrong while trying to give you SEO advice. Try again shortly.",
           timestamp: new Date(),
+          source: "corner-bubble",
         },
       ]);
     } finally {
@@ -347,8 +495,14 @@ const ChatAssistant = ({
     }
   };
 
-  const endConversation = () => {
+  const endConversation = async () => {
+    // Mark the current conversation as ended in corner bubble
+    if (currentConversationId) {
+      await endConversationInCorner(currentConversationId);
+    }
+    
     localStorage.removeItem("seoChatMessages");
+    setCurrentConversationId(null);
     const pageContext = getPageContext();
     setMessages([
       {
@@ -394,42 +548,7 @@ const ChatAssistant = ({
 
       <ScrollArea className="flex-1 p-3 overflow-y-auto">
         <div className="space-y-3">
-          {messages.map((message) => (
-            <div
-              key={message.id}
-              className={`flex ${
-                message.role === "user" ? "justify-end" : "justify-start"
-              }`}
-            >
-              <div
-                className={`max-w-[85%] rounded-2xl p-2.5 ${
-                  message.role === "user"
-                    ? "bg-[#00bf63] text-primary-foreground"
-                    : "bg-muted"
-                }`}
-              >
-                <div className="text-sm whitespace-pre-wrap">
-                  {message.type === "image" ? (
-                    <img
-                      src={message.content}
-                      alt="User uploaded"
-                      className="rounded-md max-w-full h-auto"
-                    />
-                  ) : (
-                    <ReactMarkdown>{message.content}</ReactMarkdown>
-                  )}
-                </div>
-                <p className="text-xs opacity-70 mt-1">
-                  {new Date(message.timestamp).toLocaleTimeString([], {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  })}
-                </p>
-              </div>
-            </div>
-          ))}
-
-          {isThinking && (
+          {isLoadingConversation ? (
             <div className="flex justify-start">
               <div className="bg-muted max-w-[85%] rounded-2xl p-2.5">
                 <div className="flex space-x-1.5">
@@ -437,11 +556,61 @@ const ChatAssistant = ({
                   <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse delay-75"></div>
                   <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse delay-150"></div>
                 </div>
+                <p className="text-xs text-muted-foreground mt-1">Loading conversation...</p>
               </div>
             </div>
-          )}
+          ) : (
+            <>
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex ${
+                    message.role === "user" ? "justify-end" : "justify-start"
+                  }`}
+                >
+                  <div
+                    className={`max-w-[85%] rounded-2xl p-2.5 ${
+                      message.role === "user"
+                        ? "bg-[#00bf63] text-primary-foreground"
+                        : "bg-muted"
+                    }`}
+                  >
+                    <div className="text-sm whitespace-pre-wrap">
+                      {message.type === "image" ? (
+                        <img
+                          src={message.content}
+                          alt="User uploaded"
+                          className="rounded-md max-w-full h-auto"
+                        />
+                      ) : (
+                        <ReactMarkdown>{message.content}</ReactMarkdown>
+                      )}
+                    </div>
+                    <p className="text-xs opacity-70 mt-1">
+                      {new Date(message.timestamp).toLocaleTimeString([], {
+                        hour: "2-digit",
+                        minute: "2-digit",
+                      })}
+                    </p>
+                  </div>
+                </div>
+              ))}
 
-          <div ref={messagesEndRef} />
+              {isThinking && (
+                <div className="flex justify-start">
+                  <div className="bg-muted max-w-[85%] rounded-2xl p-2.5">
+                    <div className="flex space-x-1.5">
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse delay-75"></div>
+                      <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse delay-150"></div>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div ref={messagesEndRef} />
+            </>
+          )}
         </div>
       </ScrollArea>
 
