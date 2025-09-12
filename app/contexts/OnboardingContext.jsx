@@ -11,6 +11,8 @@ const initialData = {
   businessLocation: "",
   cmsPlatform: "",
   hasGSC: false,
+  gscProperty: "",
+  googleEmail: "",
   isComplete: false,
 };
 

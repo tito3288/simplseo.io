@@ -1,9 +1,41 @@
 import { NextResponse } from "next/server";
+import { db } from "../../../lib/firebaseAdmin";
 
 export async function POST(request) {
   try {
-    const { code } = await request.json();
+    const { code, accessToken, refreshToken, property, userId } = await request.json();
 
+    // If we have an accessToken and property, store them directly
+    if (accessToken && property && userId) {
+      try {
+        console.log("🔐 About to store tokens in Firestore:", {
+          hasRefreshToken: !!refreshToken,
+          refreshTokenLength: refreshToken?.length,
+          hasAccessToken: !!accessToken,
+          accessTokenLength: accessToken?.length,
+          siteUrl: property,
+          userId: userId
+        });
+
+        // Use admin SDK to store tokens directly
+        const userRef = db.collection('users').doc(userId);
+        await userRef.set({
+          gscRefreshToken: refreshToken,
+          gscAccessToken: accessToken,
+          gscSiteUrl: property,
+          gscConnectedAt: new Date().toISOString(),
+          gscLastSync: new Date().toISOString(),
+        }, { merge: true });
+        
+        console.log("✅ Stored access token for property:", property);
+        return NextResponse.json({ success: true });
+      } catch (error) {
+        console.error("❌ Error storing tokens:", error);
+        return NextResponse.json({ error: "Failed to store tokens" }, { status: 500 });
+      }
+    }
+
+    // Original code exchange logic
     if (!code) {
       return NextResponse.json(
         { error: "Authorization code is required" },

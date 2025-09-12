@@ -56,6 +56,10 @@ const OnboardingWizard = () => {
   const router = useRouter();
   const [currentStep, setCurrentStep] = useState(1);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [gscProperties, setGscProperties] = useState([]);
+  const [isLoadingProperties, setIsLoadingProperties] = useState(false);
+  const [googleAccessToken, setGoogleAccessToken] = useState(null);
+  const [googleRefreshToken, setGoogleRefreshToken] = useState(null);
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
@@ -67,8 +71,26 @@ const OnboardingWizard = () => {
   const totalSteps = 5;
 
   const nextStep = () => {
-    if (currentStep < totalSteps) {
+    if (currentStep < totalSteps && isStepValid()) {
       setCurrentStep(currentStep + 1);
+    }
+  };
+
+  const isStepValid = () => {
+    switch (currentStep) {
+      case 1:
+        return data.name && data.businessName && data.businessType;
+      case 2:
+        return data.websiteUrl && data.cmsPlatform;
+      case 3:
+        return data.businessLocation;
+      case 4:
+        // If GSC is enabled, property selection is required
+        return !data.hasGSC || (data.hasGSC && data.gscProperty);
+      case 5:
+        return true; // Final step
+      default:
+        return false;
     }
   };
 
@@ -92,6 +114,90 @@ const OnboardingWizard = () => {
   const getProgressPercent = () => {
     return (currentStep / totalSteps) * 100;
   };
+
+  // Handle Google OAuth
+  const handleGoogleAuth = () => {
+    const clientId = process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID || "956212275866-7dtgdq7b38b156riehghuvh8b8469ktg.apps.googleusercontent.com";
+    const redirectUri = `${window.location.origin}/api/auth/google/callback`;
+    const scope = 'https://www.googleapis.com/auth/webmasters.readonly https://www.googleapis.com/auth/userinfo.email';
+    
+    // Debug logging
+    console.log('Google OAuth Debug:', {
+      clientId,
+      redirectUri,
+      scope,
+      origin: window.location.origin
+    });
+    
+    if (!clientId) {
+      alert('Google Client ID not found. Please check your environment variables.');
+      return;
+    }
+    
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=${clientId}&` +
+      `redirect_uri=${encodeURIComponent(redirectUri)}&` +
+      `scope=${encodeURIComponent(scope)}&` +
+      `response_type=code&` +
+      `access_type=offline&` +
+      `prompt=consent`;
+    
+    console.log('Auth URL:', authUrl);
+    window.location.href = authUrl;
+  };
+
+  // Fetch GSC properties
+  const fetchGscProperties = async (accessToken) => {
+    setIsLoadingProperties(true);
+    try {
+      const response = await fetch(`/api/gsc/properties?accessToken=${accessToken}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setGscProperties(result.properties);
+      } else {
+        console.error("Failed to fetch GSC properties:", result.error);
+      }
+    } catch (error) {
+      console.error("Error fetching GSC properties:", error);
+    } finally {
+      setIsLoadingProperties(false);
+    }
+  };
+
+  // Check for Google OAuth callback
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const accessToken = urlParams.get('access_token');
+    const refreshToken = urlParams.get('refresh_token');
+    const email = urlParams.get('email');
+    const step = urlParams.get('step');
+    
+    console.log("🔍 OAuth callback tokens:", {
+      hasAccessToken: !!accessToken,
+      hasRefreshToken: !!refreshToken,
+      email: email,
+      step: step
+    });
+    
+    if (accessToken && email) {
+      setGoogleAccessToken(accessToken);
+      if (refreshToken) {
+        setGoogleRefreshToken(refreshToken);
+      }
+      updateData({ googleEmail: email });
+      fetchGscProperties(accessToken);
+      
+      // Set the step if provided (for OAuth callback)
+      if (step) {
+        setCurrentStep(parseInt(step));
+      }
+      
+      // Clean up URL
+      const newUrl = window.location.pathname;
+      window.history.replaceState({}, document.title, newUrl);
+    }
+  }, []);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -122,16 +228,17 @@ const OnboardingWizard = () => {
                   </h2>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="name">Your Name</Label>
+                  <Label htmlFor="name">Your Name <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
                     placeholder="e.g. Bryan"
                     value={data.name || ""}
                     onChange={(e) => updateData({ name: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessName">Business Name</Label>
+                  <Label htmlFor="businessName">Business Name <span className="text-red-500">*</span></Label>
                   <Input
                     id="businessName"
                     placeholder="Acme Inc."
@@ -139,10 +246,11 @@ const OnboardingWizard = () => {
                     onChange={(e) =>
                       updateData({ businessName: e.target.value })
                     }
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessType">Business Type</Label>
+                  <Label htmlFor="businessType">Business Type <span className="text-red-500">*</span></Label>
                   <Select
                     value={data.businessType}
                     onValueChange={(value) =>
@@ -161,6 +269,9 @@ const OnboardingWizard = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <p className="text-sm text-muted-foreground mt-4">
+                  <span className="text-red-500">*</span> All fields are required to continue
+                </p>
               </div>
             )}
 
@@ -171,16 +282,17 @@ const OnboardingWizard = () => {
                   <h2 className="text-xl font-semibold">Website Information</h2>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="websiteUrl">Website URL</Label>
+                  <Label htmlFor="websiteUrl">Website URL <span className="text-red-500">*</span></Label>
                   <Input
                     id="websiteUrl"
                     placeholder="https://example.com"
                     value={data.websiteUrl}
                     onChange={(e) => updateData({ websiteUrl: e.target.value })}
+                    required
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="cmsPlatform">Website Platform</Label>
+                  <Label htmlFor="cmsPlatform">Website Platform <span className="text-red-500">*</span></Label>
                   <Select
                     value={data.cmsPlatform}
                     onValueChange={(value) =>
@@ -199,6 +311,9 @@ const OnboardingWizard = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                <p className="text-sm text-muted-foreground mt-4">
+                  <span className="text-red-500">*</span> All fields are required to continue
+                </p>
               </div>
             )}
 
@@ -211,7 +326,7 @@ const OnboardingWizard = () => {
                   </h2>
                 </div>
                 <div className="space-y-2">
-                  <Label htmlFor="businessLocation">Business Location</Label>
+                  <Label htmlFor="businessLocation">Business Location <span className="text-red-500">*</span></Label>
                   <Input
                     id="businessLocation"
                     placeholder="City, State or ZIP Code"
@@ -219,10 +334,14 @@ const OnboardingWizard = () => {
                     onChange={(e) =>
                       updateData({ businessLocation: e.target.value })
                     }
+                    required
                   />
                 </div>
                 <p className="text-sm text-muted-foreground mt-2">
                   This helps us optimize your local SEO strategy
+                </p>
+                <p className="text-sm text-muted-foreground mt-4">
+                  <span className="text-red-500">*</span> All fields are required to continue
                 </p>
               </div>
             )}
@@ -269,6 +388,104 @@ const OnboardingWizard = () => {
                     </div>
                   </div>
                 )}
+
+                {data.hasGSC && (
+                  <div className="space-y-4 mt-4">
+                    <div className="space-y-2">
+                      <Label htmlFor="gscProperty">Select GSC Property</Label>
+                      <Select
+                        value={data.gscProperty || ""}
+                        onValueChange={async (value) => {
+                          if (value === "connect") {
+                            handleGoogleAuth();
+                          } else {
+                            console.log("🎯 GSC Property selected:", value);
+                            updateData({ gscProperty: value });
+                            console.log("✅ GSC Property saved to context");
+                            
+                            // Store the Google tokens in Firestore for the selected property
+                            if (googleAccessToken && user?.id) {
+                              try {
+                                console.log("💾 Storing Google tokens for property:", value);
+                                const response = await fetch('/api/gsc/exchange-code', {
+                                  method: 'POST',
+                                  headers: { 'Content-Type': 'application/json' },
+                                  body: JSON.stringify({
+                                    accessToken: googleAccessToken,
+                                    refreshToken: googleRefreshToken,
+                                    property: value,
+                                    userId: user.id
+                                  })
+                                });
+                                
+                                if (response.ok) {
+                                  console.log("✅ Google tokens stored successfully");
+                                } else {
+                                  console.error("❌ Failed to store Google tokens");
+                                }
+                              } catch (error) {
+                                console.error("❌ Error storing Google tokens:", error);
+                              }
+                            }
+                          }
+                        }}
+                      >
+                        <SelectTrigger id="gscProperty">
+                          <SelectValue placeholder={
+                            googleAccessToken 
+                              ? (isLoadingProperties ? "Loading properties..." : "Select a property")
+                              : "Connect your Google account to see properties"
+                          } />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {!googleAccessToken ? (
+                            <SelectItem value="connect">
+                              <div className="flex items-center gap-2">
+                                <span>🔗 Connect Google Account</span>
+                              </div>
+                            </SelectItem>
+                          ) : (
+                            <>
+                              {isLoadingProperties ? (
+                                <SelectItem value="loading" disabled>
+                                  <div className="flex items-center gap-2">
+                                    <div className="w-4 h-4 border-2 border-gray-300 border-t-blue-600 rounded-full animate-spin"></div>
+                                    <span>Loading properties...</span>
+                                  </div>
+                                </SelectItem>
+                              ) : gscProperties.length > 0 ? (
+                                gscProperties.map((property) => (
+                                  <SelectItem key={property.siteUrl} value={property.siteUrl}>
+                                    <div className="flex items-center gap-2">
+                                      <span>{property.siteUrl}</span>
+                                      {property.verified && (
+                                        <span className="text-green-500 text-xs">✓</span>
+                                      )}
+                                    </div>
+                                  </SelectItem>
+                                ))
+                              ) : (
+                                <SelectItem value="no-properties" disabled>
+                                  <div className="flex items-center gap-2">
+                                    <span>No GSC properties found</span>
+                                  </div>
+                                </SelectItem>
+                              )}
+                            </>
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <p className="text-sm text-muted-foreground">
+                      This property will be used for SEO tracking and insights.
+                    </p>
+                    {googleAccessToken && gscProperties.length === 0 && !isLoadingProperties && (
+                      <p className="text-sm text-amber-600">
+                        No verified GSC properties found. Make sure you have verified ownership of your website in Google Search Console.
+                      </p>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 
@@ -310,10 +527,17 @@ const OnboardingWizard = () => {
             )}
 
             {currentStep < totalSteps ? (
-              <Button onClick={nextStep}>
-                Next
-                <ArrowRight className="ml-2 h-4 w-4" />
-              </Button>
+              <div className="flex flex-col items-end">
+                <Button onClick={nextStep} disabled={!isStepValid()}>
+                  Next
+                  <ArrowRight className="ml-2 h-4 w-4" />
+                </Button>
+                {!isStepValid() && (
+                  <p className="text-xs text-muted-foreground mt-1">
+                    Please fill in all required fields
+                  </p>
+                )}
+              </div>
             ) : (
               <Button onClick={submitOnboarding} disabled={isSubmitting}>
                 {isSubmitting ? (

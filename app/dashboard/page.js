@@ -150,6 +150,21 @@ export default function Dashboard() {
 
     const checkGSCConnection = async () => {
       try {
+        // Debug: Log onboarding data
+        console.log("🔍 Dashboard onboarding data:", {
+          hasGSC: data?.hasGSC,
+          gscProperty: data?.gscProperty,
+          googleEmail: data?.googleEmail,
+          fullData: data
+        });
+
+        // Check if a GSC property was selected during onboarding
+        if (!data?.gscProperty) {
+          console.log("❌ No GSC property selected during onboarding");
+          setIsGscConnected(false);
+          return;
+        }
+
         const tokenManager = createGSCTokenManager(user.id);
         const accessToken = await tokenManager.getValidAccessToken();
         
@@ -178,7 +193,7 @@ export default function Dashboard() {
     };
 
     checkGSCConnection();
-  }, [isLoading, user?.id]);
+  }, [isLoading, user?.id, data?.gscProperty, data?.hasGSC]);
 
   // Commented out to prevent duplicate calls
   // useEffect(() => {
@@ -202,74 +217,25 @@ export default function Dashboard() {
 
   const fetchAndMatchGSC = async (token) => {
     if (!user?.id) return;
-    const onboardingDoc = await getDoc(doc(db, "onboarding", user.id));
-    const userWebsiteUrl = onboardingDoc.data()?.websiteUrl;
-
-    const cleanDomain = userWebsiteUrl
-      .replace(/^https?:\/\//, "")
-      .replace(/\/$/, "");
-
-    const potentialMatches = [
-      `https://${cleanDomain}/`,
-      `https://www.${cleanDomain}/`,
-      `sc-domain:${cleanDomain}`,
-    ];
-
-    const res = await fetch(
-      "https://searchconsole.googleapis.com/webmasters/v3/sites",
-      {
-        headers: {
-          Authorization: `Bearer ${token}`,
-        },
-      }
-    );
-
-    const data = await res.json();
     
-    // Check if user has any GSC properties
-    if (!data.siteEntry || data.siteEntry.length === 0) {
-      console.log("❌ No GSC properties found for this account");
+    // Use the GSC property selected during onboarding
+    const selectedProperty = data?.gscProperty;
+    
+    if (selectedProperty) {
+      console.log("🎯 Using selected GSC property:", selectedProperty);
       
-      if (!hasShownGscError) {
-        toast.error("No GSC Properties Found", {
-          description: "This Google account doesn&apos;t have any Search Console properties. Please add your website to Google Search Console first.",
-          duration: 30000, // 30 seconds - longer duration
-          style: {
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca'
-          }
-        });
-        setHasShownGscError(true);
-        setGscAlert({
-          type: "no-properties",
-          title: "No Google Search Console Properties Found",
-          description: "This Google account doesn&apos;t have any Search Console properties. You need to add your website to Google Search Console first.",
-          action: "Set Up GSC"
-        });
-      }
-      return;
-    }
-    
-    const verifiedSites = data.siteEntry.map((site) => site.siteUrl);
-    console.log("🔍 Available GSC sites:", verifiedSites);
-    
-    const match = potentialMatches.find((url) => verifiedSites.includes(url));
-
-    if (match) {
       // Store site URL in Firestore
       const tokenManager = createGSCTokenManager(user.id);
-      await tokenManager.storeTokens(null, token, match);
+      await tokenManager.storeTokens(null, token, selectedProperty);
       
-      fetchSearchAnalyticsData(match, token, dateRange);
+      fetchSearchAnalyticsData(selectedProperty, token, dateRange);
     } else {
-      console.log("❌ No matching site found");
-      console.log("🔍 Looking for:", potentialMatches);
-      console.log("🔍 Available sites:", verifiedSites);
+      console.log("❌ No GSC property selected during onboarding");
       
       if (!hasShownGscError) {
-        toast.error("Website Not Found in GSC", {
-          description: `Your website ${data.websiteUrl || "your website"} is not verified in Google Search Console. Please add it first.`,
-          duration: 0, // Don't auto-dismiss
+        toast.error("No GSC Property Selected", {
+          description: "Please complete the onboarding process and select a Google Search Console property.",
+          duration: 30000,
           style: {
             backgroundColor: '#fef2f2',
             border: '1px solid #fecaca'
@@ -277,10 +243,10 @@ export default function Dashboard() {
         });
         setHasShownGscError(true);
         setGscAlert({
-          type: "website-not-found",
-          title: "Website Not Found in Google Search Console",
-          description: `Your website ${data.websiteUrl || "your website"} is not verified in Google Search Console. You need to add it first.`,
-          action: "Set Up GSC"
+          type: "no-property-selected",
+          title: "No GSC Property Selected",
+          description: "Please complete the onboarding process and select a Google Search Console property.",
+          action: "Complete Onboarding"
         });
       }
     }
@@ -617,7 +583,13 @@ export default function Dashboard() {
                   {gscAlert.description}
                 </p>
                 <Button 
-                  onClick={() => window.open("https://search.google.com/search-console", "_blank")}
+                  onClick={() => {
+                    if (gscAlert.type === "no-property-selected") {
+                      router.push("/onboarding");
+                    } else {
+                      window.open("https://search.google.com/search-console", "_blank");
+                    }
+                  }}
                   className="bg-red-600 hover:bg-red-700 text-white"
                 >
                   {gscAlert.action}
