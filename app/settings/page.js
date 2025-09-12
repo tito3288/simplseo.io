@@ -41,6 +41,26 @@ import {
   Plus
 } from "lucide-react";
 import { toast } from "sonner";
+import { 
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { db } from "../lib/firebaseConfig";
+import { 
+  doc, 
+  deleteDoc, 
+  collection, 
+  query, 
+  where, 
+  getDocs, 
+  writeBatch 
+} from "firebase/firestore";
+import { deleteUser } from "firebase/auth";
 
 export default function Settings() {
   const { user, isLoading: authLoading } = useAuth();
@@ -88,6 +108,9 @@ export default function Settings() {
   // Loading states
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
 
   useEffect(() => {
     if (typeof window !== "undefined" && !authLoading && !user) {
@@ -150,10 +173,128 @@ export default function Settings() {
     });
   };
 
-  const handleDeleteAccount = () => {
-    toast.error("Account deletion requires confirmation", {
-      description: "Please contact support to proceed with account deletion."
-    });
+  const handleDeleteAccount = async () => {
+    if (deleteConfirmation !== "DELETE") {
+      toast.error("Please type 'DELETE' to confirm account deletion");
+      return;
+    }
+
+    setIsDeleting(true);
+    try {
+      // Delete all user data from Firestore
+      await deleteAllUserData(user.id);
+      
+      // Delete the Firebase Auth user
+      const { auth } = await import("../lib/firebaseConfig");
+      await deleteUser(auth.currentUser);
+      
+      toast.success("Account deleted successfully", {
+        description: "All your data has been permanently removed."
+      });
+      
+      // Redirect to home page
+      router.push("/");
+    } catch (error) {
+      console.error("Error deleting account:", error);
+      toast.error("Failed to delete account", {
+        description: error.message || "Please try again or contact support."
+      });
+    } finally {
+      setIsDeleting(false);
+      setShowDeleteDialog(false);
+      setDeleteConfirmation("");
+    }
+  };
+
+  const deleteAllUserData = async (userId) => {
+    const batch = writeBatch(db);
+    let deleteCount = 0;
+
+    try {
+      // 1. Delete onboarding data
+      const onboardingRef = doc(db, "onboarding", userId);
+      batch.delete(onboardingRef);
+      deleteCount++;
+
+      // 2. Delete user profile data
+      const userRef = doc(db, "users", userId);
+      batch.delete(userRef);
+      deleteCount++;
+
+      // 3. Delete implementedSeoTips (query by userId field)
+      const implementedSeoTipsQuery = query(
+        collection(db, "implementedSeoTips"),
+        where("userId", "==", userId)
+      );
+      const implementedSeoTipsSnapshot = await getDocs(implementedSeoTipsQuery);
+      implementedSeoTipsSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        deleteCount++;
+      });
+
+      // 4. Delete intentMismatches
+      const intentMismatchesQuery = query(
+        collection(db, "intentMismatches"),
+        where("userId", "==", userId)
+      );
+      const intentMismatchesSnapshot = await getDocs(intentMismatchesQuery);
+      intentMismatchesSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        deleteCount++;
+      });
+
+      // 5. Delete internalLinkSuggestions (documents with userId prefix)
+      const internalLinkQuery = query(
+        collection(db, "internalLinkSuggestions"),
+        where("userId", "==", userId)
+      );
+      const internalLinkSnapshot = await getDocs(internalLinkQuery);
+      internalLinkSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        deleteCount++;
+      });
+
+      // 6. Delete contentAuditResults (documents with userId prefix)
+      const contentAuditQuery = query(
+        collection(db, "contentAuditResults"),
+        where("userId", "==", userId)
+      );
+      const contentAuditSnapshot = await getDocs(contentAuditQuery);
+      contentAuditSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        deleteCount++;
+      });
+
+      // 7. Delete aiSuggestions (documents with userId prefix)
+      const aiSuggestionsQuery = query(
+        collection(db, "aiSuggestions"),
+        where("userId", "==", userId)
+      );
+      const aiSuggestionsSnapshot = await getDocs(aiSuggestionsQuery);
+      aiSuggestionsSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        deleteCount++;
+      });
+
+      // 8. Delete pageContentCache (documents with userId prefix)
+      const pageCacheQuery = query(
+        collection(db, "pageContentCache"),
+        where("userId", "==", userId)
+      );
+      const pageCacheSnapshot = await getDocs(pageCacheQuery);
+      pageCacheSnapshot.docs.forEach((doc) => {
+        batch.delete(doc.ref);
+        deleteCount++;
+      });
+
+      // Execute the batch delete
+      await batch.commit();
+      
+      console.log(`✅ Deleted ${deleteCount} documents for user ${userId}`);
+    } catch (error) {
+      console.error("Error deleting user data:", error);
+      throw error;
+    }
   };
 
   const tabs = [
@@ -820,11 +961,85 @@ export default function Settings() {
                           <div className="text-sm text-muted-foreground">
                             Permanently delete your account and all associated data. This action cannot be undone.
                           </div>
+                          <div className="text-xs text-red-500 mt-1">
+                            <strong>This will delete:</strong> All SEO progress, implementation history, GSC data, 
+                            recommendations, settings, and account information.
+                          </div>
                         </div>
-                        <Button variant="destructive" onClick={handleDeleteAccount}>
-                          <Trash2 className="w-4 h-4 mr-2" />
-                          Delete Account
-                        </Button>
+                        <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+                          <DialogTrigger asChild>
+                            <Button variant="destructive">
+                              <Trash2 className="w-4 h-4 mr-2" />
+                              Delete Account
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent className="sm:max-w-md">
+                            <DialogHeader>
+                              <DialogTitle className="flex items-center gap-2 text-red-600">
+                                <AlertTriangle className="w-5 h-5" />
+                                Delete Account
+                              </DialogTitle>
+                              <DialogDescription>
+                                This action will permanently delete your account and all associated data. 
+                                <strong> This cannot be undone.</strong>
+                              </DialogDescription>
+                            </DialogHeader>
+                            <div className="space-y-4">
+                              <div className="bg-red-50 dark:bg-red-950/20 p-3 rounded-lg">
+                                <p className="text-sm font-medium text-red-800 dark:text-red-200 mb-2">
+                                  The following data will be permanently deleted:
+                                </p>
+                                <ul className="text-xs text-red-700 dark:text-red-300 space-y-1">
+                                  <li>• All SEO progress and implementation history</li>
+                                  <li>• Google Search Console data and tokens</li>
+                                  <li>• AI-generated recommendations and suggestions</li>
+                                  <li>• Content audit results and keyword analysis</li>
+                                  <li>• Account settings and preferences</li>
+                                  <li>• All cached data and analytics</li>
+                                </ul>
+                              </div>
+                              <p className="text-sm">
+                                To confirm deletion, type <strong>DELETE</strong> in the box below:
+                              </p>
+                              <Input
+                                placeholder="Type DELETE to confirm"
+                                value={deleteConfirmation}
+                                onChange={(e) => setDeleteConfirmation(e.target.value)}
+                                className="border-red-200 focus:border-red-400"
+                              />
+                            </div>
+                            <DialogFooter className="gap-2">
+                              <Button
+                                variant="outline"
+                                onClick={() => {
+                                  setShowDeleteDialog(false);
+                                  setDeleteConfirmation("");
+                                }}
+                                disabled={isDeleting}
+                              >
+                                Cancel
+                              </Button>
+                              <Button
+                                variant="destructive"
+                                onClick={handleDeleteAccount}
+                                disabled={isDeleting || deleteConfirmation !== "DELETE"}
+                                className="gap-2"
+                              >
+                                {isDeleting ? (
+                                  <>
+                                    <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                                    Deleting...
+                                  </>
+                                ) : (
+                                  <>
+                                    <Trash2 className="w-4 h-4" />
+                                    Delete Account
+                                  </>
+                                )}
+                              </Button>
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
                       </div>
                     </div>
                   </div>
