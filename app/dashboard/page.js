@@ -37,10 +37,14 @@ import {
   ExternalLink,
   Unlink,
   AlertTriangle,
+  FileText,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import DateRangeFilter from "../components/dashboard/DateRangeFilter";
 import KeywordTable from "../components/dashboard/KeywordTable";
+import ContentExpansionCard from "../components/dashboard/ContentExpansionCard";
+import LongTailKeywordCard from "../components/dashboard/LongTailKeywordCard";
+import GenericKeywordCard from "../components/dashboard/GenericKeywordCard";
 import { toast } from "sonner";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
@@ -85,6 +89,10 @@ export default function Dashboard() {
         }),
       });
 
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status}`);
+      }
+      
       const json = await res.json();
       return (
         json.description ||
@@ -110,6 +118,10 @@ export default function Dashboard() {
         }),
       });
 
+      if (!res.ok) {
+        throw new Error(`API error: ${res.status}`);
+      }
+      
       const json = await res.json();
       return json.title || "Suggested Meta Title";
     } catch (err) {
@@ -412,7 +424,7 @@ export default function Dashboard() {
         // 🔹 Low CTR pages
         const lowCtr = formatted.filter(
           (kw) =>
-            parseFloat(kw.ctr.replace("%", "")) === 0 && kw.impressions > 20
+            parseFloat(kw.ctr.replace("%", "")) <= 2 && kw.impressions > 20
         );
 
         const grouped = Object.values(
@@ -488,7 +500,7 @@ export default function Dashboard() {
   const easyWins = gscKeywords.filter((kw) => {
     const pos = kw.position;
     const ctr = parseFloat(kw.ctr.replace("%", ""));
-    return pos > 10 && pos <= 20 && ctr < 5;
+    return pos > 10 && pos <= 20 && ctr < 3 && kw.impressions > 10;
   });
 
   const stripHtmlTags = (html) => {
@@ -710,7 +722,17 @@ export default function Dashboard() {
                   <p className="text-sm text-muted-foreground">Loading CTR data...</p>
                 </div>
               ) : lowCtrPages.length === 0 ? (
-                <p className="text-sm text-muted-foreground">No issues found</p>
+                <div className="text-center py-6">
+                  <div className="bg-green-100 dark:bg-green-900/20 inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
+                    🎉 No issues found!
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-300">
+                    Your pages are getting great click-through rates
+                  </p>
+                </div>
               ) : (
                 <ul className="space-y-2">
                   {lowCtrPages.map((page, idx) => (
@@ -778,6 +800,18 @@ export default function Dashboard() {
                   <SquashBounceLoader size="lg" className="mb-4" />
                   <p className="text-sm text-muted-foreground">Loading opportunities...</p>
                 </div>
+              ) : easyWins.length === 0 ? (
+                <div className="text-center py-6">
+                  <div className="bg-green-100 dark:bg-green-900/20 inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
+                    🎉 No easy wins needed!
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-300">
+                    Your keywords are already performing well
+                  </p>
+                </div>
               ) : (
                 <KeywordTable
                   keywords={easyWins}
@@ -801,7 +835,65 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+
       </div>
+
+      {/* Generic Keyword Opportunities Row */}
+      <div className="grid grid-cols-1 gap-6 mb-6">
+        <Card className="border-red-200 shadow-red-100">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  AI-Generated Content Opportunities
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                    High Priority
+                  </span>
+                </CardTitle>
+                <CardDescription>
+                  Discover new keywords and content ideas to expand your reach and attract new customers.
+                </CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/generic-keywords">See More</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isGscConnected ? (
+              shouldShowLoader ? (
+                <div className="text-center py-8">
+                  <SquashBounceLoader size="lg" className="mb-4" />
+                  <p className="text-sm text-muted-foreground">Loading opportunities...</p>
+                </div>
+              ) : (
+                <GenericKeywordCard gscKeywords={gscKeywords} />
+              )
+            ) : (
+              <div className="text-center py-6">
+                <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
+                  <Unlink className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">
+                  Connect Google Search Console
+                </h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  Find generic keyword opportunities to attract new customers
+                </p>
+                <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Content Expansion Row - Show for all users */}
+      {/* {isGscConnected && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+          <ContentExpansionCard gscKeywords={gscKeywords} />
+          <LongTailKeywordCard gscKeywords={gscKeywords} />
+        </div>
+      )} */}
 
       {/* Bottom Row - Analytics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">

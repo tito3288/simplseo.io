@@ -258,10 +258,10 @@ export default function LowCtrPage() {
     
     const filteredRows = json.rows.filter(
       (r) =>
-        parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
+        parseFloat((r.ctr * 100).toFixed(1)) <= 2 && r.impressions > 20
     );
     
-    console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
+    console.log("🔍 Rows after filtering (≤2% CTR, >20 impressions):", filteredRows.length);
     console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
     
     const grouped = Object.values(
@@ -311,8 +311,16 @@ export default function LowCtrPage() {
           }),
         ]);
 
-        const titleJson = await titleRes.json();
-        const descJson = await descRes.json();
+        // Check if responses are ok before parsing JSON
+        if (!titleRes.ok) {
+          console.error(`Title API error for ${item.page}:`, titleRes.status);
+        }
+        if (!descRes.ok) {
+          console.error(`Description API error for ${item.page}:`, descRes.status);
+        }
+
+        const titleJson = titleRes.ok ? await titleRes.json() : { title: null };
+        const descJson = descRes.ok ? await descRes.json() : { description: null };
 
         return {
           pageUrl: item.page,
@@ -403,8 +411,9 @@ export default function LowCtrPage() {
       </div>
 
       <p className="text-muted-foreground mb-4">
-        These pages appear in search but get very few clicks. Try improving
-        their titles and meta descriptions.
+        These pages show up in Google search results but aren't getting many clicks. 
+        This usually means your page titles and descriptions aren't compelling enough 
+        to make people want to click. Try making them more attractive and keyword-focused!
       </p>
 
       <Card className="mb-6">
@@ -413,7 +422,7 @@ export default function LowCtrPage() {
             <div>
               <CardTitle>Raw Low CTR Data</CardTitle>
               <CardDescription>
-                Pages with impressions but 0% click-through rate
+                Pages with low click-through rates (2% or less) - these need better titles and descriptions
               </CardDescription>
             </div>
             <DropdownMenu>

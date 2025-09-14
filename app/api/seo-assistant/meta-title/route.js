@@ -77,7 +77,7 @@ Context (Impressions, CTR, etc): ${JSON.stringify(context)}
 `;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-4",
+    model: "gpt-3.5-turbo",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 60,
   });

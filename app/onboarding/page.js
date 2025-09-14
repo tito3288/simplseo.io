@@ -37,6 +37,16 @@ const businessTypes = [
   "Law Firm",
   "Real Estate",
   "Fitness",
+  "Car Wash",
+  "Automotive Services",
+  "Oil Change",
+  "Auto Repair",
+  "Pet Grooming",
+  "Cleaning Services",
+  "Landscaping",
+  "HVAC",
+  "Electrician",
+  "Contractor",
   "Other",
 ];
 
@@ -79,6 +89,10 @@ const OnboardingWizard = () => {
   const isStepValid = () => {
     switch (currentStep) {
       case 1:
+        // If "Other" is selected, customBusinessType is required
+        if (data.businessType === "Other") {
+          return data.name && data.businessName && data.businessType && data.customBusinessType;
+        }
         return data.name && data.businessName && data.businessType;
       case 2:
         return data.websiteUrl && data.cmsPlatform;
@@ -269,6 +283,25 @@ const OnboardingWizard = () => {
                     </SelectContent>
                   </Select>
                 </div>
+                
+                {/* Custom business type input when "Other" is selected */}
+                {data.businessType === "Other" && (
+                  <div className="space-y-2">
+                    <Label htmlFor="customBusinessType">Please specify your business type <span className="text-red-500">*</span></Label>
+                    <Input
+                      id="customBusinessType"
+                      placeholder="e.g. Car Wash, Pet Grooming, Landscaping"
+                      value={data.customBusinessType || ""}
+                      onChange={(e) =>
+                        updateData({ customBusinessType: e.target.value })
+                      }
+                      required
+                    />
+                    <p className="text-xs text-muted-foreground">
+                      This helps us provide better SEO recommendations for your specific business.
+                    </p>
+                  </div>
+                )}
                 <p className="text-sm text-muted-foreground mt-4">
                   <span className="text-red-500">*</span> All fields are required to continue
                 </p>

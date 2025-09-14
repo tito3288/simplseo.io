@@ -169,10 +169,10 @@ export default function IntentMismatch() {
       
       const filteredRows = json.rows.filter(
         (r) =>
-          parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
+          parseFloat((r.ctr * 100).toFixed(1)) <= 2 && r.impressions > 20
       );
       
-      console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
+      console.log("🔍 Rows after filtering (≤2% CTR, >20 impressions):", filteredRows.length);
       console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
       
       const grouped = Object.values(
@@ -424,6 +424,13 @@ export default function IntentMismatch() {
         return;
       }
 
+      // Check if GSC is connected
+      if (!data?.hasGSC) {
+        console.log("❌ GSC not connected");
+        setIsLoading(false);
+        return;
+      }
+
       // Try to load cached results first
       const hasCached = await loadCachedResults();
       
@@ -567,10 +574,10 @@ export default function IntentMismatch() {
         
         const filteredRows = json.rows.filter(
           (r) =>
-            parseFloat((r.ctr * 100).toFixed(1)) === 0 && r.impressions > 20
+            parseFloat((r.ctr * 100).toFixed(1)) <= 2 && r.impressions > 20
         );
         
-        console.log("🔍 Rows after filtering (0% CTR, >20 impressions):", filteredRows.length);
+        console.log("🔍 Rows after filtering (≤2% CTR, >20 impressions):", filteredRows.length);
         console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
         
         const grouped = Object.values(

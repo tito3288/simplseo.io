@@ -60,7 +60,13 @@ import {
   getDocs, 
   writeBatch 
 } from "firebase/firestore";
-import { deleteUser } from "firebase/auth";
+import { 
+  deleteUser, 
+  reauthenticateWithCredential, 
+  reauthenticateWithPopup,
+  EmailAuthProvider,
+  signInWithEmailAndPassword 
+} from "firebase/auth";
 
 export default function Settings() {
   const { user, isLoading: authLoading } = useAuth();
@@ -111,12 +117,33 @@ export default function Settings() {
   const [isDeleting, setIsDeleting] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
+  const [deletePassword, setDeletePassword] = useState("");
+  const [isGoogleUser, setIsGoogleUser] = useState(false);
 
   useEffect(() => {
     if (typeof window !== "undefined" && !authLoading && !user) {
       router.push("/auth");
     }
   }, [user, authLoading, router]);
+
+  // Detect user's authentication method
+  useEffect(() => {
+    if (user) {
+      const checkAuthMethod = async () => {
+        try {
+          const { auth } = await import("../lib/firebaseConfig");
+          const currentUser = auth.currentUser;
+          if (currentUser) {
+            const isGoogle = currentUser.providerData.some(provider => provider.providerId === 'google.com');
+            setIsGoogleUser(isGoogle);
+          }
+        } catch (error) {
+          console.error("Error checking auth method:", error);
+        }
+      };
+      checkAuthMethod();
+    }
+  }, [user]);
 
   // Load user data
   useEffect(() => {
@@ -181,12 +208,46 @@ export default function Settings() {
 
     setIsDeleting(true);
     try {
+      const { auth } = await import("../lib/firebaseConfig");
+      const currentUser = auth.currentUser;
+      
+      // Check if user signed up with Google OAuth
+      const isGoogleUser = currentUser.providerData.some(provider => provider.providerId === 'google.com');
+      
+      if (isGoogleUser) {
+        // For Google OAuth users, we need to re-authenticate with Google
+        // This will open a popup for Google re-authentication
+        const provider = new (await import("firebase/auth")).GoogleAuthProvider();
+        provider.addScope('email');
+        provider.addScope('profile');
+        
+        try {
+          await reauthenticateWithPopup(currentUser, provider);
+        } catch (reauthError) {
+          if (reauthError.code === 'auth/popup-closed-by-user') {
+            toast.error("Re-authentication cancelled", {
+              description: "Please complete Google re-authentication to delete your account."
+            });
+            return;
+          }
+          throw reauthError;
+        }
+      } else {
+        // For email/password users, require password
+        if (!deletePassword) {
+          toast.error("Please enter your password to confirm account deletion");
+          return;
+        }
+        
+        const credential = EmailAuthProvider.credential(user.email, deletePassword);
+        await reauthenticateWithCredential(currentUser, credential);
+      }
+      
       // Delete all user data from Firestore
       await deleteAllUserData(user.id);
       
       // Delete the Firebase Auth user
-      const { auth } = await import("../lib/firebaseConfig");
-      await deleteUser(auth.currentUser);
+      await deleteUser(currentUser);
       
       toast.success("Account deleted successfully", {
         description: "All your data has been permanently removed."
@@ -196,101 +257,177 @@ export default function Settings() {
       router.push("/");
     } catch (error) {
       console.error("Error deleting account:", error);
-      toast.error("Failed to delete account", {
-        description: error.message || "Please try again or contact support."
-      });
+      
+      if (error.code === "auth/wrong-password") {
+        toast.error("Incorrect password", {
+          description: "Please enter the correct password for this account."
+        });
+      } else if (error.code === "auth/too-many-requests") {
+        toast.error("Too many attempts", {
+          description: "Please wait a moment before trying again."
+        });
+      } else if (error.code === "auth/popup-closed-by-user") {
+        toast.error("Re-authentication cancelled", {
+          description: "Please complete Google re-authentication to delete your account."
+        });
+      } else {
+        toast.error("Failed to delete account", {
+          description: error.message || "Please try again or contact support."
+        });
+      }
     } finally {
       setIsDeleting(false);
       setShowDeleteDialog(false);
       setDeleteConfirmation("");
+      setDeletePassword("");
     }
   };
 
   const deleteAllUserData = async (userId) => {
-    const batch = writeBatch(db);
     let deleteCount = 0;
 
     try {
       // 1. Delete onboarding data
-      const onboardingRef = doc(db, "onboarding", userId);
-      batch.delete(onboardingRef);
-      deleteCount++;
+      try {
+        const onboardingRef = doc(db, "onboarding", userId);
+        await deleteDoc(onboardingRef);
+        deleteCount++;
+        console.log("✅ Deleted onboarding data");
+      } catch (error) {
+        console.log("⚠️ Onboarding data not found or already deleted");
+      }
 
       // 2. Delete user profile data
-      const userRef = doc(db, "users", userId);
-      batch.delete(userRef);
-      deleteCount++;
+      try {
+        const userRef = doc(db, "users", userId);
+        await deleteDoc(userRef);
+        deleteCount++;
+        console.log("✅ Deleted user profile data");
+      } catch (error) {
+        console.log("⚠️ User profile data not found or already deleted");
+      }
 
       // 3. Delete implementedSeoTips (query by userId field)
-      const implementedSeoTipsQuery = query(
-        collection(db, "implementedSeoTips"),
-        where("userId", "==", userId)
-      );
-      const implementedSeoTipsSnapshot = await getDocs(implementedSeoTipsQuery);
-      implementedSeoTipsSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-        deleteCount++;
-      });
+      try {
+        const implementedSeoTipsQuery = query(
+          collection(db, "implementedSeoTips"),
+          where("userId", "==", userId)
+        );
+        const implementedSeoTipsSnapshot = await getDocs(implementedSeoTipsQuery);
+        const batch1 = writeBatch(db);
+        implementedSeoTipsSnapshot.docs.forEach((doc) => {
+          batch1.delete(doc.ref);
+          deleteCount++;
+        });
+        if (implementedSeoTipsSnapshot.docs.length > 0) {
+          await batch1.commit();
+          console.log(`✅ Deleted ${implementedSeoTipsSnapshot.docs.length} implementedSeoTips documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting implementedSeoTips:", error.message);
+      }
 
       // 4. Delete intentMismatches
-      const intentMismatchesQuery = query(
-        collection(db, "intentMismatches"),
-        where("userId", "==", userId)
-      );
-      const intentMismatchesSnapshot = await getDocs(intentMismatchesQuery);
-      intentMismatchesSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-        deleteCount++;
-      });
+      try {
+        const intentMismatchesQuery = query(
+          collection(db, "intentMismatches"),
+          where("userId", "==", userId)
+        );
+        const intentMismatchesSnapshot = await getDocs(intentMismatchesQuery);
+        const batch2 = writeBatch(db);
+        intentMismatchesSnapshot.docs.forEach((doc) => {
+          batch2.delete(doc.ref);
+          deleteCount++;
+        });
+        if (intentMismatchesSnapshot.docs.length > 0) {
+          await batch2.commit();
+          console.log(`✅ Deleted ${intentMismatchesSnapshot.docs.length} intentMismatches documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting intentMismatches:", error.message);
+      }
 
-      // 5. Delete internalLinkSuggestions (documents with userId prefix)
-      const internalLinkQuery = query(
-        collection(db, "internalLinkSuggestions"),
-        where("userId", "==", userId)
-      );
-      const internalLinkSnapshot = await getDocs(internalLinkQuery);
-      internalLinkSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-        deleteCount++;
-      });
+      // 5. Delete internalLinkSuggestions
+      try {
+        const internalLinkQuery = query(
+          collection(db, "internalLinkSuggestions"),
+          where("userId", "==", userId)
+        );
+        const internalLinkSnapshot = await getDocs(internalLinkQuery);
+        const batch3 = writeBatch(db);
+        internalLinkSnapshot.docs.forEach((doc) => {
+          batch3.delete(doc.ref);
+          deleteCount++;
+        });
+        if (internalLinkSnapshot.docs.length > 0) {
+          await batch3.commit();
+          console.log(`✅ Deleted ${internalLinkSnapshot.docs.length} internalLinkSuggestions documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting internalLinkSuggestions:", error.message);
+      }
 
-      // 6. Delete contentAuditResults (documents with userId prefix)
-      const contentAuditQuery = query(
-        collection(db, "contentAuditResults"),
-        where("userId", "==", userId)
-      );
-      const contentAuditSnapshot = await getDocs(contentAuditQuery);
-      contentAuditSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-        deleteCount++;
-      });
+      // 6. Delete contentAuditResults
+      try {
+        const contentAuditQuery = query(
+          collection(db, "contentAuditResults"),
+          where("userId", "==", userId)
+        );
+        const contentAuditSnapshot = await getDocs(contentAuditQuery);
+        const batch4 = writeBatch(db);
+        contentAuditSnapshot.docs.forEach((doc) => {
+          batch4.delete(doc.ref);
+          deleteCount++;
+        });
+        if (contentAuditSnapshot.docs.length > 0) {
+          await batch4.commit();
+          console.log(`✅ Deleted ${contentAuditSnapshot.docs.length} contentAuditResults documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting contentAuditResults:", error.message);
+      }
 
-      // 7. Delete aiSuggestions (documents with userId prefix)
-      const aiSuggestionsQuery = query(
-        collection(db, "aiSuggestions"),
-        where("userId", "==", userId)
-      );
-      const aiSuggestionsSnapshot = await getDocs(aiSuggestionsQuery);
-      aiSuggestionsSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-        deleteCount++;
-      });
+      // 7. Delete aiSuggestions
+      try {
+        const aiSuggestionsQuery = query(
+          collection(db, "aiSuggestions"),
+          where("userId", "==", userId)
+        );
+        const aiSuggestionsSnapshot = await getDocs(aiSuggestionsQuery);
+        const batch5 = writeBatch(db);
+        aiSuggestionsSnapshot.docs.forEach((doc) => {
+          batch5.delete(doc.ref);
+          deleteCount++;
+        });
+        if (aiSuggestionsSnapshot.docs.length > 0) {
+          await batch5.commit();
+          console.log(`✅ Deleted ${aiSuggestionsSnapshot.docs.length} aiSuggestions documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting aiSuggestions:", error.message);
+      }
 
-      // 8. Delete pageContentCache (documents with userId prefix)
-      const pageCacheQuery = query(
-        collection(db, "pageContentCache"),
-        where("userId", "==", userId)
-      );
-      const pageCacheSnapshot = await getDocs(pageCacheQuery);
-      pageCacheSnapshot.docs.forEach((doc) => {
-        batch.delete(doc.ref);
-        deleteCount++;
-      });
-
-      // Execute the batch delete
-      await batch.commit();
+      // 8. Delete pageContentCache
+      try {
+        const pageCacheQuery = query(
+          collection(db, "pageContentCache"),
+          where("userId", "==", userId)
+        );
+        const pageCacheSnapshot = await getDocs(pageCacheQuery);
+        const batch6 = writeBatch(db);
+        pageCacheSnapshot.docs.forEach((doc) => {
+          batch6.delete(doc.ref);
+          deleteCount++;
+        });
+        if (pageCacheSnapshot.docs.length > 0) {
+          await batch6.commit();
+          console.log(`✅ Deleted ${pageCacheSnapshot.docs.length} pageContentCache documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting pageContentCache:", error.message);
+      }
       
-      console.log(`✅ Deleted ${deleteCount} documents for user ${userId}`);
+      console.log(`✅ Successfully deleted ${deleteCount} documents for user ${userId}`);
     } catch (error) {
       console.error("Error deleting user data:", error);
       throw error;
@@ -999,14 +1136,30 @@ export default function Settings() {
                                 </ul>
                               </div>
                               <p className="text-sm">
-                                To confirm deletion, type <strong>DELETE</strong> in the box below:
+                                To confirm deletion, type <strong>DELETE</strong> in the box below{!isGoogleUser && " and enter your password"}:
                               </p>
-                              <Input
-                                placeholder="Type DELETE to confirm"
-                                value={deleteConfirmation}
-                                onChange={(e) => setDeleteConfirmation(e.target.value)}
-                                className="border-red-200 focus:border-red-400"
-                              />
+                              <div className="space-y-3">
+                                <Input
+                                  placeholder="Type DELETE to confirm"
+                                  value={deleteConfirmation}
+                                  onChange={(e) => setDeleteConfirmation(e.target.value)}
+                                  className="border-red-200 focus:border-red-400"
+                                />
+                                {!isGoogleUser && (
+                                  <Input
+                                    type="password"
+                                    placeholder="Enter your password"
+                                    value={deletePassword}
+                                    onChange={(e) => setDeletePassword(e.target.value)}
+                                    className="border-red-200 focus:border-red-400"
+                                  />
+                                )}
+                                {isGoogleUser && (
+                                  <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 p-2 rounded">
+                                    <strong>Google Account:</strong> You'll be prompted to re-authenticate with Google when you click delete.
+                                  </div>
+                                )}
+                              </div>
                             </div>
                             <DialogFooter className="gap-2">
                               <Button
@@ -1014,6 +1167,7 @@ export default function Settings() {
                                 onClick={() => {
                                   setShowDeleteDialog(false);
                                   setDeleteConfirmation("");
+                                  setDeletePassword("");
                                 }}
                                 disabled={isDeleting}
                               >
@@ -1022,7 +1176,7 @@ export default function Settings() {
                               <Button
                                 variant="destructive"
                                 onClick={handleDeleteAccount}
-                                disabled={isDeleting || deleteConfirmation !== "DELETE"}
+                                disabled={isDeleting || deleteConfirmation !== "DELETE" || (!isGoogleUser && !deletePassword)}
                                 className="gap-2"
                               >
                                 {isDeleting ? (

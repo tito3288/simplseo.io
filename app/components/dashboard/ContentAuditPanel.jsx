@@ -271,12 +271,12 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
             {/* Detailed Analysis */}
             {isExpanded && (
               <div className="space-y-4">
-                <h4 className="font-medium text-gray-900">Content Analysis</h4>
+                <h4 className="font-medium text-gray-900 dark:text-gray-100">Content Analysis</h4>
                 
                 {/* Content Length */}
-                <div className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <div>
-                    <h5 className="font-medium">Content Length</h5>
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100">Content Length</h5>
                     <p className="text-sm text-muted-foreground">
                       {auditResult.analysis.contentLength.value.toLocaleString()} characters
                     </p>
@@ -287,9 +287,9 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                 </div>
 
                 {/* Readability */}
-                <div className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <div>
-                    <h5 className="font-medium">Readability</h5>
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100">Readability</h5>
                     <p className="text-sm text-muted-foreground">
                       Flesch-Kincaid: {auditResult.analysis.readability.value.toFixed(1)}
                     </p>
@@ -300,9 +300,9 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                 </div>
 
                 {/* Heading Structure */}
-                <div className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <div>
-                    <h5 className="font-medium">Heading Structure</h5>
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100">Heading Structure</h5>
                     <p className="text-sm text-muted-foreground">
                       {auditResult.analysis.headingStructure.value.totalHeadings} headings
                     </p>
@@ -313,9 +313,9 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                 </div>
 
                 {/* Title Optimization */}
-                <div className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <div>
-                    <h5 className="font-medium">Title Optimization</h5>
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100">Title Optimization</h5>
                     <p className="text-sm text-muted-foreground">
                       {auditResult.analysis.titleOptimization.value.length} characters
                     </p>
@@ -326,9 +326,9 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                 </div>
 
                 {/* Meta Description */}
-                <div className="flex items-center justify-between p-3 bg-white border rounded-lg">
+                <div className="flex items-center justify-between p-3 bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg">
                   <div>
-                    <h5 className="font-medium">Meta Description</h5>
+                    <h5 className="font-medium text-gray-900 dark:text-gray-100">Meta Description</h5>
                     <p className="text-sm text-muted-foreground">
                       {auditResult.analysis.metaDescription.value.length} characters
                     </p>
@@ -341,7 +341,7 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                 {/* Improvement Suggestions */}
                 {auditResult.suggestions.length > 0 && (
                   <div className="mt-6">
-                    <h4 className="font-medium text-gray-900 mb-3">Improvement Suggestions</h4>
+                    <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Improvement Suggestions</h4>
                     <div className="space-y-3">
                       {auditResult.suggestions.map((suggestion, idx) => (
                         <div key={idx} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">

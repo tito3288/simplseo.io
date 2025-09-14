@@ -104,7 +104,7 @@ export default function EasyWinsPage() {
         const easyWins = formatted.filter((kw) => {
           const pos = kw.position;
           const ctr = parseFloat(kw.ctr.replace("%", ""));
-          return pos > 10 && pos <= 20 && ctr < 5;
+          return pos > 10 && pos <= 20 && ctr < 3 && kw.impressions > 10;
         });
 
         setGscKeywords(easyWins);
@@ -203,7 +203,7 @@ export default function EasyWinsPage() {
             <CardHeader>
               <CardTitle>Raw Easy Win Data</CardTitle>
               <CardDescription>
-                Keywords with positions 11–20 and CTR &lt; 5%
+                Keywords with positions 11–20, CTR &lt; 3%, and &gt; 10 impressions
               </CardDescription>
             </CardHeader>
             <CardContent>
