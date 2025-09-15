@@ -26,6 +26,8 @@ export default function GenericKeywordsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filter, setFilter] = useState('all');
+  const [fromCache, setFromCache] = useState(false);
+  const [cacheAge, setCacheAge] = useState(null);
   const shouldShowLoader = useMinimumLoading(loading, 2000);
 
   // Helper function to get display name for page types
@@ -117,6 +119,7 @@ export default function GenericKeywordsPage() {
         customBusinessType: data.customBusinessType,
         businessLocation: data.businessLocation,
         websiteUrl: data.websiteUrl,
+        userId: user.id, // Add userId for caching
       };
       
       console.log("🔍 API request body:", {
@@ -141,10 +144,13 @@ export default function GenericKeywordsPage() {
       
       console.log("🔍 Generic opportunities result:", result);
       console.log("🔍 Sample opportunity with page data:", result.opportunities?.[0]);
+      console.log("🔍 Sample opportunity actionItems:", result.opportunities?.[0]?.actionItems);
       
       if (result.opportunities && result.opportunities.length > 0) {
         setOpportunities(result.opportunities);
         setCannibalizationAnalysis(result.cannibalizationAnalysis || null);
+        setFromCache(result.fromCache || false);
+        setCacheAge(result.cacheAge || null);
       } else {
         setError("No generic opportunities found");
       }
@@ -319,7 +325,7 @@ export default function GenericKeywordsPage() {
           {/* Filter Options */}
           <Card className="mb-6">
             <CardContent className="pt-6">
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 mb-4">
                 {filterOptions.map((option) => (
                   <Button
                     key={option.value}
@@ -336,6 +342,16 @@ export default function GenericKeywordsPage() {
                   </Button>
                 ))}
               </div>
+              
+              {/* Cache Status Indicator */}
+              {fromCache && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>
+                    Cached data loaded {cacheAge ? `(${cacheAge} hours old)` : ''}
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -355,7 +371,7 @@ export default function GenericKeywordsPage() {
             ) : (
               <div className="space-y-4">
                 {filteredOpportunities.map((opportunity, index) => (
-                <Card key={index} className="hover:shadow-md transition-shadow border-l-4 border-l-blue-200 dark:border-l-blue-800">
+                <Card key={`${opportunity.keyword}-${index}`} className="hover:shadow-md transition-shadow border-l-4 border-l-blue-200 dark:border-l-blue-800">
                   <CardContent className="pt-6">
                     <div className="flex items-start justify-between mb-4">
                       <div className="flex items-center gap-3">
@@ -393,7 +409,7 @@ export default function GenericKeywordsPage() {
 
 
                     {/* Action Items */}
-                    {opportunity.actionItems && opportunity.actionItems.length > 0 && (
+                    {opportunity.actionItems && opportunity.actionItems.length > 0 ? (
                       <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg mb-4">
                         <div className="flex items-start gap-2">
                           <Wrench className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
@@ -402,6 +418,7 @@ export default function GenericKeywordsPage() {
                               Recommended Actions
                             </p>
                             <ul className="text-sm text-orange-700 dark:text-orange-300 space-y-1">
+                              {console.log("🔍 Rendering actions for", opportunity.keyword, ":", opportunity.actionItems)}
                               {opportunity.actionItems.map((action, idx) => (
                                 <li key={idx} className="flex items-start gap-2">
                                   <span className="text-orange-600 mt-0.5">•</span>
@@ -412,7 +429,7 @@ export default function GenericKeywordsPage() {
                           </div>
                         </div>
                       </div>
-                    )}
+                    ) : null}
 
                     <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
                       <Badge className={getVolumeColor(opportunity.searchVolume)}>

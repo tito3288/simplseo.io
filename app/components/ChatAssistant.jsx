@@ -50,6 +50,11 @@ const ChatAssistant = ({
         message: "I see you're on the Easy Wins page! These are quick SEO fixes you can do right now. Need help understanding what you're seeing?",
         help: "I can help you pick the best wins, guide you through them, or explain what results to expect."
       },
+      '/generic-keywords': {
+        title: 'Generic Keywords Analysis',
+        message: "I see you're on the Generic Keywords page! This analyzes broad, non-branded keywords that could bring in new traffic. Need help understanding what you're seeing?",
+        help: "I can explain the keyword analysis, help you understand the opportunities, or guide you on how to optimize for these generic terms."
+      },
       '/chatbot': {
         title: 'SEO Mentor Chat',
         message: "I see you're in the SEO Mentor chat! This is your personal SEO help space. What would you like to work on?",

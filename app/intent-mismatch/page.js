@@ -954,6 +954,7 @@ export default function IntentMismatch() {
   });
 
   // Check if a keyword has location issues that need attention
+  // Note: This function is kept for future use but UI is disabled
   const checkForLocationIssues = (keyword, userLocation) => {
     if (!userLocation) return null;
     
@@ -1337,7 +1338,17 @@ Can you analyze my page structure and give me specific, actionable advice for im
         </Alert>
       )}
 
-        {/* Info Alert */}
+
+      {/* Location Keyword Warning */}
+      <Alert className="mt-6 mb-5 bg-blue-50 border-blue-200 dark:bg-blue-950/20 dark:border-blue-800">
+        <AlertTriangle className="h-4 w-4 text-blue-600 dark:text-blue-400" />
+        <AlertDescription className="text-blue-800 dark:text-blue-200">
+          <strong>Location Keyword Notice:</strong> Some keywords may appear without full location context (e.g., &quot;orleans seo&quot; instead of &quot;new orleans seo&quot;). 
+          If you notice location-related keywords that seem incorrect, consider updating them in your content to include the full location name for better local targeting.
+        </AlertDescription>
+      </Alert>
+
+      {/* Info Alert */}
        <Alert className="mt-6 mb-5">
         <AlertTriangle className="h-4 w-4" />
         <AlertDescription>
@@ -1425,39 +1436,26 @@ Can you analyze my page structure and give me specific, actionable advice for im
           <div className="space-y-6">
             {filteredMismatches.map((mismatch, index) => {
               const cleanKeyword = mismatch.keyword.replace(/^\[|\]$/g, '');
-              const locationIssues = checkForLocationIssues(cleanKeyword, data?.businessLocation);
+              
+              // Keep location detection logic for future use but don't render UI
+              // const locationIssues = checkForLocationIssues(cleanKeyword, data?.businessLocation);
               
               return (
                 <Card key={index} className="hover:shadow-md transition-shadow">
-                  {/* Location Issue Alert - INSIDE the card, only when needed */}
-                  {locationIssues && 
-                   !dismissedLocationAlerts.has(`${cleanKeyword}_${locationIssues.severity}`) &&
-                   !mismatch.dismissedLocationIssues?.some(dismissed => 
-                     dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
-                   ) &&
-                   !mismatch.locationIssueFixed && (
-                    <div className="m-4 p-4 border border-border bg-gradient-to-r from-yellow-50 to-orange-50 dark:from-yellow-900/20 dark:to-orange-900/20 rounded-lg transition-all duration-300 ease-in-out">
-                      <LocationIssueAlert
-                        keyword={cleanKeyword}
-                        locationIssues={locationIssues}
-                        userLocation={data.businessLocation}
-                        onAction={handleLocationAction}
-                        onDismiss={handleLocationAlertDismiss}
-                      />
+                  {/* Location Keyword Warning - Full notice in each card */}
+                  <div className="px-4 pt-4 pb-2">
+                    <div className="text-sm text-blue-800 dark:text-blue-200 bg-blue-50 dark:bg-blue-950/20 px-3 py-2 rounded border border-blue-200 dark:border-blue-800">
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle className="h-4 w-4 text-blue-600 dark:text-blue-400 mt-0.5 flex-shrink-0" />
+                        <div>
+                          <strong>Location Keyword Notice:</strong> Some keywords may appear without full location context (e.g., &quot;orleans seo&quot; instead of &quot;new orleans seo&quot;). 
+                          If you notice location-related keywords that seem incorrect, consider updating them in your content to include the full location name for better local targeting.
+                        </div>
+                      </div>
                     </div>
-                  )}
+                  </div>
                   
-                  {/* Visual separator when there's a location alert */}
-                  {locationIssues && 
-                   !dismissedLocationAlerts.has(`${cleanKeyword}_${locationIssues.severity}`) &&
-                   !mismatch.dismissedLocationIssues?.some(dismissed => 
-                     dismissed.keyword === cleanKeyword && dismissed.severity === locationIssues.severity
-                   ) &&
-                   !mismatch.locationIssueFixed && (
-                    <div className="border-b border-border mx-4 transition-all duration-300 ease-in-out"></div>
-                  )}
-                  
-                  <CardContent className="pt-4">
+                  <CardContent className="pt-2">
                 <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                   {/* Left Column - Keyword & Page */}
                   <div className="space-y-3">
@@ -1555,12 +1553,7 @@ Can you analyze my page structure and give me specific, actionable advice for im
                     <Button 
                       size="sm" 
                       onClick={() => openChatWithContext(mismatch)}
-                      disabled={locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`) && !mismatch.locationIssueFixed}
-                      className={`w-full transition-all duration-300 ${
-                        locationIssues && !locationAlertInteractions.has(`${cleanKeyword}_${locationIssues.severity}`) && !mismatch.locationIssueFixed
-                          ? 'bg-gray-300 text-gray-500 cursor-not-allowed opacity-50' // Faded out when no interaction and not fixed
-                          : 'bg-[#00bf63] hover:bg-[#00bf63]/90 text-white' // Normal when interaction made or already fixed
-                      }`}
+                      className="w-full bg-[#00bf63] hover:bg-[#00bf63]/90 text-white"
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
                       Fix This

@@ -83,17 +83,17 @@ export class GSCTokenManager {
   }
 
   // Check if access token is expired (GSC tokens expire in 1 hour)
-  isTokenExpired(connectedAt) {
-    if (!connectedAt) return true;
+  isTokenExpired(tokenIssuedAt) {
+    if (!tokenIssuedAt) return true;
     
-    const connectedTime = new Date(connectedAt).getTime();
+    const tokenTime = new Date(tokenIssuedAt).getTime();
     const now = Date.now();
     const oneHour = 60 * 60 * 1000;
     
     // Add 5-minute buffer to be safe
     const bufferTime = 5 * 60 * 1000;
     
-    return (now - connectedTime) > (oneHour - bufferTime);
+    return (now - tokenTime) > (oneHour - bufferTime);
   }
 
   // Update last sync timestamp

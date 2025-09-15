@@ -451,8 +451,9 @@ async function getGoogleTrendsData(businessType, businessLocation) {
 
 function getFallbackTrendingQueries(businessType) {
   // Fallback trending queries when Google Trends API fails
+  const currentYear = new Date().getFullYear();
   const trendingQueries = [
-    `${businessType} 2024`,
+    `${businessType} ${currentYear}`,
     `${businessType} near me`,
     `best ${businessType}`,
     `${businessType} reviews`,
@@ -489,7 +490,7 @@ function isGenericOpportunity(query, businessType) {
   const genericTerms = [
     'near me', 'open now', 'membership', 'express', 'touchless', 'hand wash',
     'self wash', 'self service', 'free', 'soap', 'cost', 'price', 'reviews',
-    'best', 'quality', 'professional', 'service', 'company', '2024'
+    'best', 'quality', 'professional', 'service', 'company', currentYear.toString()
   ];
   
   const hasGenericTerm = genericTerms.some(term => lowerQuery.includes(term));

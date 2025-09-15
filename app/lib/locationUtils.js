@@ -29,11 +29,19 @@ export const generateRecommendedKeyword = (originalKeyword, serviceArea) => {
     }
   }
   
-  if (!ambiguousWord) return originalKeyword;
+  if (!ambiguousWord) {
+    // If no ambiguous word found, add the city name to the keyword
+    return `${cityName} ${originalKeyword}`;
+  }
   
   // Replace the ambiguous word with the full city name
   const regex = new RegExp(`\\b${ambiguousWord}\\b`, 'gi');
   const recommended = originalKeyword.replace(regex, cityName);
+  
+  // If the recommended keyword is the same as original, add city name
+  if (recommended.toLowerCase() === originalKeyword.toLowerCase()) {
+    return `${cityName} ${originalKeyword}`;
+  }
   
   return recommended;
 };

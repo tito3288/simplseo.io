@@ -411,7 +411,7 @@ const OnboardingWizard = () => {
                       </p>
                       <ol className="text-sm text-muted-foreground space-y-2 ml-4">
                         <li>1. Go to <a href="https://search.google.com/search-console" target="_blank" rel="noopener noreferrer" className="text-primary underline">Google Search Console</a></li>
-                        <li>2. Add your property: <code className="bg-background px-1 rounded">{data.websiteUrl || "your-website.com"}</code></li>
+                        <li>2. Add your property: <code className="bg-background px-1 rounded">{data.websiteUrl || &quot;your-website.com&quot;}</code></li>
                         <li>3. Verify ownership (DNS record or HTML file)</li>
                         <li>4. Come back and connect your account</li>
                       </ol>

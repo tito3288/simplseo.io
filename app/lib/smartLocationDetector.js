@@ -2,6 +2,67 @@
 // Focuses on detecting location ambiguity and partial matches that could attract wrong traffic
 
 /**
+ * Check if a keyword is a brand name or general keyword that shouldn't have location context
+ * @param {string} cleanKeyword - The keyword in lowercase
+ * @returns {boolean} True if it's a brand name or general keyword
+ */
+function isBrandNameOrGeneralKeyword(cleanKeyword) {
+  // Common brand name patterns
+  const brandPatterns = [
+    // Single word brands (2+ characters)
+    /^[a-z]{2,}$/,
+    // Two word combinations that are likely brand names
+    /^[a-z]+\s+[a-z]+$/,
+    // Common brand suffixes
+    /(inc|llc|corp|company|co|group|enterprises|solutions|services|systems|technologies|tech)$/,
+    // Common brand prefixes
+    /^(the|a|an)\s+[a-z]+/,
+  ];
+  
+  // Check if it matches brand patterns
+  for (const pattern of brandPatterns) {
+    if (pattern.test(cleanKeyword)) {
+      return true;
+    }
+  }
+  
+  // Common general keywords that shouldn't have location context
+  const generalKeywords = [
+    'google', 'facebook', 'instagram', 'twitter', 'youtube', 'linkedin',
+    'amazon', 'apple', 'microsoft', 'netflix', 'spotify', 'uber', 'lyft',
+    'walmart', 'target', 'costco', 'home depot', 'lowes', 'best buy',
+    'nike', 'adidas', 'starbucks', 'mcdonalds', 'subway', 'pizza hut',
+    'dominos', 'kfc', 'burger king', 'wendys', 'taco bell',
+    'drive and shine', 'jiffy lube', 'valvoline', 'firestone',
+    'goodyear', 'bridgestone', 'michelin', 'continental'
+  ];
+  
+  // Check against known general keywords
+  if (generalKeywords.includes(cleanKeyword)) {
+    return true;
+  }
+  
+  // Check if it's a very short keyword (likely a brand)
+  if (cleanKeyword.length <= 3) {
+    return true;
+  }
+  
+  // Check if it contains common business/service words that are typically global
+  const globalServiceWords = [
+    'app', 'website', 'online', 'digital', 'software', 'platform',
+    'network', 'system', 'tool', 'service', 'solution', 'product'
+  ];
+  
+  for (const word of globalServiceWords) {
+    if (cleanKeyword.includes(word)) {
+      return true;
+    }
+  }
+  
+  return false;
+}
+
+/**
  * Check if a keyword has location issues that need user attention
  * @param {string} keyword - The keyword to analyze
  * @param {string} userLocation - User's business location (e.g., "South Bend, IN")
@@ -13,44 +74,31 @@ export const detectLocationIssues = (keyword, userLocation) => {
   const cleanKeyword = keyword.toLowerCase().trim();
   const cleanLocation = userLocation.toLowerCase().trim();
   
-  // Debug logging
-  console.log(`🔍 Location Analysis for "${keyword}":`);
-  console.log(`  User Location: "${userLocation}"`);
-  console.log(`  Clean Location: "${cleanLocation}"`);
-  console.log(`  Original Keyword: "${keyword}"`);
-  console.log(`  Cleaned Keyword: "${cleanKeyword}"`);
+  // FIRST: Check if this is a brand name or general keyword that shouldn't have location context
+  if (isBrandNameOrGeneralKeyword(cleanKeyword)) {
+    return null;
+  }
   
   // Parse location into parts
   const locationParts = cleanLocation.split(',').map(part => part.trim());
   const city = locationParts[0] || '';
   const state = locationParts[1] || '';
   
-  console.log(`  Parsed City: "${city}"`);
-  console.log(`  Parsed State: "${state}"`);
-  
   // Extract individual words from city name
   const cityWords = city.split(' ').filter(word => word.length > 0);
   
-  console.log(`  City Words: [${cityWords.join(', ')}]`);
-  console.log(`  Keyword: "${cleanKeyword}"`);
-  
   // Check if keyword contains the full city name (this is GOOD)
-  console.log(`  🔍 Checking full city name: "${city}" in keyword: ${cleanKeyword.includes(city)}`);
   if (cleanKeyword.includes(city)) {
-    console.log(`  ✅ Full city name found - no issues`);
     return null; // No issues - full city name is present
   }
   
   // Check if keyword contains the full location (city + state)
-  console.log(`  🔍 Checking full location: "${cleanLocation}" in keyword: ${cleanKeyword.includes(cleanLocation)}`);
   if (cleanKeyword.includes(cleanLocation)) {
-    console.log(`  ✅ Full location found - no issues`);
     return null; // No issues - full location is present
   }
   
   // Check for compound city names (like "south bend")
   if (cityWords.length > 1) {
-    console.log(`  🔍 Checking compound city: [${cityWords.join(', ')}]`);
     
     // SPECIAL CASE: If location contains numbers (like ZIP codes), be more flexible
     const hasNumbers = cityWords.some(word => /\d/.test(word));
@@ -68,44 +116,29 @@ export const detectLocationIssues = (keyword, userLocation) => {
         return word.length > 2;
       });
       
-      console.log(`  🔍 Core city words (no numbers, no state): [${coreCityWords.join(', ')}]`);
-      
       if (coreCityWords.length > 0) {
-        console.log(`  🔍 Checking each core city word:`);
         const hasCoreCity = coreCityWords.every(word => {
-          const hasWord = cleanKeyword.includes(word);
-          console.log(`    "${word}" in "${cleanKeyword}": ${hasWord}`);
-          console.log(`    Word length: ${word.length}, Keyword length: ${cleanKeyword.length}`);
-          console.log(`    Word: "${word}", Keyword: "${cleanKeyword}"`);
-          return hasWord;
+          return cleanKeyword.includes(word);
         });
-        console.log(`  🔍 Has core city parts: ${hasCoreCity}`);
         
         if (hasCoreCity) {
-          console.log(`  ✅ Core city parts found - no issues`);
           return null; // No issues - core city parts are present
         }
       }
     } else {
       // For normal compound cities, check if keyword contains ALL parts
       const hasAllParts = cityWords.every(word => {
-        const hasPart = cleanKeyword.includes(word);
-        console.log(`    "${word}" in keyword: ${hasPart}`);
-        return hasPart;
+        return cleanKeyword.includes(word);
       });
       
       if (hasAllParts) {
-        console.log(`  ✅ Compound city complete - no issues`);
         return null; // No issues - compound city name is complete
       }
     }
-    
-    console.log(`  ❌ Compound city incomplete`);
   }
   
   // Check for state-level targeting (this is also good)
   if (state && cleanKeyword.includes(state)) {
-    console.log(`  ✅ State found - no issues`);
     return null; // No issues - state targeting is fine
   }
   
@@ -132,8 +165,9 @@ export const detectLocationIssues = (keyword, userLocation) => {
   }
   
   // Problem 2: No location context at all
-  const hasAnyLocationTerms = cityWords.some(word => cleanKeyword.includes(word)) || 
-                             (state && cleanKeyword.includes(state));
+  const hasAnyLocationTerms = cityWords.some(word => {
+    return cleanKeyword.includes(word);
+  }) || (state && cleanKeyword.includes(state));
   
   if (!hasAnyLocationTerms) {
     issues.push({
@@ -147,11 +181,8 @@ export const detectLocationIssues = (keyword, userLocation) => {
   
   // Only return issues if there are real problems
   if (issues.length === 0) {
-    console.log(`  ✅ No location issues found`);
     return null;
   }
-  
-  console.log(`  ❌ Found ${issues.length} location issues:`, issues.map(i => i.type));
   
   return {
     keyword,

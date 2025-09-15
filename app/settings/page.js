@@ -1156,7 +1156,7 @@ export default function Settings() {
                                 )}
                                 {isGoogleUser && (
                                   <div className="text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/20 p-2 rounded">
-                                    <strong>Google Account:</strong> You'll be prompted to re-authenticate with Google when you click delete.
+                                    <strong>Google Account:</strong> You&apos;ll be prompted to re-authenticate with Google when you click delete.
                                   </div>
                                 )}
                               </div>

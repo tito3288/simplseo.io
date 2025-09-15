@@ -1,8 +1,9 @@
 import { NextResponse } from "next/server";
+import { db } from "../../../lib/firebaseAdmin";
 
 export async function POST(req) {
   try {
-    const { gscKeywords, businessType, businessLocation, websiteUrl, customBusinessType } = await req.json();
+    const { gscKeywords, businessType, businessLocation, websiteUrl, customBusinessType, userId } = await req.json();
 
     // Use custom business type if provided, otherwise use the selected business type
     const effectiveBusinessType = (businessType === "Other" && customBusinessType) ? customBusinessType : businessType;
@@ -12,8 +13,44 @@ export async function POST(req) {
       businessType,
       customBusinessType,
       effectiveBusinessType,
-      businessLocation 
+      businessLocation,
+      userId
     });
+
+    // Check for cached results first
+    if (userId) {
+      const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${websiteUrl}`;
+      console.log("🔍 Checking cache for key:", cacheKey);
+      
+      try {
+        const cachedDoc = await db.collection("genericKeywordsCache").doc(cacheKey).get();
+        
+        if (cachedDoc.exists) {
+          const cachedData = cachedDoc.data();
+          const cacheAge = Date.now() - cachedData.timestamp;
+          const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
+          
+          if (cacheAge < maxAge) {
+            console.log("✅ Using cached generic keywords data (age:", Math.round(cacheAge / (60 * 60 * 1000)), "hours)");
+            return NextResponse.json({
+              success: true,
+              opportunities: cachedData.opportunities,
+              cannibalizationAnalysis: cachedData.cannibalizationAnalysis,
+              hubAndSpokeStrategy: cachedData.hubAndSpokeStrategy,
+              fromCache: true,
+              cacheAge: Math.round(cacheAge / (60 * 60 * 1000)) // hours
+            });
+          } else {
+            console.log("⏰ Cache expired, generating new data");
+          }
+        } else {
+          console.log("📝 No cache found, generating new data");
+        }
+      } catch (cacheError) {
+        console.error("⚠️ Error checking cache:", cacheError);
+        // Continue with generation if cache check fails
+      }
+    }
 
     // Allow empty GSC keywords for pure AI generation
     if (!gscKeywords) {
@@ -24,12 +61,22 @@ export async function POST(req) {
     const existingKeywords = gscKeywords.length > 0 ? gscKeywords.map(kw => kw.keyword.toLowerCase()) : [];
     console.log("📋 Existing GSC keywords for filtering:", existingKeywords.length);
 
+    // Crawl the user's website to understand current structure
+    const siteAnalysis = await analyzeUserWebsite(websiteUrl, effectiveBusinessType);
+    console.log("🔍 Site analysis completed:", {
+      hasNavigation: !!siteAnalysis.navigation,
+      hasFooter: !!siteAnalysis.footer,
+      pageCount: siteAnalysis.pages?.length || 0,
+      contentGaps: siteAnalysis.contentGaps?.length || 0
+    });
+
     // Generate new AI-powered generic keyword opportunities
     const aiGeneratedOpportunities = await generateAIGenericKeywords(
       effectiveBusinessType, 
       businessLocation, 
       websiteUrl,
-      existingKeywords
+      existingKeywords,
+      siteAnalysis
     );
 
     console.log("🤖 AI-generated opportunities:", aiGeneratedOpportunities.length);
@@ -56,7 +103,8 @@ export async function POST(req) {
 
     console.log(`🔄 Filtered out ${aiGeneratedOpportunities.length - filteredOpportunities.length} opportunities from Low CTR pages`);
 
-    return NextResponse.json({
+    // Prepare the response data
+    const responseData = {
       opportunities: filteredOpportunities.slice(0, 50), // Return top 50
       cannibalizationAnalysis,
       hubAndSpokeStrategy,
@@ -65,7 +113,31 @@ export async function POST(req) {
       totalGenerated: aiGeneratedOpportunities.length,
       totalFiltered: filteredOpportunities.length,
       strategy: "ai_generated_content_creation"
-    });
+    };
+
+    // Cache the results if userId is provided
+    if (userId) {
+      const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${websiteUrl}`;
+      console.log("💾 Caching generic keywords data for key:", cacheKey);
+      
+      try {
+        await db.collection("genericKeywordsCache").doc(cacheKey).set({
+          ...responseData,
+          userId,
+          businessType: effectiveBusinessType,
+          websiteUrl,
+          businessLocation,
+          timestamp: Date.now(),
+          createdAt: new Date().toISOString()
+        });
+        console.log("✅ Successfully cached generic keywords data");
+      } catch (cacheError) {
+        console.error("⚠️ Error caching data:", cacheError);
+        // Continue even if caching fails
+      }
+    }
+
+    return NextResponse.json(responseData);
 
   } catch (error) {
     console.error("❌ Error in Generic Keywords API:", error);
@@ -74,7 +146,7 @@ export async function POST(req) {
 }
 
 // Generate AI-powered generic keywords using Google Trends and business context
-async function generateAIGenericKeywords(businessType, businessLocation, websiteUrl, existingKeywords) {
+async function generateAIGenericKeywords(businessType, businessLocation, websiteUrl, existingKeywords, siteAnalysis) {
   console.log("🤖 Generating AI-powered generic keywords...");
   
   const opportunities = [];
@@ -144,25 +216,29 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
     console.log(`🎯 Using ${finalSuggestions.length} final suggestions`);
     
     // 4. Convert to opportunity format with content creation focus
-    return finalSuggestions.map((suggestion, index) => ({
-      keyword: suggestion.keyword,
-      category: suggestion.category,
-      priority: suggestion.priority,
-      searchVolume: suggestion.searchVolume || "Unknown",
-      competition: suggestion.competition || "Medium",
-      contentIdea: suggestion.contentIdea,
-      actionItems: getContentCreationActionItems(suggestion, businessType, businessLocation),
-      currentPerformance: {
-        position: 0, // New keyword, not ranking yet
-        ctr: "0%",
-        impressions: 0,
-        clicks: 0,
-        page: null // No existing page
-      },
-      opportunity: "content_creation",
-      difficulty: suggestion.difficulty || "Medium",
-      potential: suggestion.potential || "High"
-    }));
+    const opportunities = await Promise.all(
+      finalSuggestions.map(async (suggestion, index) => ({
+        keyword: suggestion.keyword,
+        category: suggestion.category,
+        priority: suggestion.priority,
+        searchVolume: suggestion.searchVolume || "Unknown",
+        competition: suggestion.competition || "Medium",
+        contentIdea: suggestion.contentIdea,
+        actionItems: await getPersonalizedActionItems(suggestion, businessType, businessLocation, siteAnalysis),
+        currentPerformance: {
+          position: 0, // New keyword, not ranking yet
+          ctr: "0%",
+          impressions: 0,
+          clicks: 0,
+          page: null // No existing page
+        },
+        opportunity: "content_creation",
+        difficulty: suggestion.difficulty || "Medium",
+        potential: suggestion.potential || "High"
+      }))
+    );
+    
+    return opportunities;
     
   } catch (error) {
     console.error("❌ Error generating AI keywords:", error);
@@ -178,14 +254,15 @@ async function getGoogleTrendsData(businessType, businessLocation) {
     const location = businessLocation.split(',')[0].trim();
     
     // Generate trending-style keywords based on common patterns
+    const currentYear = new Date().getFullYear();
     const trendingKeywords = [
       {
-        keyword: `${businessType} 2024`,
+        keyword: `${businessType} ${currentYear}`,
         category: 'trending_search',
         priority: 8,
         searchVolume: "High",
         competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} 2024`, businessType, businessLocation),
+        contentIdea: generateContentIdea(`${businessType} ${currentYear}`, businessType, businessLocation),
         difficulty: "Medium",
         potential: "High"
       },
@@ -606,3 +683,343 @@ function generateOptimizationRecommendations(strategy, businessType, businessLoc
   
   return recommendations;
 }
+
+// Analyze user's website to understand current structure and content
+async function analyzeUserWebsite(websiteUrl, businessType) {
+  try {
+    console.log("🔍 Analyzing user website:", websiteUrl);
+    
+    // Ensure the URL has a protocol
+    const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
+    console.log("🔍 Using full URL for scraping:", fullUrl);
+    
+    // Use the existing scrape-content API to get homepage data
+    const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/scrape-content`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ pageUrl: fullUrl })
+    });
+
+    if (!response.ok) {
+      console.warn("⚠️ Could not crawl website, using fallback analysis");
+      return getFallbackSiteAnalysis(businessType);
+    }
+
+    const data = await response.json();
+    const { title, metaDescription, textContent, headings } = data.data;
+
+    // Analyze the content to understand current structure
+    const analysis = {
+      title: title || '',
+      metaDescription: metaDescription || '',
+      contentLength: textContent?.length || 0,
+      headings: headings || [],
+      navigation: extractNavigationInfo(headings, textContent),
+      footer: extractFooterInfo(textContent),
+      pages: extractPageInfo(headings, textContent),
+      contentGaps: identifyContentGaps(headings, textContent, businessType),
+      hasContactForm: checkForContactForm(textContent),
+      hasTestimonials: checkForTestimonials(textContent),
+      hasPricing: checkForPricing(textContent),
+      hasLocationInfo: checkForLocationInfo(textContent)
+    };
+
+    console.log("✅ Website analysis completed:", {
+      contentLength: analysis.contentLength,
+      headingsCount: analysis.headings.length,
+      hasContactForm: analysis.hasContactForm,
+      hasTestimonials: analysis.hasTestimonials,
+      hasPricing: analysis.hasPricing,
+      contentGaps: analysis.contentGaps.length
+    });
+
+    return analysis;
+
+  } catch (error) {
+    console.error("❌ Error analyzing website:", error);
+    return getFallbackSiteAnalysis(businessType);
+  }
+}
+
+// Extract navigation information from headings and content
+function extractNavigationInfo(headings, content) {
+  const navKeywords = ['services', 'about', 'contact', 'pricing', 'portfolio', 'gallery', 'testimonials'];
+  const foundNavItems = [];
+  
+  headings.forEach(heading => {
+    const headingLower = heading.toLowerCase();
+    navKeywords.forEach(keyword => {
+      if (headingLower.includes(keyword)) {
+        foundNavItems.push(heading);
+      }
+    });
+  });
+
+  return {
+    items: foundNavItems,
+    hasServices: foundNavItems.some(item => item.toLowerCase().includes('service')),
+    hasAbout: foundNavItems.some(item => item.toLowerCase().includes('about')),
+    hasContact: foundNavItems.some(item => item.toLowerCase().includes('contact')),
+    hasPricing: foundNavItems.some(item => item.toLowerCase().includes('pricing'))
+  };
+}
+
+// Extract footer information
+function extractFooterInfo(content) {
+  const footerKeywords = ['copyright', 'privacy', 'terms', 'address', 'phone', 'email'];
+  const foundFooterItems = [];
+  
+  footerKeywords.forEach(keyword => {
+    if (content.toLowerCase().includes(keyword)) {
+      foundFooterItems.push(keyword);
+    }
+  });
+
+  return {
+    items: foundFooterItems,
+    hasContactInfo: foundFooterItems.some(item => ['address', 'phone', 'email'].includes(item)),
+    hasLegalPages: foundFooterItems.some(item => ['privacy', 'terms'].includes(item))
+  };
+}
+
+// Extract page information
+function extractPageInfo(headings, content) {
+  const pages = [];
+  const h1Headings = headings.filter(h => h.startsWith('H1:') || h.includes('h1'));
+  
+  h1Headings.forEach(heading => {
+    const cleanHeading = heading.replace(/^H1:\s*/, '').trim();
+    if (cleanHeading) {
+      pages.push({
+        title: cleanHeading,
+        type: categorizePageType(cleanHeading),
+        hasContent: content.length > 500
+      });
+    }
+  });
+
+  return pages;
+}
+
+// Categorize page type based on heading
+function categorizePageType(heading) {
+  const headingLower = heading.toLowerCase();
+  
+  if (headingLower.includes('service')) return 'service';
+  if (headingLower.includes('about')) return 'about';
+  if (headingLower.includes('contact')) return 'contact';
+  if (headingLower.includes('pricing')) return 'pricing';
+  if (headingLower.includes('portfolio')) return 'portfolio';
+  if (headingLower.includes('testimonial')) return 'testimonial';
+  if (headingLower.includes('gallery')) return 'gallery';
+  
+  return 'content';
+}
+
+// Identify content gaps
+function identifyContentGaps(headings, content, businessType) {
+  const gaps = [];
+  const contentLower = content.toLowerCase();
+  
+  // Check for common business content gaps
+  const commonGaps = [
+    { keyword: 'pricing', check: () => !contentLower.includes('pricing') && !contentLower.includes('price') },
+    { keyword: 'testimonials', check: () => !contentLower.includes('testimonial') && !contentLower.includes('review') },
+    { keyword: 'contact', check: () => !contentLower.includes('contact') && !contentLower.includes('phone') },
+    { keyword: 'about', check: () => !contentLower.includes('about') && !contentLower.includes('story') },
+    { keyword: 'location', check: () => !contentLower.includes('location') && !contentLower.includes('address') },
+    { keyword: 'hours', check: () => !contentLower.includes('hours') && !contentLower.includes('open') },
+    { keyword: 'booking', check: () => !contentLower.includes('book') && !contentLower.includes('appointment') }
+  ];
+
+  commonGaps.forEach(gap => {
+    if (gap.check()) {
+      gaps.push(gap.keyword);
+    }
+  });
+
+  return gaps;
+}
+
+// Check for contact form
+function checkForContactForm(content) {
+  const formKeywords = ['form', 'contact', 'book', 'appointment', 'quote', 'inquiry'];
+  return formKeywords.some(keyword => content.toLowerCase().includes(keyword));
+}
+
+// Check for testimonials
+function checkForTestimonials(content) {
+  const testimonialKeywords = ['testimonial', 'review', 'customer', 'client', 'satisfied', 'happy'];
+  return testimonialKeywords.some(keyword => content.toLowerCase().includes(keyword));
+}
+
+// Check for pricing information
+function checkForPricing(content) {
+  const pricingKeywords = ['pricing', 'price', 'cost', 'rate', 'fee', '$', 'dollar'];
+  return pricingKeywords.some(keyword => content.toLowerCase().includes(keyword));
+}
+
+// Check for location information
+function checkForLocationInfo(content) {
+  const locationKeywords = ['location', 'address', 'near', 'area', 'city', 'state', 'zip'];
+  return locationKeywords.some(keyword => content.toLowerCase().includes(keyword));
+}
+
+// Get fallback site analysis when crawling fails
+function getFallbackSiteAnalysis(businessType) {
+  return {
+    title: '',
+    metaDescription: '',
+    contentLength: 0,
+    headings: [],
+    navigation: { items: [], hasServices: false, hasAbout: false, hasContact: false, hasPricing: false },
+    footer: { items: [], hasContactInfo: false, hasLegalPages: false },
+    pages: [],
+    contentGaps: ['pricing', 'testimonials', 'contact', 'about', 'location', 'hours', 'booking'],
+    hasContactForm: false,
+    hasTestimonials: false,
+    hasPricing: false,
+    hasLocationInfo: false
+  };
+}
+
+// Get AI-generated personalized action items based on site analysis
+async function getPersonalizedActionItems(suggestion, businessType, businessLocation, siteAnalysis) {
+  console.log("🎯 Generating AI-powered personalized actions for:", suggestion.keyword);
+  console.log("🔍 Site analysis available:", !!siteAnalysis);
+  console.log("🔍 Content gaps:", siteAnalysis?.contentGaps);
+  console.log("🔍 Navigation:", siteAnalysis?.navigation);
+  
+  try {
+    // Generate AI-powered recommendations
+    const aiActions = await generateAIActionItems(suggestion, businessType, businessLocation, siteAnalysis);
+    console.log("✅ AI-generated actions for", suggestion.keyword, ":", aiActions);
+    return aiActions;
+  } catch (error) {
+    console.error("❌ AI action generation failed, using fallback:", error);
+    // Fallback to basic actions if AI fails
+    return [
+      `Create a dedicated page or blog post specifically about "${suggestion.keyword}" to help you rank for this keyword`,
+      `Write content that directly addresses what people are looking for when they search "${suggestion.keyword}"`,
+      `Include "${suggestion.keyword}" in your page titles, headings, and content naturally`,
+      `Add local SEO optimization if this is a location-based keyword`
+    ];
+  }
+}
+
+// Generate AI-powered action items
+async function generateAIActionItems(suggestion, businessType, businessLocation, siteAnalysis) {
+  const prompt = `You are an SEO expert helping a ${businessType} business in ${businessLocation}. 
+
+Generate 4-6 specific, actionable recommendations for the keyword: "${suggestion.keyword}"
+
+Business Context:
+- Business Type: ${businessType}
+- Location: ${businessLocation}
+- Keyword Category: ${suggestion.category}
+- Search Volume: ${suggestion.searchVolume}
+- Difficulty: ${suggestion.difficulty}
+
+Current Website Analysis:
+- Content Gaps: ${siteAnalysis?.contentGaps?.join(', ') || 'None identified'}
+- Navigation Issues: ${!siteAnalysis?.navigation?.hasServices ? 'Missing Services menu' : 'Has Services menu'}, ${!siteAnalysis?.navigation?.hasPricing ? 'Missing Pricing menu' : 'Has Pricing menu'}, ${!siteAnalysis?.navigation?.hasContact ? 'Missing Contact menu' : 'Has Contact menu'}
+
+Requirements:
+1. Make each recommendation specific to the exact keyword "${suggestion.keyword}"
+2. Include the keyword naturally in each recommendation
+3. Focus on beginner-friendly, actionable steps
+4. Explain WHY each action helps with SEO
+5. Be specific about what content to create and where to put it
+6. Consider the business type and location context
+7. Address any identified content gaps or navigation issues
+
+Format as a JSON array of strings, each string being one complete recommendation.
+
+Example format:
+[
+  "Create a dedicated landing page for '${suggestion.keyword}' with clear calls-to-action and local contact information",
+  "Write blog posts about '${suggestion.keyword}' topics and share them on social media to build authority",
+  "Add '${suggestion.keyword}' to your page titles, meta descriptions, and H1 headings for better search visibility"
+]`;
+
+  const response = await fetch('https://api.openai.com/v1/chat/completions', {
+    method: 'POST',
+    headers: {
+      'Authorization': `Bearer ${process.env.OPENAI_API_KEY}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      model: 'gpt-3.5-turbo',
+      messages: [
+        {
+          role: 'system',
+          content: 'You are an expert SEO consultant who provides specific, actionable recommendations for small businesses. Always include the exact keyword in your recommendations and explain the SEO benefit.'
+        },
+        {
+          role: 'user',
+          content: prompt
+        }
+      ],
+      max_tokens: 800,
+      temperature: 0.7
+    })
+  });
+
+  if (!response.ok) {
+    throw new Error(`OpenAI API error: ${response.status}`);
+  }
+
+  const data = await response.json();
+  const content = data.choices[0]?.message?.content?.trim();
+  
+  if (!content) {
+    throw new Error('No content received from OpenAI');
+  }
+
+  try {
+    // Clean up the content first - remove any markdown formatting
+    let cleanContent = content
+      .replace(/```json\s*/g, '')
+      .replace(/```\s*/g, '')
+      .replace(/^json\s*/g, '')
+      .trim();
+    
+    // Try to parse as JSON
+    const actions = JSON.parse(cleanContent);
+    if (Array.isArray(actions) && actions.length > 0) {
+      // Clean up each action item
+      return actions.map(action => {
+        if (typeof action === 'string') {
+          return action.trim();
+        }
+        return String(action).trim();
+      }).filter(action => action.length > 0);
+    } else {
+      throw new Error('Invalid JSON format');
+    }
+  } catch (parseError) {
+    console.error("❌ Failed to parse AI response as JSON:", content);
+    // Fallback: split by lines and clean up
+    const lines = content
+      .split('\n')
+      .filter(line => line.trim().length > 0)
+      .map(line => {
+        // Remove bullet points, quotes, and other formatting
+        return line
+          .replace(/^[-•*]\s*/, '')
+          .replace(/^"\s*/, '')
+          .replace(/"$/, '')
+          .replace(/^\d+\.\s*/, '')
+          .replace(/^json\s*/, '')
+          .replace(/^\[/, '')
+          .replace(/\]$/, '')
+          .trim();
+      })
+      .filter(line => line.length > 0 && !line.match(/^[\[\]{}"]*$/));
+    
+    return lines;
+  }
+}
+
