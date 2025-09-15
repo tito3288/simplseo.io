@@ -272,7 +272,7 @@ export default function GenericKeywordsPage() {
                 {cannibalizationAnalysis.cannibalizedKeywords.slice(0, 6).map((item, index) => (
                   <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-orange-200">
                     <h4 className="font-semibold text-orange-800 dark:text-orange-200 mb-2">
-                      "{item.keyword}"
+                      &quot;{item.keyword}&quot;
                     </h4>
                     <p className="text-sm text-orange-700 dark:text-orange-300 mb-2">
                       {item.recommendation}

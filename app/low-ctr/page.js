@@ -411,8 +411,8 @@ export default function LowCtrPage() {
       </div>
 
       <p className="text-muted-foreground mb-4">
-        These pages show up in Google search results but aren't getting many clicks. 
-        This usually means your page titles and descriptions aren't compelling enough 
+        These pages show up in Google search results but aren&apos;t getting many clicks. 
+        This usually means your page titles and descriptions aren&apos;t compelling enough 
         to make people want to click. Try making them more attractive and keyword-focused!
       </p>
 
