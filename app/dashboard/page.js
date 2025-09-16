@@ -72,6 +72,10 @@ export default function Dashboard() {
   const [isLoadingGscData, setIsLoadingGscData] = useState(false);
   const [isRefreshingData, setIsRefreshingData] = useState(false); // ✅ NEW: Track refresh state
   
+  // Use AI-powered filtering for non-branded keywords
+  const [nonBrandedKeywords, setNonBrandedKeywords] = useState([]);
+  const [isFilteringKeywords, setIsFilteringKeywords] = useState(false);
+  
   // Use minimum loading time for professional UX
   const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
 
@@ -222,6 +226,54 @@ export default function Dashboard() {
       fetchAndMatchGSC(gscAccessToken);
     }
   }, [dateRange, gscAccessToken, isGscConnected]);
+
+  // AI-powered brand filtering effect
+  useEffect(() => {
+    const filterKeywordsWithAI = async () => {
+      if (!gscKeywords.length || !data?.businessName) return;
+      
+      setIsFilteringKeywords(true);
+      try {
+        console.log('🤖 Using AI to filter branded keywords for dashboard...');
+        
+        const response = await fetch('/api/filter-branded-keywords', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            keywords: gscKeywords,
+            businessName: data.businessName,
+            businessType: data.businessType
+          })
+        });
+
+        if (!response.ok) {
+          throw new Error(`API error: ${response.status}`);
+        }
+
+        const result = await response.json();
+        console.log('✅ AI filtering result:', result);
+        
+        // Set only the generic (non-branded) keywords - limit to 4 for dashboard
+        setNonBrandedKeywords(result.generic.slice(0, 4));
+        
+      } catch (error) {
+        console.error('❌ AI filtering failed, using fallback:', error);
+        // Fallback to simple filtering if AI fails
+        const fallback = gscKeywords.filter(kw => {
+          const keyword = kw.keyword.toLowerCase();
+          const businessName = data?.businessName?.toLowerCase() || '';
+          return !keyword.includes(businessName);
+        }).slice(0, 4);
+        setNonBrandedKeywords(fallback);
+      } finally {
+        setIsFilteringKeywords(false);
+      }
+    };
+
+    filterKeywordsWithAI();
+  }, [gscKeywords, data?.businessName, data?.businessType]);
 
   if (isLoading || !user) {
     return null; // or show a loader/spinner if you want
@@ -502,6 +554,7 @@ export default function Dashboard() {
     const ctr = parseFloat(kw.ctr.replace("%", ""));
     return pos > 10 && pos <= 20 && ctr < 3 && kw.impressions > 10;
   });
+
 
   const stripHtmlTags = (html) => {
     if (typeof window === "undefined") return html;
@@ -839,7 +892,93 @@ export default function Dashboard() {
       </div>
 
       {/* Generic Keyword Opportunities Row */}
-      <div className="grid grid-cols-1 gap-6 mb-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+        {/* Non-Branded Keywords Already Ranking */}
+        <Card className="border-green-200 shadow-green-100">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2">
+                  Generic Keywords Already Ranking
+                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
+                    Low Priority
+                  </span>
+                </CardTitle>
+                <CardDescription>
+                  Non-branded keywords you&apos;re already ranking for in the last {dateRange === "all" ? "year" : `${dateRange} days`} (showing top 4)
+                </CardDescription>
+              </div>
+              <Button asChild variant="outline" size="sm">
+                <Link href="/generic-keywords-ranking">See More</Link>
+              </Button>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {isGscConnected ? (
+              shouldShowLoader || isFilteringKeywords ? (
+                <div className="text-center py-8">
+                  <SquashBounceLoader size="lg" className="mb-4" />
+                  <p className="text-sm text-muted-foreground">
+                    {isFilteringKeywords ? 'AI is filtering keywords...' : 'Loading keywords...'}
+                  </p>
+                </div>
+              ) : nonBrandedKeywords.length === 0 ? (
+                <div className="text-center py-6">
+                  <div className="bg-muted inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
+                    <FileText className="w-6 h-6 text-muted-foreground" />
+                  </div>
+                  <p className="text-sm font-medium text-muted-foreground mb-1">
+                    No generic keywords found
+                  </p>
+                  <p className="text-xs text-muted-foreground">
+                    Most of your keywords appear to be branded
+                  </p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {nonBrandedKeywords.map((keyword, index) => (
+                    <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-green-200">
+                      <div className="flex items-center justify-between mb-2">
+                        <h4 className="font-semibold text-green-800 dark:text-green-200 text-sm">
+                          &quot;{keyword.keyword}&quot;
+                        </h4>
+                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
+                          Position {keyword.position}
+                        </span>
+                      </div>
+                      <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
+                        <div>
+                          <span className="font-medium text-green-600">{keyword.clicks}</span> clicks
+                        </div>
+                        <div>
+                          <span className="font-medium text-green-600">{keyword.impressions}</span> impressions
+                        </div>
+                        <div>
+                          <span className="font-medium text-green-600">{keyword.ctr}</span> CTR
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )
+            ) : (
+              <div className="text-center py-6">
+                <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
+                  <Unlink className="h-8 w-8 text-muted-foreground" />
+                </div>
+                <h3 className="text-lg font-medium mb-2">
+                  Connect Google Search Console
+                </h3>
+                <p className="text-muted-foreground text-sm mb-4">
+                  See your generic keywords that are already ranking
+                </p>
+                <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+
+        {/* AI-Generated Content Opportunities */}
         <Card className="border-red-200 shadow-red-100">
           <CardHeader>
             <div className="flex items-center justify-between">

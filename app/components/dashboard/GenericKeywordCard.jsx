@@ -21,6 +21,8 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
   const [opportunities, setOpportunities] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+  const [fromCache, setFromCache] = useState(false);
+  const [cacheAge, setCacheAge] = useState(null);
 
   useEffect(() => {
     if (user?.id && data?.businessType && gscKeywords.length > 0) {
@@ -51,6 +53,7 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
           customBusinessType: data.customBusinessType,
           businessLocation: data.businessLocation,
           websiteUrl: data.websiteUrl,
+          userId: user.id, // Add userId for caching
         }),
       });
 
@@ -63,6 +66,8 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
 
       if (result.opportunities && result.opportunities.length > 0) {
         setOpportunities(result.opportunities);
+        setFromCache(result.fromCache || false);
+        setCacheAge(result.cacheAge || null);
       } else {
         setError("No generic opportunities found");
       }
@@ -209,6 +214,14 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
         </CardTitle>
         <CardDescription>
           Focus on non-branded, service-based keywords for new customer acquisition
+          {fromCache && (
+            <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+              <span>
+                Cached data loaded {cacheAge ? `(${cacheAge} hours old)` : ''}
+              </span>
+            </div>
+          )}
         </CardDescription>
       </CardHeader>
       <CardContent>

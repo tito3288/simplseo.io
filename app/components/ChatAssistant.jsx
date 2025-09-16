@@ -55,6 +55,11 @@ const ChatAssistant = ({
         message: "I see you're on the Generic Keywords page! This analyzes broad, non-branded keywords that could bring in new traffic. Need help understanding what you're seeing?",
         help: "I can explain the keyword analysis, help you understand the opportunities, or guide you on how to optimize for these generic terms."
       },
+      '/generic-keywords-ranking': {
+        title: 'Generic Keywords Already Ranking',
+        message: "I see you're on the Generic Keywords Already Ranking page! This shows non-branded keywords you're already ranking for in Google Search Console. Need help understanding what you're seeing?",
+        help: "I can explain which keywords are performing well, help you understand the metrics (clicks, impressions, CTR, position), or guide you on how to improve these rankings further."
+      },
       '/chatbot': {
         title: 'SEO Mentor Chat',
         message: "I see you're in the SEO Mentor chat! This is your personal SEO help space. What would you like to work on?",
