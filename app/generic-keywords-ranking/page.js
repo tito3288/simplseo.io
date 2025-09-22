@@ -149,45 +149,45 @@ export default function GenericKeywordsRankingPage() {
 
       const result = await response.json();
       console.log('✅ AI filtering result:', result);
+      console.log('🔍 Branded keywords from AI:', result.branded?.map(kw => kw.keyword) || []);
+      console.log('🔍 Generic keywords from AI:', result.generic?.map(kw => kw.keyword) || []);
       
       // Set only the generic (non-branded) keywords
       setNonBrandedKeywords(result.generic || []);
       
     } catch (error) {
-      console.error('❌ AI filtering failed, using fallback:', error);
-      // Fallback to more aggressive filtering if AI fails
+      console.error('❌ AI filtering failed, using enhanced fallback:', error);
+      // Enhanced fallback filtering if AI fails
       const businessName = data?.businessName?.toLowerCase() || '';
-      const businessWords = businessName.split(' ');
+      const businessWords = businessName.split(' ').filter(word => word.length > 2);
       
       const fallback = keywords.filter(kw => {
         const keyword = kw.keyword.toLowerCase();
         
-        // Check for exact business name
-        if (keyword.includes(businessName)) return false;
+        // Enhanced branded detection - same logic as API
+        const isBranded = 
+          // Exact business name matches
+          keyword.includes(businessName) || 
+          keyword.includes(businessName.replace(/\s+/g, '')) ||
+          keyword.includes(businessName.replace(/\s+/g, ' n ')) ||
+          keyword.includes(businessName.replace(/\s+/g, ' & ')) ||
+          keyword.includes(businessName.replace(/\s+/g, ' and ')) ||
+          // Check for individual business words (but be more strict)
+          (businessWords.length > 1 && businessWords.every(word => keyword.includes(word))) ||
+          // Check for common brand variations
+          keyword === businessName ||
+          keyword === businessName.replace(/\s+/g, '') ||
+          keyword === businessName.replace(/\s+/g, ' n ') ||
+          keyword === businessName.replace(/\s+/g, ' & ');
         
-        // Check for individual business words
-        for (const word of businessWords) {
-          if (word.length > 2 && keyword.includes(word)) {
-            return false;
-          }
-        }
-        
-        // Check for common brand variations
-        const brandVariations = [
-          businessName.replace(/\s+/g, ''),
-          businessName.replace(/\s+/g, ' n '),
-          businessName.replace(/\s+/g, ' & '),
-          businessName.replace(/\s+/g, ' and ')
-        ];
-        
-        for (const variation of brandVariations) {
-          if (keyword.includes(variation)) return false;
-        }
-        
-        return true;
+        // Return true if NOT branded (i.e., it's generic)
+        return !isBranded;
       });
       
-      console.log(`🔄 Fallback filtering: ${fallback.length} generic keywords from ${keywords.length} total`);
+      console.log(`🔄 Enhanced fallback filtering: ${fallback.length} generic keywords from ${keywords.length} total`);
+      console.log(`🔄 Business name: "${businessName}"`);
+      console.log(`🔄 Business words:`, businessWords);
+      console.log(`🔄 Sample filtered keywords:`, fallback.slice(0, 5).map(kw => kw.keyword));
       setNonBrandedKeywords(fallback);
     } finally {
       setIsFilteringKeywords(false);
@@ -292,9 +292,14 @@ export default function GenericKeywordsRankingPage() {
             Non-branded keywords you&apos;re already ranking for in the last 28 days
           </p>
         </div>
-        <Button onClick={() => window.history.back()} variant="outline">
-          Back to Dashboard
-        </Button>
+        <div className="flex gap-2">
+          <Button onClick={fetchGSCKeywords} variant="outline" size="sm">
+            Refresh Data
+          </Button>
+          <Button onClick={() => window.history.back()} variant="outline">
+            Back to Dashboard
+          </Button>
+        </div>
       </div>
 
       {error ? (

@@ -255,12 +255,12 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
         ) : (
           <>
             {/* Overall Score */}
-            <div className="mb-6 p-4 bg-gray-50 rounded-lg">
+            <div className="mb-6 p-4 bg-gray-50 dark:bg-gray-800 rounded-lg">
               <div className="flex items-center justify-between mb-2">
-                <h4 className="font-medium">Overall Content Score</h4>
+                <h4 className="font-medium text-gray-900 dark:text-gray-100">Overall Content Score</h4>
                 {getScoreBadge(auditResult.contentScore)}
               </div>
-              <div className="w-full bg-gray-200 rounded-full h-2">
+              <div className="w-full bg-gray-200 dark:bg-gray-700 rounded-full h-2">
                 <div 
                   className="bg-blue-600 h-2 rounded-full transition-all duration-300"
                   style={{ width: `${auditResult.contentScore}%` }}
@@ -344,13 +344,13 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                     <h4 className="font-medium text-gray-900 dark:text-gray-100 mb-3">Improvement Suggestions</h4>
                     <div className="space-y-3">
                       {auditResult.suggestions.map((suggestion, idx) => (
-                        <div key={idx} className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                        <div key={idx} className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
                           <div className="flex items-start justify-between mb-2">
-                            <h5 className="font-medium text-blue-900">{suggestion.title}</h5>
+                            <h5 className="font-medium text-blue-900 dark:text-blue-200">{suggestion.title}</h5>
                             {getPriorityBadge(suggestion.priority)}
                           </div>
-                          <p className="text-sm text-blue-700 mb-2">{suggestion.description}</p>
-                          <p className="text-sm text-blue-600 font-medium">Action: {suggestion.action}</p>
+                          <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">{suggestion.description}</p>
+                          <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Action: {suggestion.action}</p>
                         </div>
                       ))}
                     </div>
@@ -364,7 +364,7 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                     disabled={isGeneratingSuggestions || !auditResult}
                     variant="outline"
                     size="sm"
-                    className="bg-green-50 border-green-200 text-green-700 hover:bg-green-100"
+                    className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/30"
                   >
                     {isGeneratingSuggestions ? (
                       <>
@@ -389,49 +389,83 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
 
                 {/* AI Suggestions Section */}
                 {aiSuggestions && (
-                  <div className="mt-6 pt-6 border-t border-gray-200">
-                    <h4 className="font-medium text-green-900 mb-4 flex items-center gap-2">
+                  <div className="mt-6 pt-6 border-t border-gray-200 dark:border-gray-700">
+                    <h4 className="font-medium text-green-900 dark:text-green-200 mb-4 flex items-center gap-2">
                       <TrendingUp className="w-5 h-5" />
                       AI Improvement Suggestions
                     </h4>
                     <div className="space-y-4">
                       {aiSuggestions.suggestions.map((suggestion, idx) => (
-                        <div key={idx} className="p-4 bg-green-50 border border-green-200 rounded-lg">
+                        <div key={idx} className="p-4 bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800 rounded-lg">
                           <div className="flex items-start justify-between mb-2">
-                            <h5 className="font-medium text-green-900">{suggestion.title}</h5>
+                            <h5 className="font-medium text-green-900 dark:text-green-200">{suggestion.title}</h5>
                             {getPriorityBadge(suggestion.priority)}
                           </div>
-                          <p className="text-sm text-green-700 mb-3">{suggestion.description}</p>
-                          <div className="bg-white p-3 rounded border border-green-100">
-                            <h6 className="text-xs font-medium text-green-800 mb-2">AI Recommendation:</h6>
-                            <p className="text-sm text-green-700">{suggestion.aiRecommendation}</p>
+                          <p className="text-sm text-green-700 dark:text-green-300 mb-3">{suggestion.description}</p>
+                          <div className="bg-white dark:bg-gray-800 p-3 rounded border border-green-100 dark:border-green-800">
+                            <h6 className="text-xs font-medium text-green-800 dark:text-green-300 mb-2">AI Recommendation:</h6>
+                            <p className="text-sm text-green-700 dark:text-green-300">{suggestion.aiRecommendation}</p>
                           </div>
                           {suggestion.examples && (
-                            <div className="mt-3 bg-white p-3 rounded border border-green-100">
-                              <h6 className="text-xs font-medium text-green-800 mb-2">Examples:</h6>
-                              <ul className="text-sm text-green-700 space-y-1">
-                                {suggestion.examples.map((example, exampleIdx) => (
-                                  <li key={exampleIdx} className="flex items-start gap-2">
-                                    <span className="text-green-500 mt-1">•</span>
-                                    <span>{String(example || '')}</span>
-                                  </li>
-                                ))}
-                              </ul>
+                            <div className="mt-3 bg-white dark:bg-gray-800 p-3 rounded border border-green-100 dark:border-green-800">
+                              <h6 className="text-sm font-bold text-green-800 dark:text-green-300 mb-3">Examples:</h6>
+                              <div className="space-y-3">
+                                {suggestion.examples.map((example, exampleIdx) => {
+                                  // Parse the example to extract before/after if it contains them
+                                  const exampleText = String(example || '');
+                                  const beforeMatch = exampleText.match(/"before":"([^"]+)"/);
+                                  const afterMatch = exampleText.match(/"after":"([^"]+)"/);
+                                  
+                                  if (beforeMatch && afterMatch) {
+                                    // Format as before/after comparison
+                                    return (
+                                      <div key={exampleIdx} className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                                        <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-3">
+                                          Example {exampleIdx + 1} of {suggestion.examples.length}
+                                        </div>
+                                        <div className="space-y-3">
+                                          <div className="bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800">
+                                            <h6 className="text-sm font-bold text-red-800 dark:text-red-300 mb-2">BEFORE:</h6>
+                                            <p className="text-sm text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-line">{beforeMatch[1].replace(/\\n/g, '\n')}</p>
+                                          </div>
+                                          <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800">
+                                            <h6 className="text-sm font-bold text-green-800 dark:text-green-300 mb-2">AFTER:</h6>
+                                            <p className="text-sm text-green-700 dark:text-green-300 font-mono leading-relaxed whitespace-pre-line">{afterMatch[1].replace(/\\n/g, '\n')}</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  } else {
+                                    // Regular example format
+                                    return (
+                                      <div key={exampleIdx} className="flex items-start gap-2">
+                                        <span className="text-green-500 dark:text-green-400 mt-1">•</span>
+                                        <span className="text-sm text-green-700 dark:text-green-300">{exampleText}</span>
+                                      </div>
+                                    );
+                                  }
+                                })}
+                              </div>
                             </div>
                           )}
                           {suggestion.beforeAfter && suggestion.beforeAfter.length > 0 && (
-                            <div className="mt-3 bg-white p-3 rounded border border-green-100">
-                              <h6 className="text-xs font-medium text-green-800 mb-2">Specific Changes:</h6>
-                              <div className="space-y-3">
+                            <div className="mt-3 bg-white dark:bg-gray-800 p-3 rounded border border-green-100 dark:border-green-800">
+                              <h6 className="text-xs font-medium text-green-800 dark:text-green-300 mb-2">Specific Changes:</h6>
+                              <div className="space-y-4">
                                 {suggestion.beforeAfter.map((change, changeIdx) => (
-                                  <div key={changeIdx} className="space-y-2">
-                                    <div className="bg-red-50 p-2 rounded border border-red-200">
-                                      <h6 className="text-xs font-medium text-red-800 mb-1">BEFORE:</h6>
-                                      <p className="text-xs text-red-700 font-mono">{String(change.before || '')}</p>
+                                  <div key={changeIdx} className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
+                                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-3">
+                                      Example {changeIdx + 1} of {suggestion.beforeAfter.length}
                                     </div>
-                                    <div className="bg-green-50 p-2 rounded border border-green-200">
-                                      <h6 className="text-xs font-medium text-green-800 mb-1">AFTER:</h6>
-                                      <p className="text-xs text-green-700 font-mono">{String(change.after || '')}</p>
+                                    <div className="space-y-3">
+                                      <div className="bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800">
+                                        <h6 className="text-sm font-bold text-red-800 dark:text-red-300 mb-2">BEFORE:</h6>
+                                        <p className="text-sm text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-line">{String(change.before || '').replace(/\\n/g, '\n')}</p>
+                                      </div>
+                                      <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800">
+                                        <h6 className="text-sm font-bold text-green-800 dark:text-green-300 mb-2">AFTER:</h6>
+                                        <p className="text-sm text-green-700 dark:text-green-300 font-mono leading-relaxed whitespace-pre-line">{String(change.after || '').replace(/\\n/g, '\n')}</p>
+                                      </div>
                                     </div>
                                   </div>
                                 ))}

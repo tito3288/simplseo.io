@@ -503,7 +503,7 @@ export default function Chatbot() {
   if (shouldShowLoader) {
     return (
       <MainLayout>
-        <div className="flex h-full w-full bg-background z-2">
+        <div className="flex h-[calc(100vh-4rem)] w-full bg-background">
           <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
             <div className="text-center w-full max-w-2xl">
               <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6 sm:mb-8">

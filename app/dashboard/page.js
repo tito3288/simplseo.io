@@ -254,18 +254,42 @@ export default function Dashboard() {
 
         const result = await response.json();
         console.log('✅ AI filtering result:', result);
+        console.log('🔍 Branded keywords from AI:', result.branded?.map(kw => kw.keyword) || []);
+        console.log('🔍 Generic keywords from AI:', result.generic?.map(kw => kw.keyword) || []);
         
         // Set only the generic (non-branded) keywords - limit to 4 for dashboard
         setNonBrandedKeywords(result.generic.slice(0, 4));
         
       } catch (error) {
-        console.error('❌ AI filtering failed, using fallback:', error);
-        // Fallback to simple filtering if AI fails
+        console.error('❌ AI filtering failed, using enhanced fallback:', error);
+        // Enhanced fallback filtering if AI fails
+        const businessName = data?.businessName?.toLowerCase() || '';
+        const businessWords = businessName.split(' ').filter(word => word.length > 2);
+        
         const fallback = gscKeywords.filter(kw => {
           const keyword = kw.keyword.toLowerCase();
-          const businessName = data?.businessName?.toLowerCase() || '';
-          return !keyword.includes(businessName);
+          
+          // Enhanced branded detection - same logic as API
+          const isBranded = 
+            // Exact business name matches
+            keyword.includes(businessName) || 
+            keyword.includes(businessName.replace(/\s+/g, '')) ||
+            keyword.includes(businessName.replace(/\s+/g, ' n ')) ||
+            keyword.includes(businessName.replace(/\s+/g, ' & ')) ||
+            keyword.includes(businessName.replace(/\s+/g, ' and ')) ||
+            // Check for individual business words (but be more strict)
+            (businessWords.length > 1 && businessWords.every(word => keyword.includes(word))) ||
+            // Check for common brand variations
+            keyword === businessName ||
+            keyword === businessName.replace(/\s+/g, '') ||
+            keyword === businessName.replace(/\s+/g, ' n ') ||
+            keyword === businessName.replace(/\s+/g, ' & ');
+          
+          // Return true if NOT branded (i.e., it's generic)
+          return !isBranded;
         }).slice(0, 4);
+        
+        console.log(`🔄 Dashboard fallback filtering: ${fallback.length} generic keywords from ${gscKeywords.length} total`);
         setNonBrandedKeywords(fallback);
       } finally {
         setIsFilteringKeywords(false);

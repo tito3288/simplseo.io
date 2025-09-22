@@ -15,6 +15,8 @@ export async function POST(req) {
     // Limit keywords to prevent API overload
     const keywordsToProcess = keywords.slice(0, 500);
     console.log(`🔍 AI Brand Filtering: ${keywordsToProcess.length} keywords for business "${businessName}" (limited from ${keywords.length})`);
+    console.log(`🔍 Business Type: ${businessType}`);
+    console.log(`🔍 Sample keywords:`, keywordsToProcess.slice(0, 5).map(kw => kw.keyword));
 
     // Check if OpenAI API key is available
     if (!process.env.OPENAI_API_KEY) {
@@ -22,7 +24,10 @@ export async function POST(req) {
       return NextResponse.json({ error: "OpenAI API key not configured" }, { status: 500 });
     }
 
-    // Create a prompt for OpenAI to identify branded vs non-branded keywords
+    // Create a more robust prompt for OpenAI to identify branded vs non-branded keywords
+    const businessNameLower = businessName.toLowerCase();
+    const businessWords = businessNameLower.split(' ').filter(word => word.length > 2);
+    
     const prompt = `You are an SEO expert analyzing keywords for a ${businessType || 'business'} called "${businessName}".
 
 Your task: Classify each keyword as either "BRANDED" or "GENERIC".
@@ -31,17 +36,20 @@ BRANDED keywords are:
 - EXACT variations of the business name "${businessName}" (e.g., "drive n shine", "drive & shine", "driveshine", "drive and shine")
 - Keywords that contain the FULL business name "${businessName}" or clear variations
 - Keywords that are clearly about this specific business
+- Keywords containing "${businessNameLower}" or "${businessNameLower.replace(/\s+/g, '')}" or "${businessNameLower.replace(/\s+/g, ' n ')}" or "${businessNameLower.replace(/\s+/g, ' & ')}"
 
 GENERIC keywords are:
 - Service-based terms (e.g., "car wash near me", "auto detailing", "oil change")
 - Location-based terms (e.g., "car wash lima ohio", "car wash fort wayne") 
 - Industry terms that could apply to any business in the same industry
-- Keywords that DON'T contain the business name "${businessName}"
+- Keywords that DON'T contain the business name "${businessName}" or its variations
 
 IMPORTANT: 
 - Only mark as BRANDED if the keyword clearly contains "${businessName}" or its variations
 - If a keyword is just about the service or location without the business name, mark it as GENERIC
 - You MUST return BOTH "branded" and "generic" arrays - even if one is empty
+- Be very strict about branded classification - only include if it's clearly about this specific business
+- CRITICAL: The response MUST include both "branded" and "generic" arrays. If you only return "branded", the system will fail.
 
 Return ONLY a JSON object with this exact format:
 {
@@ -52,7 +60,7 @@ Return ONLY a JSON object with this exact format:
 Keywords to classify:
 ${keywordsToProcess.map(kw => `"${kw.keyword}"`).join(', ')}
 
-Remember: Be balanced - only mark as branded if it clearly contains the business name.`;
+Remember: Be very strict - only mark as branded if it clearly contains the business name "${businessName}" or its variations.`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -65,28 +73,34 @@ Remember: Be balanced - only mark as branded if it clearly contains the business
         messages: [
           {
             role: 'system',
-            content: 'You are an expert SEO consultant who accurately classifies keywords as branded or generic. Always return valid JSON with "branded" and "generic" arrays.'
+            content: 'You are an expert SEO consultant who accurately classifies keywords as branded or generic. You MUST always return valid JSON with BOTH "branded" and "generic" arrays. Never return only one array. If you cannot complete the response, return an empty array for the missing category.'
           },
           {
             role: 'user',
             content: prompt
           }
         ],
-        max_tokens: 1000,
+        max_tokens: 2000,
         temperature: 0.1 // Low temperature for consistent results
       })
     });
 
     if (!response.ok) {
-      throw new Error(`OpenAI API error: ${response.status}`);
+      const errorText = await response.text();
+      console.error(`❌ OpenAI API error: ${response.status} - ${errorText}`);
+      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
     }
 
     const data = await response.json();
     const aiResponse = data.choices[0]?.message?.content?.trim();
     
     if (!aiResponse) {
+      console.error('❌ No response from OpenAI');
       throw new Error('No response from OpenAI');
     }
+    
+    console.log(`🔍 OpenAI response length: ${aiResponse.length} characters`);
+    console.log(`🔍 OpenAI response preview: ${aiResponse.substring(0, 200)}...`);
 
     // Clean and parse JSON response
     let cleanedResponse = aiResponse
@@ -123,19 +137,77 @@ Remember: Be balanced - only mark as branded if it clearly contains the business
       if (!classification.branded || !classification.generic) {
         console.error('❌ Invalid AI response format:', classification);
         console.log('🔄 Using fallback parsing due to missing generic array...');
+        console.log('🔍 Available keys:', Object.keys(classification));
         
-        // Use fallback parsing when AI response is incomplete
+        // If we have branded keywords from AI, use them and derive generic from the rest
+        if (classification.branded && Array.isArray(classification.branded)) {
+          console.log('🔄 Using AI branded keywords and deriving generic from remaining...');
+          const aiBrandedKeywords = classification.branded;
+          const brandedKeywords = [];
+          const genericKeywords = [];
+          
+          keywordsToProcess.forEach(kw => {
+            if (aiBrandedKeywords.includes(kw.keyword)) {
+              brandedKeywords.push(kw.keyword);
+            } else {
+              genericKeywords.push(kw.keyword);
+            }
+          });
+          
+          console.log(`🔄 AI + Fallback: ${brandedKeywords.length} branded, ${genericKeywords.length} generic`);
+          
+          // Filter the processed keywords based on this classification
+          const brandedKeywordsFiltered = keywordsToProcess.filter(kw => 
+            brandedKeywords.includes(kw.keyword)
+          );
+          
+          const genericKeywordsFiltered = keywordsToProcess.filter(kw => 
+            genericKeywords.includes(kw.keyword)
+          );
+          
+          return NextResponse.json({
+            success: true,
+            branded: brandedKeywordsFiltered,
+            generic: genericKeywordsFiltered,
+            brandedCount: brandedKeywordsFiltered.length,
+            genericCount: genericKeywordsFiltered.length,
+            totalProcessed: keywordsToProcess.length,
+            totalReceived: keywords.length,
+            limited: keywords.length > 500,
+            fallback: true,
+            reason: 'ai_missing_generic_array'
+          });
+        }
+        
+        // Use enhanced fallback parsing when AI response is incomplete
         const businessNameLower = businessName.toLowerCase();
+        const businessWords = businessNameLower.split(' ').filter(word => word.length > 2);
         const brandedKeywords = [];
         const genericKeywords = [];
         
         keywordsToProcess.forEach(kw => {
           const keywordLower = kw.keyword.toLowerCase();
-          // Only mark as branded if it clearly contains the business name
-          const isBranded = keywordLower.includes(businessNameLower) || 
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, '')) ||
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, ' n ')) ||
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, ' & '));
+          
+          // Enhanced branded detection
+          const isBranded = 
+            // Exact business name matches
+            keywordLower.includes(businessNameLower) || 
+            keywordLower.includes(businessNameLower.replace(/\s+/g, '')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' n ')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' & ')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' and ')) ||
+            // Check for individual business words (but be more strict)
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word))) ||
+            // Check for common brand variations
+            keywordLower === businessNameLower ||
+            keywordLower === businessNameLower.replace(/\s+/g, '') ||
+            keywordLower === businessNameLower.replace(/\s+/g, ' n ') ||
+            keywordLower === businessNameLower.replace(/\s+/g, ' & ') ||
+            // Additional variations for business names with multiple words
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word))) ||
+            // Check for partial brand matches (e.g., "drive n shine lima" should be branded)
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word)) && 
+             (keywordLower.includes('drive') && keywordLower.includes('shine')));
           
           if (isBranded) {
             brandedKeywords.push(kw.keyword);
@@ -174,28 +246,39 @@ Remember: Be balanced - only mark as branded if it clearly contains the business
       console.log('🔍 Branded keywords:', classification.branded.slice(0, 10));
       console.log('🔍 Generic keywords:', classification.generic.slice(0, 10));
       
+      // Validate the classification results
+      if (classification.branded.length + classification.generic.length !== keywordsToProcess.length) {
+        console.warn(`⚠️ Classification count mismatch: ${classification.branded.length} + ${classification.generic.length} ≠ ${keywordsToProcess.length}`);
+      }
+      
     } catch (parseError) {
       console.error('❌ JSON parsing failed:', parseError);
       console.error('🔍 Problematic response:', cleanedResponse.substring(0, 500));
       
-      // Fallback: try to extract keywords manually
+      // Enhanced fallback: try to extract keywords manually with better logic
+      const businessNameLower = businessName.toLowerCase();
+      const businessWords = businessNameLower.split(' ').filter(word => word.length > 2);
       const brandedKeywords = [];
       const genericKeywords = [];
       
-      // Look for keywords in the response text
+      // Look for keywords in the response text first
       const keywordMatches = cleanedResponse.match(/"([^"]+)"/g);
       if (keywordMatches) {
         keywordMatches.forEach(match => {
           const keyword = match.replace(/"/g, '');
-          // More balanced heuristic: only mark as branded if it clearly contains the business name
-          const businessNameLower = businessName.toLowerCase();
           const keywordLower = keyword.toLowerCase();
           
-          // Check for exact business name or clear variations
-          const isBranded = keywordLower.includes(businessNameLower) || 
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, '')) ||
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, ' n ')) ||
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, ' & '));
+          // Enhanced branded detection
+          const isBranded = 
+            keywordLower.includes(businessNameLower) || 
+            keywordLower.includes(businessNameLower.replace(/\s+/g, '')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' n ')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' & ')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' and ')) ||
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word))) ||
+            // Check for partial brand matches (e.g., "drive n shine lima" should be branded)
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word)) && 
+             (keywordLower.includes('drive') && keywordLower.includes('shine')));
           
           if (isBranded) {
             brandedKeywords.push(keyword);
@@ -207,16 +290,28 @@ Remember: Be balanced - only mark as branded if it clearly contains the business
       
       console.log(`🔄 Fallback parsing: ${brandedKeywords.length} branded, ${genericKeywords.length} generic`);
       
-      // If we have no generic keywords, use a more lenient approach
-      if (genericKeywords.length === 0) {
-        console.log('🔄 No generic keywords found, using lenient filtering...');
-        const businessNameLower = businessName.toLowerCase();
+      // If we have no generic keywords or very few, use the full keyword list
+      if (genericKeywords.length === 0 || genericKeywords.length < keywordsToProcess.length * 0.1) {
+        console.log('🔄 No generic keywords found in response, using full keyword list...');
         
         keywordsToProcess.forEach(kw => {
           const keywordLower = kw.keyword.toLowerCase();
-          // Only mark as branded if it clearly contains the business name
-          const isBranded = keywordLower.includes(businessNameLower) || 
-                           keywordLower.includes(businessNameLower.replace(/\s+/g, ''));
+          
+          // Enhanced branded detection
+          const isBranded = 
+            keywordLower.includes(businessNameLower) || 
+            keywordLower.includes(businessNameLower.replace(/\s+/g, '')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' n ')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' & ')) ||
+            keywordLower.includes(businessNameLower.replace(/\s+/g, ' and ')) ||
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word))) ||
+            keywordLower === businessNameLower ||
+            keywordLower === businessNameLower.replace(/\s+/g, '') ||
+            keywordLower === businessNameLower.replace(/\s+/g, ' n ') ||
+            keywordLower === businessNameLower.replace(/\s+/g, ' & ') ||
+            // Check for partial brand matches (e.g., "drive n shine lima" should be branded)
+            (businessWords.length > 1 && businessWords.every(word => keywordLower.includes(word)) && 
+             (keywordLower.includes('drive') && keywordLower.includes('shine')));
           
           if (isBranded) {
             brandedKeywords.push(kw.keyword);
@@ -263,6 +358,10 @@ Remember: Be balanced - only mark as branded if it clearly contains the business
     const genericKeywords = keywordsToProcess.filter(kw => 
       classification.generic.includes(kw.keyword)
     );
+
+    console.log(`✅ Final Result: ${brandedKeywords.length} branded, ${genericKeywords.length} generic keywords`);
+    console.log(`✅ Branded examples:`, brandedKeywords.slice(0, 5).map(kw => kw.keyword));
+    console.log(`✅ Generic examples:`, genericKeywords.slice(0, 5).map(kw => kw.keyword));
 
     return NextResponse.json({
       success: true,

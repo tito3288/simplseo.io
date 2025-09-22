@@ -11,13 +11,15 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { ArrowDown, ArrowUp, ChevronDown, ChevronRight } from "lucide-react";
+import { ArrowDown, ArrowUp, ChevronDown, ChevronRight, RefreshCw } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
 
 const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const { user } = useAuth();
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [leaderboardData, setLeaderboardData] = useState([]);
   const [implementedCount, setImplementedCount] = useState(0);
   const [expandedRows, setExpandedRows] = useState(new Set());
@@ -79,6 +81,82 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
     setExpandedRows(newExpanded);
   };
 
+  const handleRefresh = async () => {
+    if (!user?.id) return;
+    
+    setRefreshing(true);
+    try {
+      console.log("🔄 Refreshing postStats data...");
+      
+      const response = await fetch('/api/refresh-poststats', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          userId: user.id,
+          forceUpdate: true
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || `API error: ${response.status}`);
+      }
+
+      const result = await response.json();
+      console.log("✅ Refresh result:", result);
+
+      // Refresh the data
+      const fetchLeaderboardData = async () => {
+        const q = query(
+          collection(db, "implementedSeoTips"),
+          where("userId", "==", user.id),
+          where("status", "==", "implemented")
+        );
+
+        const snapshot = await getDocs(q);
+        const docs = snapshot.docs.map((doc) => doc.data());
+        setImplementedCount(docs.length);
+
+        const deltas = docs
+          .filter((doc) => doc.preStats && doc.postStats)
+          .map((doc) => {
+            const { preStats, postStats, pageUrl, implementedAt } = doc;
+            return {
+              pageUrl,
+              implementedAt,
+              preStats,
+              postStats,
+              impressionsDelta: postStats.impressions - preStats.impressions,
+              clicksDelta: postStats.clicks - preStats.clicks,
+              ctrDelta: postStats.ctr - preStats.ctr,
+              positionDelta: postStats.position - preStats.position,
+            };
+          });
+
+        deltas.sort((a, b) => {
+          if (b.clicksDelta !== a.clicksDelta) {
+            return b.clicksDelta - a.clicksDelta;
+          }
+          return b.ctrDelta - a.ctrDelta;
+        });
+
+        setLeaderboardData(deltas);
+      };
+
+      await fetchLeaderboardData();
+      
+      alert("✅ Data refreshed successfully!");
+      
+    } catch (error) {
+      console.error("❌ Refresh failed:", error);
+      alert(`❌ Failed to refresh: ${error.message}`);
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
   if (loading) {
     return (
       <Card>
@@ -127,7 +205,19 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>SEO Progress</CardTitle>
+        <div className="flex items-center justify-between">
+          <CardTitle>SEO Progress</CardTitle>
+          <Button
+            onClick={handleRefresh}
+            disabled={refreshing || loading}
+            variant="outline"
+            size="sm"
+            className="flex items-center gap-2"
+          >
+            <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+            {refreshing ? 'Refreshing...' : 'Refresh Data'}
+          </Button>
+        </div>
       </CardHeader>
       <CardContent>
         {/* Progress Bar */}
@@ -244,11 +334,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                     </h4>
                     
                     {/* Before (Implementation) */}
-                    <div className="bg-white rounded-lg p-3 border">
-                      <h5 className="text-xs font-medium text-blue-600 mb-2">
+                    <div className="bg-card rounded-lg p-3 border">
+                      <h5 className="text-xs font-medium text-blue-600 dark:text-blue-400 mb-2">
                         🎯 Before (Implementation)
                       </h5>
-                      <div className="text-xs text-blue-500 mb-3">
+                      <div className="text-xs text-blue-500 dark:text-blue-400 mb-3">
                         Implemented on: {new Date(item.implementedAt).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'short',
@@ -280,11 +370,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                     </div>
 
                     {/* After (7+ Days) */}
-                    <div className="bg-white rounded-lg p-3 border">
-                      <h5 className="text-xs font-medium text-green-600 mb-2">
+                    <div className="bg-card rounded-lg p-3 border">
+                      <h5 className="text-xs font-medium text-green-600 dark:text-green-400 mb-2">
                         🚀 After (7+ Days)
                       </h5>
-                      <div className="text-xs text-green-500 mb-3">
+                      <div className="text-xs text-green-500 dark:text-green-400 mb-3">
                         Last updated: {new Date(item.postStats.lastUpdated || item.postStats.updatedAt || Date.now()).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'short',
@@ -316,11 +406,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                     </div>
 
                     {/* Summary of Changes */}
-                    <div className="bg-blue-50 rounded-lg p-3 border border-blue-200">
-                      <h5 className="text-xs font-medium text-blue-700 mb-2">
+                    <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
+                      <h5 className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">
                         📈 Summary of Changes
                       </h5>
-                      <div className="text-xs text-blue-600">
+                      <div className="text-xs text-blue-600 dark:text-blue-400">
                         <p>
                           <strong>Impressions:</strong> {item.impressionsDelta > 0 ? '+' : ''}{item.impressionsDelta} 
                           ({item.impressionsDelta > 0 ? 'improved' : 'decreased'})

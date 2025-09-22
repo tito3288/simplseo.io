@@ -364,6 +364,9 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
 });
 
 // ⏰ Daily cron job to check SEO progress after 7 days
+// COMMENTED OUT: Automatic refresh causing data to reset to 0s
+// Users will now manually refresh using the "Refresh Data" button
+/*
 exports.checkSeoTipProgress = pubsub
   .schedule("every 24 hours")
   .timeZone("America/New_York") // optional
@@ -479,3 +482,4 @@ exports.checkSeoTipProgress = pubsub
     console.log(`✅ Updated ${updates.length} SEO tip documents with continuous monitoring`);
     return null;
   });
+*/

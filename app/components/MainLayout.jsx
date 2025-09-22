@@ -226,8 +226,9 @@ const MainLayout = ({
                   {data.websiteUrl || "No website set"}
                 </span>
               </div>
-              <Button variant="ghost" size="icon" onClick={handleLogout}>
-                <User className="w-5 h-5" />
+              <Button variant="ghost" size="sm" onClick={handleLogout} className="flex items-center gap-1">
+                <User className="w-4 h-4" />
+                <span className="text-sm">Logout</span>
               </Button>
             </div>
           </div>
