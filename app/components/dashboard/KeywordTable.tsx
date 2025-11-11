@@ -14,6 +14,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { Badge } from "@/components/ui/badge";
 
 interface Keyword {
   keyword: string;
@@ -22,6 +23,7 @@ interface Keyword {
   position: number;
   ctr: string;
   page?: string; // optional in case some rows don't include it
+  isFocus?: boolean;
 }
 
 interface KeywordTableProps {
@@ -64,7 +66,16 @@ const KeywordTable = ({ keywords, title, description, showPagination = true }: K
           <TableBody>
             {displayKeywords.map((item, index) => (
               <TableRow key={index}>
-                <TableCell className="font-medium">{item.keyword}</TableCell>
+                <TableCell className="font-medium">
+                  <div className="flex items-center gap-2">
+                    <span>{item.keyword}</span>
+                    {item.isFocus && (
+                      <Badge variant="outline" className="text-xs">
+                        Focus
+                      </Badge>
+                    )}
+                  </div>
+                </TableCell>
                 <TableCell className="text-right">{item.clicks}</TableCell>
                 <TableCell className="text-right flex items-center justify-end gap-1">
                   {item.position}

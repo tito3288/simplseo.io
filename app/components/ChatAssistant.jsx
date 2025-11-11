@@ -281,6 +281,7 @@ const ChatAssistant = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: messageContent,
+          userId: user?.id,
           context: {
             aiTips,
             gscKeywords,
@@ -440,6 +441,7 @@ const ChatAssistant = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: input,
+          userId: user?.id,
           context: {
             aiTips,
             gscKeywords,

@@ -32,6 +32,8 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ContentAuditPanel from "../components/dashboard/ContentAuditPanel";
+import { Badge } from "@/components/ui/badge";
+import { getFocusKeywords } from "../lib/firestoreHelpers";
 
 // Helper function to create safe document IDs
 const createSafeDocId = (userId, pageUrl) => {
@@ -87,13 +89,21 @@ export default function LowCtrPage() {
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [lowCtrPages, setLowCtrPages] = useState([]);
-  const [aiMeta, setAiMeta] = useState([]);
+  const [aiMetaByPage, setAiMetaByPage] = useState({});
   const [sitemapUrls, setSitemapUrls] = useState([]);
   const [implementedPages, setImplementedPages] = useState([]);
   const [pageImplementationDates, setPageImplementationDates] = useState({});
   const [loading, setLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState(28); // Default to 28 days
   const shouldShowLoader = useMinimumLoading(loading, 3000);
+  const [focusKeywords, setFocusKeywords] = useState([]);
+  const [focusKeywordAssignments, setFocusKeywordAssignments] = useState(
+    new Map()
+  );
+  const [focusKeywordsLoaded, setFocusKeywordsLoaded] = useState(false);
+  const [gscKeywordRows, setGscKeywordRows] = useState([]);
+  const [viewMode, setViewMode] = useState("raw");
+  const [userHasToggledView, setUserHasToggledView] = useState(false);
 
   useEffect(() => {
     const fetchGSCData = async () => {
@@ -197,16 +207,288 @@ export default function LowCtrPage() {
     fetchImplementedPages();
   }, [user]);
 
+  useEffect(() => {
+    const fetchFocus = async () => {
+      if (!user?.id) return;
+      try {
+        const keywords = await getFocusKeywords(user.id);
+        if (Array.isArray(keywords) && keywords.length > 0) {
+          const keywordList = [];
+          const assignments = new Map();
+          keywords.forEach(({ keyword, pageUrl }) => {
+            if (!keyword) return;
+            keywordList.push(keyword);
+            assignments.set(keyword.toLowerCase(), pageUrl || null);
+          });
+          setFocusKeywords(keywordList);
+          setFocusKeywordAssignments(assignments);
+        } else {
+          setFocusKeywords([]);
+          setFocusKeywordAssignments(new Map());
+        }
+      } catch (error) {
+        console.error("Failed to load focus keywords:", error);
+      }
+      setFocusKeywordsLoaded(true);
+    };
+
+    fetchFocus();
+  }, [user?.id]);
+
   // ✅ Memoized filtered sitemap pages
   const relevantPages = useMemo(
     () => sitemapUrls.filter(isRelevantPage),
     [sitemapUrls]
   );
 
+  useEffect(() => {
+    if (!focusKeywordsLoaded || userHasToggledView) return;
+    if (focusKeywords.length > 0) {
+      setViewMode("focus");
+    } else {
+      setViewMode("raw");
+    }
+  }, [focusKeywordsLoaded, focusKeywords.length, userHasToggledView]);
+
   const lowCtrUrls = useMemo(
     () => new Set(lowCtrPages.map((p) => p.page)),
     [lowCtrPages]
   );
+
+  const orderedFocusKeywords = useMemo(
+    () => (focusKeywords || []).map((keyword) => keyword.trim()).filter(Boolean),
+    [focusKeywords]
+  );
+
+  const focusKeywordSet = useMemo(
+    () => new Set(orderedFocusKeywords.map((keyword) => keyword.toLowerCase())),
+    [orderedFocusKeywords]
+  );
+
+  const focusKeywordTopRows = useMemo(() => {
+    const map = new Map();
+    gscKeywordRows.forEach((row) => {
+      const keyword = row.keys?.[0];
+      const page = row.keys?.[1];
+      if (!keyword || !focusKeywordSet.has(keyword.toLowerCase())) return;
+      const impressions = row.impressions || 0;
+      const position = row.position != null ? Number(row.position.toFixed(1)) : null;
+      const entry = map.get(keyword.toLowerCase());
+      if (!entry || impressions > entry.impressions) {
+        map.set(keyword.toLowerCase(), {
+          keyword,
+          impressions,
+          position,
+          page,
+        });
+      }
+    });
+    return map;
+  }, [gscKeywordRows, focusKeywordSet]);
+
+  const focusKeywordsNotShown = useMemo(() => {
+    const shown = new Set();
+    lowCtrPages.forEach((page) => {
+      page.keywords?.forEach((keyword) => {
+        shown.add(keyword.toLowerCase());
+      });
+    });
+
+    return orderedFocusKeywords
+      .filter((keyword) => !shown.has(keyword.toLowerCase()))
+      .map((keyword) => {
+        const lower = keyword.toLowerCase();
+        const data = focusKeywordTopRows.get(lower) || null;
+        const mappedPage = focusKeywordAssignments.get(lower) || null;
+        return {
+          keyword,
+          data,
+          page: mappedPage ?? data?.page ?? null,
+        };
+      });
+  }, [
+    orderedFocusKeywords,
+    lowCtrPages,
+    focusKeywordTopRows,
+    focusKeywordAssignments,
+  ]);
+
+  const focusLowCtrPages = useMemo(() => {
+    if (!focusKeywordSet.size) return [];
+
+    return lowCtrPages
+      .map((page) => {
+        const matchingKeywords = (page.keywords || []).filter((keyword) =>
+          focusKeywordSet.has(keyword.toLowerCase())
+        );
+        if (!matchingKeywords.length) {
+          return null;
+        }
+
+        const focusKeyword = matchingKeywords[0];
+        const additionalKeywords = (page.keywords || []).filter((keyword) => {
+          if (!keyword) return false;
+          return !matchingKeywords.includes(keyword);
+        });
+
+        return {
+          ...page,
+          focusKeyword,
+          matchingKeywords,
+          additionalKeywords,
+        };
+      })
+      .filter(Boolean);
+  }, [lowCtrPages, focusKeywordSet]);
+
+  const buildSuggestionKey = (pageUrl, focusKeyword) =>
+    `${pageUrl}::${focusKeyword ? focusKeyword.toLowerCase() : "__none__"}`;
+
+  const focusSuggestionTargets = useMemo(() => {
+    const targets = focusLowCtrPages.map((page) => ({
+      pageUrl: page.page,
+      focusKeyword: page.focusKeyword,
+      metrics: {
+        impressions: page.impressions,
+        clicks: page.clicks,
+        ctr: page.ctr,
+      },
+      key: buildSuggestionKey(page.page, page.focusKeyword),
+    }));
+
+    const seen = new Set(targets.map((item) => item.pageUrl));
+
+    focusKeywordsNotShown.forEach(({ keyword, data, page }) => {
+      const pageUrl = page || data?.page;
+      if (!pageUrl || seen.has(pageUrl)) return;
+      seen.add(pageUrl);
+      targets.push({
+        pageUrl,
+        focusKeyword: keyword,
+        metrics: {
+          impressions: data?.impressions ?? 0,
+          clicks: data?.clicks ?? 0,
+          ctr:
+            data && typeof data.impressions === "number" && data.impressions > 0
+              ? `${(((data.clicks ?? 0) / data.impressions) * 100).toFixed(1)}%`
+              : "0%",
+        },
+        key: buildSuggestionKey(pageUrl, keyword),
+      });
+    });
+
+    return targets;
+  }, [focusLowCtrPages, focusKeywordsNotShown]);
+
+  const rawSuggestionTargets = useMemo(
+    () =>
+      lowCtrPages.map((page) => ({
+        pageUrl: page.page,
+        focusKeyword: null,
+        metrics: {
+          impressions: page.impressions,
+          clicks: page.clicks,
+          ctr: page.ctr,
+        },
+        key: buildSuggestionKey(page.page, null),
+      })),
+    [lowCtrPages]
+  );
+
+  const suggestionTargets = useMemo(() => {
+    if (viewMode === "focus") {
+      if (focusSuggestionTargets.length > 0) {
+        return focusSuggestionTargets;
+      }
+      return rawSuggestionTargets;
+    }
+    return rawSuggestionTargets;
+  }, [viewMode, focusSuggestionTargets, rawSuggestionTargets]);
+
+  const requestAiMeta = async ({
+    pageUrl,
+    focusKeyword: focusKeywordArg,
+    key,
+  }) => {
+    try {
+      const payload = {
+        pageUrl,
+        context: {
+          source: "low-ctr-suggestions",
+          ...(focusKeywordArg ? { focusKeyword: focusKeywordArg } : {}),
+        },
+        ...(focusKeywordArg ? { focusKeywords: [focusKeywordArg] } : {}),
+      };
+
+      const [titleRes, descRes] = await Promise.all([
+        fetch("/api/seo-assistant/meta-title", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }),
+        fetch("/api/seo-assistant/meta-description", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(payload),
+        }),
+      ]);
+
+      if (!titleRes.ok) {
+        console.error(`Title API error for ${pageUrl}:`, titleRes.status);
+      }
+      if (!descRes.ok) {
+        console.error(`Description API error for ${pageUrl}:`, descRes.status);
+      }
+
+      const titleJson = titleRes.ok ? await titleRes.json() : { title: null };
+      const descJson = descRes.ok ? await descRes.json() : { description: null };
+
+      return {
+        pageUrl,
+        title: titleJson.title || "Suggested Title",
+        description: descJson.description || "Suggested Description",
+        focusKeyword: focusKeywordArg || null,
+        key,
+      };
+    } catch (error) {
+      console.error("Failed to fetch AI meta suggestions:", error);
+      return {
+        pageUrl,
+        title: "Suggested Title",
+        description: "Suggested Description",
+        focusKeyword: focusKeywordArg || null,
+        key,
+      };
+    }
+  };
+
+  useEffect(() => {
+    const missing = suggestionTargets.filter(
+      ({ key }) => !aiMetaByPage[key]
+    );
+    if (!missing.length) return;
+
+    let cancelled = false;
+    const loadSuggestions = async () => {
+      const suggestions = await Promise.all(
+        missing.map((target) => requestAiMeta(target))
+      );
+      if (cancelled) return;
+      setAiMetaByPage((prev) => {
+        const next = { ...prev };
+        suggestions.forEach((entry) => {
+          next[entry.key] = entry;
+        });
+        return next;
+      });
+    };
+
+    loadSuggestions();
+    return () => {
+      cancelled = true;
+    };
+  }, [suggestionTargets, aiMetaByPage]);
+
 
   // Helper function to check if a page is eligible for Content Quality Audit
   const isPageEligibleForContentAudit = (pageUrl) => {
@@ -255,6 +537,7 @@ export default function LowCtrPage() {
 
     // Debug: Log all rows before filtering
     console.log("🔍 All GSC rows before filtering:", json.rows.slice(0, 5));
+    setGscKeywordRows(json.rows);
     
     const filteredRows = json.rows.filter(
       (r) =>
@@ -274,63 +557,46 @@ export default function LowCtrPage() {
               clicks: 0,
               impressions: 0,
               ctr: "0%",
+              keywords: new Set(),
             };
           }
           acc[page].clicks += row.clicks;
           acc[page].impressions += row.impressions;
+          const query = row.keys?.[0];
+          if (query) {
+            acc[page].keywords.add(query);
+          }
           return acc;
         }, {})
-    );
+    ).map((item) => ({
+      ...item,
+      ctr:
+        item.impressions > 0
+          ? `${((item.clicks / item.impressions) * 100).toFixed(1)}%`
+          : "0%",
+      keywords: Array.from(item.keywords || []),
+    }));
 
     setLowCtrPages(grouped);
 
     const aiResults = await Promise.all(
-      grouped.map(async (item) => {
-        const [titleRes, descRes] = await Promise.all([
-          fetch("/api/seo-assistant/meta-title", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              pageUrl: item.page,
-              context: {
-                lowCtrPages: grouped,
-                goal: "improve CTR",
-              },
-            }),
-          }),
-          fetch("/api/seo-assistant/meta-description", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              pageUrl: item.page,
-              context: {
-                lowCtrPages: grouped,
-                goal: "improve CTR",
-              },
-            }),
-          }),
-        ]);
-
-        // Check if responses are ok before parsing JSON
-        if (!titleRes.ok) {
-          console.error(`Title API error for ${item.page}:`, titleRes.status);
-        }
-        if (!descRes.ok) {
-          console.error(`Description API error for ${item.page}:`, descRes.status);
-        }
-
-        const titleJson = titleRes.ok ? await titleRes.json() : { title: null };
-        const descJson = descRes.ok ? await descRes.json() : { description: null };
-
-        return {
+      grouped.map((item) =>
+        requestAiMeta({
           pageUrl: item.page,
-          title: titleJson.title || "Suggested Title",
-          description: descJson.description || "Suggested Description",
-        };
-      })
+          focusKeyword: (item.keywords || []).find((keyword) =>
+            focusKeywordSet.has(keyword.toLowerCase())
+          ) || null,
+        })
+      )
     );
 
-    setAiMeta(aiResults);
+    setAiMetaByPage((prev) => {
+      const next = { ...prev };
+      aiResults.forEach((entry) => {
+        next[entry.pageUrl] = entry;
+      });
+      return next;
+    });
     setLoading(false);
   };
 
@@ -401,6 +667,18 @@ export default function LowCtrPage() {
     );
   }
 
+  const suggestionsToRender = suggestionTargets.map((target) => {
+    const suggestion = aiMetaByPage[target.key];
+    return {
+      pageUrl: target.pageUrl,
+      focusKeyword: target.focusKeyword,
+      title: suggestion?.title || "Hang tight—we're crafting a fresh meta title.",
+      description:
+        suggestion?.description ||
+        "Your AI-powered meta description will appear here shortly.",
+    };
+  });
+
   return (
     <MainLayout>
       <div className="mb-6 flex items-center justify-between">
@@ -416,62 +694,232 @@ export default function LowCtrPage() {
         to make people want to click. Try making them more attractive and keyword-focused!
       </p>
 
-      <Card className="mb-6">
-        <CardHeader>
-          <div className="flex items-center justify-between">
-            <div>
-              <CardTitle>Raw Low CTR Data</CardTitle>
+      <div className="mb-6 flex flex-wrap items-center gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button
+            variant={viewMode === "focus" ? "default" : "outline"}
+            onClick={() => {
+              setUserHasToggledView(true);
+              setViewMode("focus");
+            }}
+            disabled={!focusKeywordSet.size}
+          >
+            Focus keywords view
+          </Button>
+          <Button
+            variant={viewMode === "raw" ? "default" : "outline"}
+            onClick={() => {
+              setUserHasToggledView(true);
+              setViewMode("raw");
+            }}
+          >
+            Raw data view
+          </Button>
+        </div>
+        {!focusKeywordSet.size && focusKeywordsLoaded && (
+          <span className="text-xs text-muted-foreground">
+            Add focus keywords on the dashboard to unlock the focus view.
+          </span>
+        )}
+      </div>
+
+      {viewMode === "focus" ? (
+        <>
+          <Card className="mb-6 border-primary/40 bg-primary/5">
+            <CardHeader>
+              <CardTitle>Focus keywords with low CTR</CardTitle>
               <CardDescription>
-                Pages with low click-through rates (2% or less) - these need better titles and descriptions
+                These focus keywords are showing up in search results but aren&apos;t getting clicks yet. Prioritize their titles and descriptions first.
               </CardDescription>
-            </div>
-            <DropdownMenu>
-              <DropdownMenuTrigger asChild>
-                <Button variant="outline" className="flex items-center gap-2">
-                  <Calendar className="h-4 w-4" />
-                  Last {timePeriod} days
-                  <ChevronDown className="h-4 w-4" />
-                </Button>
-              </DropdownMenuTrigger>
-              <DropdownMenuContent align="end">
-                <DropdownMenuItem onClick={() => setTimePeriod(7)}>
-                  Last 7 days
-                </DropdownMenuItem>
-                <DropdownMenuItem onClick={() => setTimePeriod(28)}>
-                  Last 28 days
-                </DropdownMenuItem>
-              </DropdownMenuContent>
-            </DropdownMenu>
-          </div>
-        </CardHeader>
-        <CardContent>
-          {lowCtrPages.length === 0 ? (
-            <p className="text-sm text-muted-foreground">No issues found</p>
-          ) : (
-            <ul className="space-y-2">
-              {lowCtrPages.map((page, idx) => (
-                <li key={idx} className="flex flex-col">
-                  <div className="flex items-center gap-2">
-                    <AlertTriangle className="text-red-600 h-4 w-4 flex-shrink-0" />
-                    <a
-                      href={page.page}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="text-[#00BF63] underline truncate"
+            </CardHeader>
+            <CardContent>
+              {!focusKeywordSet.size ? (
+                <p className="text-sm text-muted-foreground">
+                  Add focus keywords on the dashboard to see prioritized alerts here.
+                </p>
+              ) : focusLowCtrPages.length === 0 ? (
+                <p className="text-sm text-muted-foreground">
+                  Great news—none of your focus keywords are hitting the Low CTR threshold right now.
+                </p>
+              ) : (
+                <ul className="space-y-3">
+                  {focusLowCtrPages.map((page, idx) => (
+                    <li key={idx} className="rounded-md border border-primary/30 bg-background/80 p-4 shadow-sm">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <AlertTriangle className="text-red-600 h-4 w-4 flex-shrink-0" />
+                        <a
+                          href={page.page}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#00BF63] underline truncate"
+                        >
+                          {page.page}
+                        </a>
+                        <Badge variant="secondary">Focus keyword</Badge>
+                      </div>
+                      <div className="mt-2 text-sm text-muted-foreground">
+                        {page.impressions} impressions, {page.clicks} clicks ({page.ctr} CTR)
+                      </div>
+                      <div className="mt-2 text-xs text-muted-foreground flex flex-col gap-1">
+                        <span>
+                          Primary keyword:&nbsp;
+                          <span className="font-medium text-foreground">
+                            {page.focusKeyword}
+                          </span>
+                        </span>
+                        {page.additionalKeywords?.length > 0 && (
+                          <span>
+                            Other low-CTR queries:&nbsp;
+                            {page.additionalKeywords.join(", ")}
+                          </span>
+                        )}
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </CardContent>
+          </Card>
+
+          {focusKeywordsNotShown.length > 0 && (
+            <Card className="mb-6 border-dashed border-muted-foreground/30 bg-muted/30">
+              <CardHeader>
+                <CardTitle>Keep an eye on your focus keywords</CardTitle>
+                <CardDescription>
+                  These keywords are on your focus list but haven&apos;t triggered Low CTR warnings yet. Optimize their pages to drive more impressions and clicks.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ul className="space-y-3">
+                  {focusKeywordsNotShown.map(({ keyword, data, page }) => (
+                    <li
+                      key={keyword}
+                      className="rounded-md bg-background p-3 shadow-sm border border-muted/40"
                     >
-                      {page.page}
-                    </a>
-                  </div>
-                  <div className="text-sm text-muted-foreground pl-6">
-                    {page.impressions} impressions, {page.clicks} clicks (
-                    {page.ctr} CTR)
-                  </div>
-                </li>
-              ))}
-            </ul>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-medium">{keyword}</span>
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                          Focus keyword
+                        </Badge>
+                      </div>
+                      {data ? (
+                        <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                          <span>{data.impressions} impressions</span>
+                          {typeof data.position === "number" && (
+                            <span>Avg. position {data.position}</span>
+                          )}
+                          {(page || data.page) && (
+                            <a
+                              href={page || data.page}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00BF63] underline"
+                            >
+                              View ranking page
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <p className="mt-2 text-xs text-muted-foreground">
+                          We don&apos;t have enough Search Console data for this keyword yet.
+                          {page && (
+                            <>
+                              {" "}
+                              <a
+                                href={page}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                className="text-[#00BF63] underline"
+                              >
+                                View page
+                              </a>
+                            </>
+                          )}
+                        </p>
+                      )}
+                      <p className="mt-3 text-xs text-muted-foreground">
+                        Try updating the page&apos;s title, meta description, and on-page content to target this keyword more directly.
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              </CardContent>
+            </Card>
           )}
-        </CardContent>
-      </Card>
+        </>
+      ) : (
+        <Card className="mb-6">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle>Raw Low CTR Data</CardTitle>
+                <CardDescription>
+                  Pages with low click-through rates (2% or less) - these need better titles and descriptions
+                </CardDescription>
+              </div>
+              <DropdownMenu>
+                <DropdownMenuTrigger asChild>
+                  <Button variant="outline" className="flex items-center gap-2">
+                    <Calendar className="h-4 w-4" />
+                    Last {timePeriod} days
+                    <ChevronDown className="h-4 w-4" />
+                  </Button>
+                </DropdownMenuTrigger>
+                <DropdownMenuContent align="end">
+                  <DropdownMenuItem onClick={() => setTimePeriod(7)}>
+                    Last 7 days
+                  </DropdownMenuItem>
+                  <DropdownMenuItem onClick={() => setTimePeriod(28)}>
+                    Last 28 days
+                  </DropdownMenuItem>
+                </DropdownMenuContent>
+              </DropdownMenu>
+            </div>
+          </CardHeader>
+          <CardContent>
+            {lowCtrPages.length === 0 ? (
+              <p className="text-sm text-muted-foreground">No issues found</p>
+            ) : (
+              <ul className="space-y-2">
+                {lowCtrPages.map((page, idx) => {
+                  const focusMatch = page.keywords?.find((keyword) =>
+                    focusKeywordSet.has(keyword.toLowerCase())
+                  );
+                  const primaryKeyword = focusMatch || page.keywords?.[0] || null;
+                  return (
+                    <li key={idx} className="flex flex-col gap-1">
+                      <div className="flex items-center gap-2">
+                        <AlertTriangle className="text-red-600 h-4 w-4 flex-shrink-0" />
+                        <a
+                          href={page.page}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-[#00BF63] underline truncate"
+                        >
+                          {page.page}
+                        </a>
+                        {focusMatch && (
+                          <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                            Focus keyword
+                          </Badge>
+                        )}
+                      </div>
+                      <div className="text-sm text-muted-foreground pl-6">
+                        {page.impressions} impressions, {page.clicks} clicks ({page.ctr} CTR)
+                      </div>
+                      {primaryKeyword && (
+                        <div className="pl-6 text-xs text-muted-foreground">
+                          Keyword: {primaryKeyword}
+                        </div>
+                      )}
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="mb-6">
         <CardHeader>
@@ -481,20 +929,27 @@ export default function LowCtrPage() {
           </CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {aiMeta.map((meta, idx) => {
-            const cleanUrl = meta.pageUrl
-              .replace(/^https?:\/\//, "")
-              .replace(/\/$/, "");
-            return (
-              <SeoRecommendationPanel
-                key={idx}
-                title={`Fix: ${cleanUrl}`}
-                pageUrl={meta.pageUrl}
-                suggestedTitle={meta.title}
-                suggestedDescription={meta.description}
-              />
-            );
-          })}
+          {suggestionsToRender.length === 0 ? (
+            <p className="text-sm text-muted-foreground">
+              No AI suggestions available yet.
+            </p>
+          ) : (
+            suggestionsToRender.map((meta, idx) => {
+              const cleanUrl = meta.pageUrl
+                .replace(/^https?:\/\//, "")
+                .replace(/\/$/, "");
+              const titlePrefix = meta.focusKeyword ? "Focus" : "Fix";
+              return (
+                <SeoRecommendationPanel
+                  key={idx}
+                  title={`${titlePrefix}: ${cleanUrl}`}
+                  pageUrl={meta.pageUrl}
+                  suggestedTitle={meta.title}
+                  suggestedDescription={meta.description}
+                />
+              );
+            })
+          )}
         </CardContent>
       </Card>
 
@@ -519,7 +974,7 @@ export default function LowCtrPage() {
 
 
       <div className="mb-6">
-        <SeoImpactLeaderboard totalRecommendations={aiMeta.length} />
+        <SeoImpactLeaderboard totalRecommendations={suggestionsToRender.length} />
       </div>
 
 

@@ -1,5 +1,5 @@
 import { db } from "./firebaseConfig";
-import { doc, getDoc, setDoc, updateDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 
 // GSC Token Management
 export class GSCTokenManager {
@@ -99,9 +99,13 @@ export class GSCTokenManager {
   // Update last sync timestamp
   async updateLastSync() {
     try {
-      await updateDoc(this.userDoc, {
-        gscLastSync: new Date().toISOString(),
-      });
+      await setDoc(
+        this.userDoc,
+        {
+          gscLastSync: new Date().toISOString(),
+        },
+        { merge: true }
+      );
     } catch (error) {
       console.error("❌ Failed to update last sync:", error);
     }
@@ -110,27 +114,18 @@ export class GSCTokenManager {
   // Clear GSC data
   async clearGSCData() {
     try {
-      // Check if document exists first
-      const docSnap = await getDoc(this.userDoc);
-      if (docSnap.exists()) {
-        await updateDoc(this.userDoc, {
+      await setDoc(
+        this.userDoc,
+        {
           gscRefreshToken: null,
           gscAccessToken: null,
           gscSiteUrl: null,
           gscConnectedAt: null,
           gscLastSync: null,
-        });
-        console.log("✅ GSC data cleared from Firestore");
-      } else {
-        console.log("ℹ️ No document to clear - creating empty document");
-        await setDoc(this.userDoc, {
-          gscRefreshToken: null,
-          gscAccessToken: null,
-          gscSiteUrl: null,
-          gscConnectedAt: null,
-          gscLastSync: null,
-        });
-      }
+        },
+        { merge: true }
+      );
+      console.log("✅ GSC data cleared from Firestore");
     } catch (error) {
       console.error("❌ Failed to clear GSC data:", error);
     }
@@ -182,10 +177,14 @@ export class GSCTokenManager {
       const newAccessToken = data.access_token;
 
       // Update stored access token
-      await updateDoc(this.userDoc, {
-        gscAccessToken: newAccessToken,
-        gscConnectedAt: new Date().toISOString(),
-      });
+      await setDoc(
+        this.userDoc,
+        {
+          gscAccessToken: newAccessToken,
+          gscConnectedAt: new Date().toISOString(),
+        },
+        { merge: true }
+      );
 
       console.log("✅ GSC access token refreshed");
       return newAccessToken;

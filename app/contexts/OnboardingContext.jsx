@@ -14,6 +14,8 @@ const initialData = {
   gscProperty: "",
   googleEmail: "",
   isComplete: false,
+  siteCrawlStatus: "idle",
+  lastSiteCrawlAt: null,
 };
 
 const OnboardingContext = createContext(undefined);
@@ -28,21 +30,29 @@ export const useOnboarding = () => {
 
 export const OnboardingProvider = ({ children }) => {
   const [data, setData] = useState(initialData);
+  const [isLoaded, setIsLoaded] = useState(false);
   const { user } = useAuth();
 
   useEffect(() => {
     const loadFromFirestore = async () => {
-      if (user) {
-        try {
-          const firestoreData = await getOnboardingData(user.id);
-          if (firestoreData) {
-            setData(firestoreData);
-          } else {
-            setData(initialData);
-          }
-        } catch (err) {
-          console.error("Failed to fetch onboarding data:", err);
+      if (!user) {
+        setData(initialData);
+        setIsLoaded(false);
+        return;
+      }
+
+      try {
+        setIsLoaded(false);
+        const firestoreData = await getOnboardingData(user.id);
+        if (firestoreData) {
+          setData(firestoreData);
+        } else {
+          setData(initialData);
         }
+      } catch (err) {
+        console.error("Failed to fetch onboarding data:", err);
+      } finally {
+        setIsLoaded(true);
       }
     };
 
@@ -63,13 +73,14 @@ export const OnboardingProvider = ({ children }) => {
 
   const resetData = () => {
     setData(initialData);
+    setIsLoaded(true);
     if (user) {
       saveOnboardingData(user.id, initialData);
     }
   };
 
   return (
-    <OnboardingContext.Provider value={{ data, updateData, resetData }}>
+    <OnboardingContext.Provider value={{ data, updateData, resetData, isLoaded }}>
       {children}
     </OnboardingContext.Provider>
   );

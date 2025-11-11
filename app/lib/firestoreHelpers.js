@@ -1,4 +1,4 @@
-import { doc, getDoc, setDoc } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
 import { db } from "./firebaseConfig";
 
 // Save onboarding data
@@ -107,6 +107,76 @@ export const getAiSuggestions = async (userId, pageUrl) => {
     return snapshot.exists() ? snapshot.data() : null;
   } catch (error) {
     console.error("Failed to fetch AI suggestions:", error);
+    throw error;
+  }
+};
+
+export const getCachedSitePages = async (userId, maxPages = 5) => {
+  console.warn(
+    "getCachedSitePages from firestoreHelpers should not be used on the server. Use admin SDK helper instead."
+  );
+  return [];
+};
+
+// Focus keyword helpers
+export const saveFocusKeywords = async (userId, keywords) => {
+  try {
+    const response = await fetch("/api/focus-keywords", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        userId,
+        keywords,
+      }),
+    });
+
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody?.error || "Failed to save focus keywords");
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Failed to save focus keywords:", error);
+    throw error;
+  }
+};
+
+export const getFocusKeywords = async (userId) => {
+  try {
+    const response = await fetch(
+      `/api/focus-keywords?userId=${encodeURIComponent(userId)}`
+    );
+    if (!response.ok) {
+      const errorBody = await response.json().catch(() => ({}));
+      throw new Error(errorBody?.error || "Failed to fetch focus keywords");
+    }
+    const data = await response.json();
+    if (!Array.isArray(data.keywords)) {
+      return [];
+    }
+    return data.keywords
+      .map((entry) => {
+        if (!entry) return null;
+        if (typeof entry === "string") {
+          const keyword = entry.trim();
+          if (!keyword) return null;
+          return { keyword, pageUrl: null };
+        }
+        const keyword =
+          typeof entry.keyword === "string" ? entry.keyword.trim() : null;
+        if (!keyword) return null;
+        const pageUrl =
+          typeof entry.pageUrl === "string" && entry.pageUrl.trim().length
+            ? entry.pageUrl.trim()
+            : null;
+        return { keyword, pageUrl };
+      })
+      .filter(Boolean);
+  } catch (error) {
+    console.error("Failed to fetch focus keywords:", error);
     throw error;
   }
 };

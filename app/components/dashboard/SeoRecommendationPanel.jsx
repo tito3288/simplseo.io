@@ -333,13 +333,13 @@ const SeoRecommendationPanel = ({
               <div className="space-y-4 mt-3 w-full">
                 {/* 7-Day Progress */}
                 <div>
-                  <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                  <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                     <span>Waiting for Results (7 Days)</span>
                     <span>{daysSinceImplementation}/7 days</span>
                   </div>
-                  <div className="w-full h-2 bg-gray-200 rounded">
+                  <div className="h-2 w-full rounded bg-muted/60">
                     <div
-                      className="h-2 bg-green-500 rounded transition-all duration-500"
+                      className="h-2 rounded bg-primary transition-all duration-500"
                       style={{
                         width: `${(daysSinceImplementation / 7) * 100}%`,
                       }}
@@ -356,13 +356,13 @@ const SeoRecommendationPanel = ({
                 {/* 30-Day Progress */}
                 {thirtyDayProgress !== null && (
                   <div>
-                    <div className="flex justify-between text-xs text-muted-foreground mb-1">
+                    <div className="mb-1 flex justify-between text-xs text-muted-foreground">
                       <span>Check Back for New Ideas (30 Days)</span>
                       <span>{thirtyDayProgress}/30 days</span>
                     </div>
-                    <div className="w-full h-2 bg-gray-200 rounded">
+                    <div className="h-2 w-full rounded bg-muted/60">
                       <div
-                        className="h-2 bg-blue-500 rounded transition-all duration-500"
+                        className="h-2 rounded bg-primary/70 transition-all duration-500"
                         style={{
                           width: `${(thirtyDayProgress / 30) * 100}%`,
                         }}
@@ -377,7 +377,7 @@ const SeoRecommendationPanel = ({
                 )}
 
                 {/* ✅ NEW: Continuous Progress Info */}
-                <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded text-xs text-blue-700">
+                <div className="mt-3 rounded border border-primary/20 bg-primary/10 p-2 text-xs text-primary">
                   <span className="font-medium">💡 Tip:</span> After 7 days, your progress will appear in the SEO Progress section below. 
                   The system continues monitoring your performance daily, so check back regularly for ongoing updates!
                 </div>
@@ -414,10 +414,10 @@ const SeoRecommendationPanel = ({
       </Collapsible>
 
       {showConfirmModal && (
-        <div className="fixed inset-0 flex items-center justify-center bg-black bg-opacity-50 z-50">
-          <div className="bg-white p-6 rounded shadow-md max-w-sm">
-            <h2 className="text-lg font-semibold mb-4">Confirm Update</h2>
-            <p className="text-sm mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-background p-6 shadow-lg transition-colors">
+            <h2 className="mb-2 text-lg font-semibold text-foreground">Confirm Update</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
               Are you sure you&apos;ve updated this SEO recommendation on your live
               site? This will impact your performance tracking.
             </p>

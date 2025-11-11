@@ -17,6 +17,7 @@ import {
   AlertTriangle,
   Moon,
   Sun,
+  TrendingUp,
 } from "lucide-react";
 import ChatAssistant from "../components/ChatAssistant";
 import {
@@ -37,7 +38,7 @@ const MainLayout = ({
   impressionTrends = [],
 }) => {
   const { logout, user, isLoading } = useAuth();
-  const { data } = useOnboarding();
+  const { data, isLoaded: isOnboardingLoaded } = useOnboarding();
   const { isDarkMode, toggleTheme } = useTheme();
   const pathname = usePathname();
   const router = useRouter();
@@ -52,6 +53,18 @@ const MainLayout = ({
       router.push("/auth");
     }
   }, [user, isLoading, router]);
+
+  useEffect(() => {
+    if (
+      !isLoading &&
+      user &&
+      isOnboardingLoaded &&
+      !data?.isComplete &&
+      pathname !== "/onboarding"
+    ) {
+      router.push("/onboarding");
+    }
+  }, [isLoading, user, isOnboardingLoaded, data?.isComplete, pathname, router]);
 
   // Don't render anything while loading to prevent hook ordering issues
   if (isLoading) {
@@ -83,9 +96,9 @@ const MainLayout = ({
       icon: <LayoutDashboard className="w-5 h-5" />,
     },
     {
-      path: "/intent-mismatch",
-      label: "Intent Mismatch",
-      icon: <AlertTriangle className="w-5 h-5" />,
+      path: "/generic-keywords",
+      label: "Extra Opportunities",
+      icon: <TrendingUp className="w-5 h-5" />,
     },
     // {
     //   path: "/website",

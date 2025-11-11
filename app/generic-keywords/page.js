@@ -1,7 +1,7 @@
 "use client";
 
 import { useAuth } from "../contexts/AuthContext";
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import MainLayout from "../components/MainLayout";
 import { createGSCTokenManager } from "../lib/gscTokenManager";
 import {
@@ -13,10 +13,16 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown } from "lucide-react";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
+import { cn } from "@/lib/utils";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 
 export default function GenericKeywordsPage() {
   const { user, isLoading } = useAuth();
@@ -25,10 +31,12 @@ export default function GenericKeywordsPage() {
   const [cannibalizationAnalysis, setCannibalizationAnalysis] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [filter, setFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [priorityFilter, setPriorityFilter] = useState("all");
   const [fromCache, setFromCache] = useState(false);
   const [cacheAge, setCacheAge] = useState(null);
   const shouldShowLoader = useMinimumLoading(loading, 2000);
+  const [openCategories, setOpenCategories] = useState({});
 
   // Helper function to get display name for page types
   const getPageTypeDisplayName = (pageType) => {
@@ -201,21 +209,231 @@ export default function GenericKeywordsPage() {
     return "bg-gray-100 text-gray-800";
   };
 
-  const filteredOpportunities = filter === 'all' 
-    ? opportunities 
-    : opportunities.filter(opp => opp.category === filter);
+  const searchVolumeRank = {
+    "Very High": 5,
+    "High": 4,
+    "Medium-High": 3,
+    "Medium": 2,
+    "Medium-Low": 1,
+    "Low": 0,
+  };
 
-  // No need to group by page for AI-generated content
+  const difficultyRank = {
+    Easy: 2,
+    Medium: 1,
+    Hard: 0,
+  };
+
+  const categoryLabels = {
+    location_based: "Location-Based Opportunities",
+    service_based: "Service-Based Opportunities",
+    comparison: "Comparison Opportunities",
+    problem_solving: "Problem-Solving Opportunities",
+    trending_search: "Trending & Seasonal Ideas",
+    long_tail: "Long-Tail Opportunities",
+  };
+
+  const sortedOpportunities = useMemo(() => {
+    const ranked = [...opportunities];
+    ranked.sort((a, b) => {
+      const priorityDiff = (b.priority || 0) - (a.priority || 0);
+      if (priorityDiff !== 0) return priorityDiff;
+
+      const volumeDiff =
+        (searchVolumeRank[b.searchVolume] || -1) -
+        (searchVolumeRank[a.searchVolume] || -1);
+      if (volumeDiff !== 0) return volumeDiff;
+
+      return (difficultyRank[a.difficulty] || 0) - (difficultyRank[b.difficulty] || 0);
+    });
+    return ranked;
+  }, [opportunities]);
+
+  const topOpportunities = useMemo(
+    () => sortedOpportunities.slice(0, 3),
+    [sortedOpportunities]
+  );
+
+  const filteredOpportunities = useMemo(() => {
+    return sortedOpportunities.filter((opp) => {
+      if (categoryFilter !== "all" && opp.category !== categoryFilter) {
+        return false;
+      }
+
+      if (priorityFilter === "high" && (opp.priority || 0) < 8) return false;
+      if (
+        priorityFilter === "medium" &&
+        ((opp.priority || 0) < 6 || (opp.priority || 0) > 7)
+      )
+        return false;
+      if (priorityFilter === "lower" && (opp.priority || 0) >= 6) return false;
+
+      return true;
+    });
+  }, [sortedOpportunities, categoryFilter, priorityFilter]);
+
+  const groupedOpportunities = useMemo(() => {
+    return filteredOpportunities.reduce((acc, opportunity) => {
+      const category = opportunity.category || "other";
+      if (!acc[category]) {
+        acc[category] = [];
+      }
+      acc[category].push(opportunity);
+      return acc;
+    }, {});
+  }, [filteredOpportunities]);
+
+  const categoryOrder = [
+    "location_based",
+    "service_based",
+    "problem_solving",
+    "comparison",
+    "trending_search",
+    "long_tail",
+    "other",
+  ];
+
+  useEffect(() => {
+    setOpenCategories((prev) => {
+      const next = { ...prev };
+      Object.keys(groupedOpportunities).forEach((category) => {
+        if (typeof next[category] === "undefined") {
+          next[category] = categoryFilter === "all";
+        }
+      });
+      return next;
+    });
+  }, [groupedOpportunities, categoryFilter]);
 
   const filterOptions = [
-    { value: 'all', label: 'All Opportunities', count: opportunities.length },
-    { value: 'location_based', label: 'Location-Based', count: opportunities.filter(o => o.category === 'location_based').length },
-    { value: 'service_based', label: 'Service-Based', count: opportunities.filter(o => o.category === 'service_based').length },
-    { value: 'comparison', label: 'Comparison', count: opportunities.filter(o => o.category === 'comparison').length },
-    { value: 'problem_solving', label: 'Problem-Solving', count: opportunities.filter(o => o.category === 'problem_solving').length },
-    { value: 'trending_search', label: 'Trending Search', count: opportunities.filter(o => o.category === 'trending_search').length },
-    { value: 'long_tail', label: 'Long-Tail', count: opportunities.filter(o => o.category === 'long_tail').length }
+    { value: "all", label: "All Opportunities", count: sortedOpportunities.length },
+    {
+      value: "location_based",
+      label: "Location-Based",
+      count: sortedOpportunities.filter((o) => o.category === "location_based").length,
+    },
+    {
+      value: "service_based",
+      label: "Service-Based",
+      count: sortedOpportunities.filter((o) => o.category === "service_based").length,
+    },
+    {
+      value: "comparison",
+      label: "Comparison",
+      count: sortedOpportunities.filter((o) => o.category === "comparison").length,
+    },
+    {
+      value: "problem_solving",
+      label: "Problem-Solving",
+      count: sortedOpportunities.filter((o) => o.category === "problem_solving").length,
+    },
+    {
+      value: "trending_search",
+      label: "Trending Search",
+      count: sortedOpportunities.filter((o) => o.category === "trending_search").length,
+    },
+    {
+      value: "long_tail",
+      label: "Long-Tail",
+      count: sortedOpportunities.filter((o) => o.category === "long_tail").length,
+    },
   ];
+
+  const priorityFilters = [
+    { value: "all", label: "All Priorities" },
+    { value: "high", label: "High (8-10)" },
+    { value: "medium", label: "Medium (6-7)" },
+    { value: "lower", label: "Lower (≤5)" },
+  ];
+
+  const renderOpportunityCard = (opportunity, key, { isFeatured = false } = {}) => (
+    <Card
+      key={key}
+      className={cn(
+        "hover:shadow-md transition-shadow border-l-4 border-l-blue-200 dark:border-l-blue-800",
+        isFeatured && "border-l-primary/60 bg-primary/5 dark:bg-primary/10"
+      )}
+    >
+      <CardContent className="pt-6">
+        <div className="flex flex-col gap-4">
+          <div className="flex items-start justify-between">
+            <div className="flex items-start gap-3">
+              {getOpportunityIcon(opportunity.category)}
+              <div>
+                <h3 className="font-semibold text-lg leading-tight">
+                  {opportunity.keyword}
+                </h3>
+                <p className="text-xs text-muted-foreground mt-1">
+                  {categoryLabels[opportunity.category] || "Growth Opportunity"}
+                </p>
+              </div>
+            </div>
+            <div className="flex flex-wrap gap-2 justify-end">
+              <Badge className={getPriorityColor(opportunity.priority)}>
+                Priority {opportunity.priority}
+              </Badge>
+              <Badge className={getDifficultyColor(opportunity.difficulty)}>
+                {opportunity.difficulty}
+              </Badge>
+              <Badge className={getVolumeColor(opportunity.searchVolume)}>
+                {opportunity.searchVolume} Volume
+              </Badge>
+            </div>
+          </div>
+
+          {opportunity.contentIdea && (
+            <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Target className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                    Content Strategy
+                  </p>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    {opportunity.contentIdea}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {opportunity.actionItems?.length > 0 && (
+            <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg">
+              <div className="flex items-start gap-2">
+                <Wrench className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                <div>
+                  <p className="text-sm font-medium text-orange-800 dark:text-orange-200 mb-2">
+                    Recommended Actions
+                  </p>
+                  <ul className="text-sm text-orange-700 dark:text-orange-300 space-y-1">
+                    {opportunity.actionItems.map((action, idx) => (
+                      <li key={idx} className="flex items-start gap-2">
+                        <span className="text-orange-600 mt-0.5">•</span>
+                        <span>{action}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
+            <span className="font-medium text-foreground">
+              {opportunity.potential} potential
+            </span>
+            <span>•</span>
+            <span>Difficulty: {opportunity.difficulty}</span>
+            <span>•</span>
+            <span>
+              Suggested for:{" "}
+              {categoryLabels[opportunity.category] || "Additional"}
+            </span>
+          </div>
+        </div>
+      </CardContent>
+    </Card>
+  );
 
   if (isLoading || !user) return null;
 
@@ -309,10 +527,10 @@ export default function GenericKeywordsPage() {
                 <Target className="w-6 h-6 text-muted-foreground" />
               </div>
               <p className="text-sm text-muted-foreground">{error}</p>
-              <Button 
-                onClick={fetchGenericOpportunities} 
-                variant="outline" 
-                size="sm" 
+              <Button
+                onClick={fetchGenericOpportunitiesFromDashboard}
+                variant="outline"
+                size="sm"
                 className="mt-2"
               >
                 Try Again
@@ -322,6 +540,24 @@ export default function GenericKeywordsPage() {
         </Card>
       ) : (
         <>
+          {topOpportunities.length > 0 && (
+            <Card className="mb-6 border-primary/20 shadow-sm">
+              <CardHeader className="pb-4">
+                <CardTitle className="text-xl">Start with these 3</CardTitle>
+                <CardDescription>
+                  Highest-priority ideas right now. Tackle these first for the fastest impact.
+                </CardDescription>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {topOpportunities.map((opportunity, index) =>
+                  renderOpportunityCard(opportunity, `${opportunity.keyword}-featured-${index}`, {
+                    isFeatured: true,
+                  })
+                )}
+              </CardContent>
+            </Card>
+          )}
+
           {/* Filter Options */}
           <Card className="mb-6">
             <CardContent className="pt-6">
@@ -329,9 +565,9 @@ export default function GenericKeywordsPage() {
                 {filterOptions.map((option) => (
                   <Button
                     key={option.value}
-                    variant={filter === option.value ? "default" : "outline"}
+                    variant={categoryFilter === option.value ? "default" : "outline"}
                     size="sm"
-                    onClick={() => setFilter(option.value)}
+                    onClick={() => setCategoryFilter(option.value)}
                     className="flex items-center gap-2"
                   >
                     <Filter className="w-4 h-4" />
@@ -339,6 +575,19 @@ export default function GenericKeywordsPage() {
                     <Badge variant="secondary" className="ml-1">
                       {option.count}
                     </Badge>
+                  </Button>
+                ))}
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {priorityFilters.map((option) => (
+                  <Button
+                    key={option.value}
+                    variant={priorityFilter === option.value ? "default" : "outline"}
+                    size="sm"
+                    onClick={() => setPriorityFilter(option.value)}
+                  >
+                    {option.label}
                   </Button>
                 ))}
               </div>
@@ -363,87 +612,56 @@ export default function GenericKeywordsPage() {
                   <div className="text-center py-8">
                     <Target className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                     <p className="text-sm text-muted-foreground">
-                      No opportunities found for this filter
+                      No opportunities match your current filters. Try selecting a different category or widen the priority/difficulty filters.
                     </p>
                   </div>
                 </CardContent>
               </Card>
             ) : (
-              <div className="space-y-4">
-                {filteredOpportunities.map((opportunity, index) => (
-                <Card key={`${opportunity.keyword}-${index}`} className="hover:shadow-md transition-shadow border-l-4 border-l-blue-200 dark:border-l-blue-800">
-                  <CardContent className="pt-6">
-                    <div className="flex items-start justify-between mb-4">
-                      <div className="flex items-center gap-3">
-                        {getOpportunityIcon(opportunity.category)}
-                        <div>
-                          <h3 className="font-semibold text-lg">{opportunity.keyword}</h3>
+              <div className="space-y-5">
+                {categoryOrder
+                  .filter((category) => groupedOpportunities[category]?.length)
+                  .map((category) => {
+                    const items = groupedOpportunities[category];
+                    return (
+                      <Collapsible
+                        key={category}
+                        open={openCategories[category]}
+                        onOpenChange={(open) =>
+                          setOpenCategories((prev) => ({
+                            ...prev,
+                            [category]: open,
+                          }))
+                        }
+                      >
+                        <div className="rounded-lg border bg-muted/40 dark:bg-muted/20">
+                          <CollapsibleTrigger asChild>
+                            <button className="flex w-full items-center justify-between px-4 py-3 text-left font-semibold">
+                              <span>
+                                {categoryLabels[category] || "Additional Opportunities"}
+                              </span>
+                              <div className="flex items-center gap-3 text-sm">
+                                <Badge variant="secondary">{items.length}</Badge>
+                                <ChevronDown
+                                  className={`h-4 w-4 transition-transform ${
+                                    openCategories[category] ? "rotate-180" : ""
+                                  }`}
+                                />
+                              </div>
+                            </button>
+                          </CollapsibleTrigger>
+                          <CollapsibleContent className="px-4 pb-4 pt-2 space-y-4">
+                            {items.map((opportunity, index) =>
+                              renderOpportunityCard(
+                                opportunity,
+                                `${opportunity.keyword}-${category}-${index}`
+                              )
+                            )}
+                          </CollapsibleContent>
                         </div>
-                      </div>
-                      <div className="flex gap-2">
-                        <Badge className={getPriorityColor(opportunity.priority)}>
-                          Priority {opportunity.priority}
-                        </Badge>
-                        <Badge className={getDifficultyColor(opportunity.difficulty)}>
-                          {opportunity.difficulty}
-                        </Badge>
-                      </div>
-                    </div>
-
-                    {opportunity.contentIdea && (
-                      <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg mb-4">
-                        <div className="flex items-start gap-2">
-                          <Target className="w-4 h-4 text-blue-600 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
-                              Content Strategy
-                            </p>
-                            <p className="text-sm text-blue-700 dark:text-blue-300">
-                              {opportunity.contentIdea}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    )}
-
-
-
-                    {/* Action Items */}
-                    {opportunity.actionItems && opportunity.actionItems.length > 0 ? (
-                      <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg mb-4">
-                        <div className="flex items-start gap-2">
-                          <Wrench className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
-                          <div>
-                            <p className="text-sm font-medium text-orange-800 dark:text-orange-200 mb-2">
-                              Recommended Actions
-                            </p>
-                            <ul className="text-sm text-orange-700 dark:text-orange-300 space-y-1">
-                              {console.log("🔍 Rendering actions for", opportunity.keyword, ":", opportunity.actionItems)}
-                              {opportunity.actionItems.map((action, idx) => (
-                                <li key={idx} className="flex items-start gap-2">
-                                  <span className="text-orange-600 mt-0.5">•</span>
-                                  <span>{action}</span>
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      </div>
-                    ) : null}
-
-                    <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-                      <Badge className={getVolumeColor(opportunity.searchVolume)}>
-                        {opportunity.searchVolume} Volume
-                      </Badge>
-                      <span>Type: {opportunity.category}</span>
-                      <span>•</span>
-                      <span>Difficulty: {opportunity.difficulty}</span>
-                      <span>•</span>
-                      <span>Potential: {opportunity.potential}</span>
-                    </div>
-                  </CardContent>
-                </Card>
-                ))}
+                      </Collapsible>
+                    );
+                  })}
               </div>
             )}
           </div>

@@ -187,11 +187,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
           
           {/* Show countdown for implemented tips */}
           {implementedCount > 0 && (
-            <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded-lg">
-              <h4 className="text-sm font-medium text-blue-900 mb-2">
+            <div className="mt-4 rounded-lg border border-primary/20 bg-primary/10 p-3">
+              <h4 className="mb-2 text-sm font-medium text-primary">
                 📊 Implementation Status
               </h4>
-              <p className="text-xs text-blue-700">
+              <p className="text-xs text-muted-foreground">
                 You have {implementedCount} implemented SEO tip{implementedCount !== 1 ? 's' : ''}. 
                 The Cloud Function will process these after 7 days and display the results here.
               </p>
@@ -236,9 +236,9 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                   ).toFixed(0) + "%"}
             </span>
           </div>
-          <div className="w-full bg-gray-200 rounded h-2 overflow-hidden">
+          <div className="h-2 w-full overflow-hidden rounded bg-muted/60">
             <div
-              className="h-full bg-green-500"
+              className="h-full rounded bg-primary transition-all duration-500"
               style={{
                 width: `${Math.min(
                   (implementedCount / totalRecommendations) * 100,
@@ -406,11 +406,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                     </div>
 
                     {/* Summary of Changes */}
-                    <div className="bg-blue-50 dark:bg-blue-950/20 rounded-lg p-3 border border-blue-200 dark:border-blue-800">
-                      <h5 className="text-xs font-medium text-blue-700 dark:text-blue-300 mb-2">
+                    <div className="rounded-lg border border-primary/20 bg-primary/10 p-3">
+                      <h5 className="mb-2 text-xs font-medium text-primary">
                         📈 Summary of Changes
                       </h5>
-                      <div className="text-xs text-blue-600 dark:text-blue-400">
+                      <div className="text-xs text-muted-foreground">
                         <p>
                           <strong>Impressions:</strong> {item.impressionsDelta > 0 ? '+' : ''}{item.impressionsDelta} 
                           ({item.impressionsDelta > 0 ? 'improved' : 'decreased'})
@@ -429,14 +429,14 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         </div>
 
         {/* ✅ NEW: Continuous Update Message */}
-        <div className="mt-6 p-3 bg-green-50 border border-green-200 rounded-lg">
+        <div className="mt-6 rounded-lg border border-primary/20 bg-primary/10 p-3">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-green-600">🔄</span>
-            <h4 className="text-sm font-medium text-green-900">
+            <span className="text-primary">🔄</span>
+            <h4 className="text-sm font-medium text-primary">
               Continuous Progress Tracking
             </h4>
           </div>
-          <p className="text-xs text-green-700">
+          <p className="text-xs text-muted-foreground">
           Your SEO tracking doesn't stop after the first week! We monitor your performance daily and provide fresh insights every 7 days, so you can stay on top of your progress. Check back regularly to see the latest progress!
           </p>
         </div>

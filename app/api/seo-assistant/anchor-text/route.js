@@ -1,10 +1,12 @@
 import OpenAI from "openai";
+import { logTrainingEvent } from "../../../lib/trainingLogger";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
 export async function POST(req) {
   try {
-    const { fromUrl, toUrl, targetSlug } = await req.json();
+    const { fromUrl, toUrl, targetSlug, userId, onboarding = {} } =
+      await req.json();
 
     console.log("📥 Received targetSlug:", targetSlug);
 
@@ -30,6 +32,21 @@ Rules:
     });
 
     const anchorText = response.choices[0].message.content.trim();
+
+    await logTrainingEvent({
+      userId,
+      eventType: "anchor_text_generated",
+      businessType: onboarding.businessType,
+      businessLocation: onboarding.businessLocation,
+      payload: {
+        fromUrl,
+        toUrl,
+        targetSlug,
+        anchorText,
+        createdAt: new Date().toISOString(),
+      },
+    });
+
     return Response.json({ anchorText });
   } catch (err) {
     console.error("❌ Anchor Text API Error:", err.message);

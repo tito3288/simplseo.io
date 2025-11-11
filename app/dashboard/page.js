@@ -1,7 +1,7 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
-import { doc, getDoc, updateDoc } from "firebase/firestore";
+import { useEffect, useMemo, useState, useRef } from "react";
+import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
 import { createGSCTokenManager } from "../lib/gscTokenManager";
@@ -40,12 +40,20 @@ import {
   FileText,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Loader2, CheckCircle, XCircle } from "lucide-react";
 import DateRangeFilter from "../components/dashboard/DateRangeFilter";
 import KeywordTable from "../components/dashboard/KeywordTable";
 import ContentExpansionCard from "../components/dashboard/ContentExpansionCard";
 import LongTailKeywordCard from "../components/dashboard/LongTailKeywordCard";
 import GenericKeywordCard from "../components/dashboard/GenericKeywordCard";
 import { toast } from "sonner";
+import {
+  saveFocusKeywords,
+  getFocusKeywords,
+} from "../lib/firestoreHelpers";
+import FocusKeywordSelector from "../components/dashboard/FocusKeywordSelector";
+import { Badge } from "@/components/ui/badge";
+import { cn } from "@/lib/utils";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -75,6 +83,57 @@ export default function Dashboard() {
   // Use AI-powered filtering for non-branded keywords
   const [nonBrandedKeywords, setNonBrandedKeywords] = useState([]);
   const [isFilteringKeywords, setIsFilteringKeywords] = useState(false);
+  const [focusKeywords, setFocusKeywords] = useState([]);
+  const [focusKeywordByPage, setFocusKeywordByPage] = useState(new Map());
+  const [initialFocusKeywordsLoaded, setInitialFocusKeywordsLoaded] = useState(
+    false
+  );
+  const [isSavingFocusKeywords, setIsSavingFocusKeywords] = useState(false);
+  const [hasAutoSelectedFocusKeywords, setHasAutoSelectedFocusKeywords] =
+    useState(false);
+  const [showDashboardPreview, setShowDashboardPreview] = useState(false);
+
+  const normalizePageKey = (page) => page || "__unknown__";
+  const assignmentsToEntries = (assignments) =>
+    Array.from(assignments.entries())
+      .map(([pageKey, keyword]) => {
+        if (typeof keyword !== "string") return null;
+        const trimmed = keyword.trim();
+        if (!trimmed) return null;
+        return {
+          keyword: trimmed,
+          pageUrl: pageKey === "__unknown__" ? null : pageKey,
+        };
+      })
+      .filter(Boolean);
+
+  const focusKeywordSet = useMemo(
+    () =>
+      new Set(
+        (focusKeywords || []).map((keyword) => keyword.trim().toLowerCase())
+      ),
+    [focusKeywords]
+  );
+
+  const focusKeywordAssignmentsByKeyword = useMemo(() => {
+    const map = new Map();
+    focusKeywordByPage.forEach((keyword, pageKey) => {
+      if (!keyword) return;
+      const normalizedKeyword = keyword.trim().toLowerCase();
+      if (!normalizedKeyword) return;
+      map.set(normalizedKeyword, pageKey === "__unknown__" ? null : pageKey);
+    });
+    return map;
+  }, [focusKeywordByPage]);
+  const hasFocusKeywords = focusKeywords.length > 0;
+  const shouldGateDashboard =
+    isGscConnected && !hasFocusKeywords && !showDashboardPreview;
+  useEffect(() => {
+    if (hasFocusKeywords) {
+      setShowDashboardPreview(true);
+    }
+  }, [hasFocusKeywords]);
+  const crawlTriggeredRef = useRef(false);
   
   // Use minimum loading time for professional UX
   const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
@@ -90,6 +149,7 @@ export default function Dashboard() {
           pageUrl,
           onboarding: data,
           context: { lowCtrPages, aiTips }, // same context as titles
+          userId: user?.id,
         }),
       });
 
@@ -119,6 +179,7 @@ export default function Dashboard() {
           pageUrl,
           onboarding: data,
           context: { lowCtrPages, aiTips }, // feel free to expand this later
+          userId: user?.id,
         }),
       });
 
@@ -157,6 +218,55 @@ export default function Dashboard() {
       fetchTitlesAndDescriptions();
     }
   }, [aiTips]);
+
+  useEffect(() => {
+    const loadFocusKeywords = async () => {
+      if (!user?.id) {
+        setFocusKeywords([]);
+        setInitialFocusKeywordsLoaded(false);
+        setFocusKeywordByPage(new Map());
+        setHasAutoSelectedFocusKeywords(false);
+        return;
+      }
+      try {
+        const stored = await getFocusKeywords(user.id);
+        if (Array.isArray(stored) && stored.length > 0) {
+          const keywordList = [];
+          const assignments = new Map();
+          stored.forEach(({ keyword, pageUrl }) => {
+            if (!keyword) return;
+            keywordList.push(keyword);
+            const pageKey = normalizePageKey(pageUrl);
+            assignments.set(pageKey, keyword);
+          });
+          setFocusKeywords(keywordList);
+          setFocusKeywordByPage(assignments);
+          setHasAutoSelectedFocusKeywords(true);
+        } else {
+          setFocusKeywords([]);
+          setFocusKeywordByPage(new Map());
+        }
+      } catch (error) {
+        console.error("Failed to load focus keywords:", error);
+      } finally {
+        setInitialFocusKeywordsLoaded(true);
+      }
+    };
+    loadFocusKeywords();
+  }, [user?.id]);
+
+  useEffect(() => {
+    if (!gscKeywords.length) {
+      if (focusKeywords.length === 0 && focusKeywordByPage.size) {
+        setFocusKeywordByPage(new Map());
+      }
+      return;
+    }
+
+    setFocusKeywordByPage((prev) =>
+      buildAssignmentsFromKeywords(focusKeywords, prev, gscKeywords)
+    );
+  }, [gscKeywords, focusKeywords]);
 
   useEffect(() => {
     if (isLoading || !user?.id) return;
@@ -211,6 +321,49 @@ export default function Dashboard() {
     checkGSCConnection();
   }, [isLoading, user?.id, data?.gscProperty, data?.hasGSC]);
 
+  useEffect(() => {
+    if (!user?.id || !data?.websiteUrl) return;
+    if (!data?.hasGSC) return;
+
+    const status = data?.siteCrawlStatus;
+    if (status === "in-progress" || status === "completed" || status === "completed-with-errors") {
+      return;
+    }
+
+    if (crawlTriggeredRef.current) {
+      return;
+    }
+
+    crawlTriggeredRef.current = true;
+
+    const startCrawl = async () => {
+      try {
+        console.log("🌐 Starting site crawl for:", data.websiteUrl);
+        const res = await fetch("/api/crawl-site", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            websiteUrl: data.websiteUrl,
+          }),
+        });
+
+        const result = await res.json();
+        if (!res.ok) {
+          console.error("❌ Site crawl failed:", result?.error || result);
+          crawlTriggeredRef.current = false;
+        } else {
+          console.log("✅ Site crawl started:", result);
+        }
+      } catch (error) {
+        crawlTriggeredRef.current = false;
+        console.error("❌ Failed to start site crawl:", error);
+      }
+    };
+
+    startCrawl();
+  }, [user?.id, data?.websiteUrl, data?.hasGSC, data?.siteCrawlStatus]);
+
   // Commented out to prevent duplicate calls
   // useEffect(() => {
   //   if (gscAccessToken) {
@@ -253,43 +406,55 @@ export default function Dashboard() {
         }
 
         const result = await response.json();
-        console.log('✅ AI filtering result:', result);
-        console.log('🔍 Branded keywords from AI:', result.branded?.map(kw => kw.keyword) || []);
-        console.log('🔍 Generic keywords from AI:', result.generic?.map(kw => kw.keyword) || []);
-        
+        console.log("✅ AI filtering result:", result);
+        console.log(
+          "🔍 Branded keywords from AI:",
+          result.branded?.map((kw) => kw.keyword) || []
+        );
+        console.log(
+          "🔍 Generic keywords from AI:",
+          result.generic?.map((kw) => kw.keyword) || []
+        );
+
         // Set only the generic (non-branded) keywords - limit to 4 for dashboard
         setNonBrandedKeywords(result.generic.slice(0, 4));
-        
       } catch (error) {
-        console.error('❌ AI filtering failed, using enhanced fallback:', error);
+        console.error("❌ AI filtering failed, using enhanced fallback:", error);
         // Enhanced fallback filtering if AI fails
-        const businessName = data?.businessName?.toLowerCase() || '';
-        const businessWords = businessName.split(' ').filter(word => word.length > 2);
-        
-        const fallback = gscKeywords.filter(kw => {
-          const keyword = kw.keyword.toLowerCase();
-          
-          // Enhanced branded detection - same logic as API
-          const isBranded = 
-            // Exact business name matches
-            keyword.includes(businessName) || 
-            keyword.includes(businessName.replace(/\s+/g, '')) ||
-            keyword.includes(businessName.replace(/\s+/g, ' n ')) ||
-            keyword.includes(businessName.replace(/\s+/g, ' & ')) ||
-            keyword.includes(businessName.replace(/\s+/g, ' and ')) ||
-            // Check for individual business words (but be more strict)
-            (businessWords.length > 1 && businessWords.every(word => keyword.includes(word))) ||
-            // Check for common brand variations
-            keyword === businessName ||
-            keyword === businessName.replace(/\s+/g, '') ||
-            keyword === businessName.replace(/\s+/g, ' n ') ||
-            keyword === businessName.replace(/\s+/g, ' & ');
-          
-          // Return true if NOT branded (i.e., it's generic)
-          return !isBranded;
-        }).slice(0, 4);
-        
-        console.log(`🔄 Dashboard fallback filtering: ${fallback.length} generic keywords from ${gscKeywords.length} total`);
+        const businessName = data?.businessName?.toLowerCase() || "";
+        const businessWords = businessName
+          .split(" ")
+          .filter((word) => word.length > 2);
+
+        const fallback = gscKeywords
+          .filter((kw) => {
+            const keyword = kw.keyword.toLowerCase();
+
+            // Enhanced branded detection - same logic as API
+            const isBranded =
+              // Exact business name matches
+              keyword.includes(businessName) ||
+              keyword.includes(businessName.replace(/\s+/g, "")) ||
+              keyword.includes(businessName.replace(/\s+/g, " n ")) ||
+              keyword.includes(businessName.replace(/\s+/g, " & ")) ||
+              keyword.includes(businessName.replace(/\s+/g, " and ")) ||
+              // Check for individual business words (but be more strict)
+              (businessWords.length > 1 &&
+                businessWords.every((word) => keyword.includes(word))) ||
+              // Check for common brand variations
+              keyword === businessName ||
+              keyword === businessName.replace(/\s+/g, "") ||
+              keyword === businessName.replace(/\s+/g, " n ") ||
+              keyword === businessName.replace(/\s+/g, " & ");
+
+            // Return true if NOT branded (i.e., it's generic)
+            return !isBranded;
+          })
+          .slice(0, 4);
+
+        console.log(
+          `🔄 Dashboard fallback filtering: ${fallback.length} generic keywords from ${gscKeywords.length} total`
+        );
         setNonBrandedKeywords(fallback);
       } finally {
         setIsFilteringKeywords(false);
@@ -297,11 +462,7 @@ export default function Dashboard() {
     };
 
     filterKeywordsWithAI();
-  }, [gscKeywords, data?.businessName, data?.businessType]);
-
-  if (isLoading || !user) {
-    return null; // or show a loader/spinner if you want
-  }
+  }, [gscKeywords, data?.businessName, data?.businessType, user?.id, initialFocusKeywordsLoaded]);
 
   const fetchAndMatchGSC = async (token) => {
     if (!user?.id) return;
@@ -417,7 +578,11 @@ export default function Dashboard() {
                    setGscAccessToken(tokenData.access_token);
                    setIsGscConnected(true);
 
-                   await updateDoc(doc(db, "onboarding", user.id), { hasGSC: true });
+                  await setDoc(
+                    doc(db, "onboarding", user.id),
+                    { hasGSC: true },
+                    { merge: true }
+                  );
 
                    fetchAndMatchGSC(tokenData.access_token);
                  } else {
@@ -506,13 +671,19 @@ export default function Dashboard() {
         const grouped = Object.values(
           lowCtr.reduce((acc, item) => {
             if (!acc[item.page]) {
-              acc[item.page] = { ...item, clicks: 0, impressions: 0 };
+              acc[item.page] = { ...item, clicks: 0, impressions: 0, keywords: new Set() };
             }
             acc[item.page].clicks += item.clicks;
             acc[item.page].impressions += item.impressions;
+            if (item.keyword) {
+              acc[item.page].keywords.add(item.keyword);
+            }
             return acc;
           }, {})
-        );
+        ).map((entry) => ({
+          ...entry,
+          keywords: Array.from(entry.keywords || []),
+        }));
 
         setLowCtrPages(grouped);
 
@@ -522,6 +693,39 @@ export default function Dashboard() {
         });
 
         setAiTips(ai);
+
+        if (
+          initialFocusKeywordsLoaded &&
+          !hasAutoSelectedFocusKeywords &&
+          focusKeywords.length === 0 &&
+          user?.id
+        ) {
+          try {
+            const defaultAssignments = new Map();
+            const sortedCandidates = formatted
+              .filter((kw) => kw.clicks >= 1 && kw.impressions >= 20)
+              .sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
+
+            sortedCandidates.forEach((kw) => {
+              const keyword = kw.keyword;
+              if (!keyword) return;
+              const pageKey = normalizePageKey(kw.page);
+              if (defaultAssignments.has(pageKey)) return;
+              defaultAssignments.set(pageKey, keyword);
+            });
+
+            const defaultEntries = assignmentsToEntries(defaultAssignments);
+
+            if (defaultEntries.length > 0) {
+              await saveFocusKeywords(user.id, defaultEntries);
+              setFocusKeywordByPage(defaultAssignments);
+              setFocusKeywords(defaultEntries.map((entry) => entry.keyword));
+              setHasAutoSelectedFocusKeywords(true);
+            }
+          } catch (error) {
+            console.error("Failed to save initial focus keywords:", error);
+          }
+        }
       } else {
         setGscKeywords([]);
         setTopPages([]);
@@ -573,11 +777,347 @@ export default function Dashboard() {
     }
   };
 
-  const easyWins = gscKeywords.filter((kw) => {
-    const pos = kw.position;
-    const ctr = parseFloat(kw.ctr.replace("%", ""));
-    return pos > 10 && pos <= 20 && ctr < 3 && kw.impressions > 10;
-  });
+  const gscKeywordsWithFocus = useMemo(
+    () =>
+      gscKeywords.map((kw) => ({
+        ...kw,
+        isFocus: focusKeywordSet.has(kw.keyword.toLowerCase()),
+      })),
+    [gscKeywords, focusKeywordSet]
+  );
+
+  const groupedByPage = useMemo(() => {
+    const map = new Map();
+    gscKeywords.forEach((row) => {
+      const page = row.page || "__unknown__";
+      const keyword = row.keyword;
+      if (!keyword) return;
+      const lower = keyword.toLowerCase();
+      const entry = map.get(page);
+      if (entry) {
+        if (!entry.includes(lower)) {
+          entry.push(lower);
+        }
+      } else {
+        map.set(page, [lower]);
+      }
+    });
+    return map;
+  }, [gscKeywords]);
+
+  const buildAssignmentsFromKeywords = (
+    keywordsList = [],
+    currentAssignments = new Map(),
+    rows = []
+  ) => {
+    if (!keywordsList.length || !rows.length) {
+      return new Map();
+    }
+
+    const next = new Map();
+    const reservedPages = new Set();
+    const previousByKeyword = new Map();
+
+    currentAssignments?.forEach((keyword, pageKey) => {
+      if (!keyword) return;
+      previousByKeyword.set(keyword.toLowerCase(), pageKey);
+    });
+
+    const rowsByKeyword = new Map();
+    rows.forEach((row) => {
+      const key = row.keyword?.toLowerCase();
+      if (!key) return;
+      if (!rowsByKeyword.has(key)) {
+        rowsByKeyword.set(key, []);
+      }
+      rowsByKeyword.get(key).push(row);
+    });
+
+    rowsByKeyword.forEach((list) => {
+      list.sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
+    });
+
+    keywordsList.forEach((keyword) => {
+      const lower = keyword?.toLowerCase();
+      if (!lower) return;
+
+      const keywordRows = rowsByKeyword.get(lower) || [];
+      if (!keywordRows.length) return;
+
+      let chosenPageKey = previousByKeyword.get(lower);
+
+      if (chosenPageKey) {
+        const stillValid = keywordRows.some(
+          (row) => normalizePageKey(row.page) === chosenPageKey
+        );
+        if (!stillValid || reservedPages.has(chosenPageKey)) {
+          chosenPageKey = null;
+        }
+      }
+
+      if (!chosenPageKey) {
+        const candidate = keywordRows.find(
+          (row) => !reservedPages.has(normalizePageKey(row.page))
+        );
+        chosenPageKey = normalizePageKey((candidate || keywordRows[0]).page);
+      }
+
+      if (chosenPageKey && !reservedPages.has(chosenPageKey)) {
+        next.set(chosenPageKey, keyword);
+        reservedPages.add(chosenPageKey);
+      }
+    });
+
+    return next;
+  };
+
+  const easyWins = useMemo(() => {
+    const filtered = gscKeywordsWithFocus.filter((kw) => {
+      const pos = kw.position;
+      const ctr = parseFloat(kw.ctr.replace("%", ""));
+      return pos > 10 && pos <= 20 && ctr < 3 && kw.impressions > 10;
+    });
+
+    return filtered.sort((a, b) => {
+      const aFocus = a.isFocus ? 1 : 0;
+      const bFocus = b.isFocus ? 1 : 0;
+      if (aFocus !== bFocus) {
+        return bFocus - aFocus;
+      }
+      return a.position - b.position;
+    });
+  }, [gscKeywordsWithFocus]);
+
+  const orderedFocusKeywords = useMemo(
+    () => (focusKeywords || []).map((keyword) => keyword.trim()).filter(Boolean),
+    [focusKeywords]
+  );
+
+  const focusKeywordTopRows = useMemo(() => {
+    const map = new Map();
+    gscKeywords.forEach((row) => {
+      const key = row.keyword?.toLowerCase();
+      if (!key || !focusKeywordSet.has(key)) return;
+      const existing = map.get(key);
+      if (!existing || row.impressions > existing.impressions) {
+        map.set(key, row);
+      }
+    });
+    return map;
+  }, [gscKeywords, focusKeywordSet]);
+
+  const focusKeywordsNotShownInEasyWins = useMemo(() => {
+    const shown = new Set(
+      easyWins
+        .filter((kw) => kw.isFocus)
+        .map((kw) => kw.keyword?.toLowerCase())
+        .filter(Boolean)
+    );
+
+    return orderedFocusKeywords
+      .filter((keyword) => !shown.has(keyword.toLowerCase()))
+      .map((keyword) => {
+        const lower = keyword.toLowerCase();
+        const data = focusKeywordTopRows.get(lower) || null;
+        const mappedPage = focusKeywordAssignmentsByKeyword.get(lower) || null;
+        const page = mappedPage ?? data?.page ?? null;
+        return {
+          keyword,
+          data,
+          page,
+        };
+      });
+  }, [
+    orderedFocusKeywords,
+    easyWins,
+    focusKeywordTopRows,
+    focusKeywordAssignmentsByKeyword,
+  ]);
+
+  const prioritizedLowCtrPages = useMemo(() => {
+    return lowCtrPages
+      .map((page) => {
+        const focusMatches = page.keywords?.filter((keyword) =>
+          focusKeywordSet.has(keyword.toLowerCase())
+        );
+        const primaryKeyword = focusMatches?.[0] || page.keywords?.[0] || null;
+        return {
+          ...page,
+          focusKeywords: focusMatches || [],
+          primaryKeyword,
+        };
+      })
+      .sort((a, b) => {
+        const aFocus = a.focusKeywords.length;
+        const bFocus = b.focusKeywords.length;
+        if (aFocus !== bFocus) {
+          return bFocus - aFocus;
+        }
+        return b.impressions - a.impressions;
+      });
+  }, [lowCtrPages, focusKeywordSet]);
+ 
+  const focusKeywordsNotShownLowCtr = useMemo(() => {
+    const shown = new Set();
+    prioritizedLowCtrPages.forEach((page) => {
+      page.focusKeywords?.forEach((keyword) => {
+        shown.add(keyword.toLowerCase());
+      });
+    });
+
+    return orderedFocusKeywords
+      .filter((keyword) => !shown.has(keyword.toLowerCase()))
+      .map((keyword) => {
+        const lower = keyword.toLowerCase();
+        const data = focusKeywordTopRows.get(lower) || null;
+        const mappedPage = focusKeywordAssignmentsByKeyword.get(lower) || null;
+        const page = mappedPage ?? data?.page ?? null;
+        return {
+          keyword,
+          data,
+          page,
+        };
+      });
+  }, [
+    orderedFocusKeywords,
+    prioritizedLowCtrPages,
+    focusKeywordTopRows,
+    focusKeywordAssignmentsByKeyword,
+  ]);
+
+  if (isLoading || !user) {
+    return null; // or show a loader/spinner if you want
+  }
+
+  const handleFocusKeywordToggle = async ({
+    keyword,
+    page,
+    isSelectedForPage,
+  }) => {
+    if (!user?.id || !keyword) return;
+
+    const pageKey = normalizePageKey(page);
+    const lowerKeyword = keyword.toLowerCase();
+
+    const nextAssignments = new Map(focusKeywordByPage);
+
+    if (isSelectedForPage) {
+      nextAssignments.delete(pageKey);
+    } else {
+      nextAssignments.delete(pageKey);
+      for (const [existingPageKey, existingKeyword] of Array.from(
+        nextAssignments.entries()
+      )) {
+        if (existingKeyword?.toLowerCase() === lowerKeyword) {
+          nextAssignments.delete(existingPageKey);
+        }
+      }
+
+      if (pageKey === "__unknown__") {
+        const keywordRow = gscKeywords.find(
+          (row) => row.keyword?.toLowerCase() === lowerKeyword
+        );
+        const resolvedPageKey = normalizePageKey(keywordRow?.page);
+        nextAssignments.set(resolvedPageKey, keyword);
+      } else {
+        nextAssignments.set(pageKey, keyword);
+      }
+    }
+
+    const uniqueKeywords = Array.from(
+      new Set(
+        Array.from(nextAssignments.values())
+          .map((item) => item?.trim())
+          .filter(Boolean)
+      )
+    );
+
+    const entries = assignmentsToEntries(nextAssignments);
+
+    setFocusKeywordByPage(nextAssignments);
+    setFocusKeywords(uniqueKeywords);
+
+    setIsSavingFocusKeywords(true);
+    try {
+      await saveFocusKeywords(user.id, entries);
+      setHasAutoSelectedFocusKeywords(true);
+      toast.success("Focus keywords updated.");
+    } catch (error) {
+      console.error("Failed to save focus keywords:", error);
+      toast.error("We couldn’t save your focus keywords. Try again.");
+    } finally {
+      setIsSavingFocusKeywords(false);
+    }
+  };
+
+  const defaultFocusKeywords = async () => {
+    const sourceList = nonBrandedKeywords.length
+      ? nonBrandedKeywords
+      : gscKeywords;
+    if (!sourceList.length) {
+      toast.error("We need more Search Console data before we can suggest keywords.");
+      return;
+    }
+
+    const keywordToRow = new Map(
+      gscKeywords.map((row) => [row.keyword?.toLowerCase(), row])
+    );
+    const nextAssignments = new Map();
+    const usedKeywords = new Set();
+
+    sourceList
+      .slice()
+      .sort((a, b) => {
+        const aImpressions =
+          typeof a === "string"
+            ? keywordToRow.get(a?.toLowerCase())?.impressions || 0
+            : a.impressions || 0;
+        const bImpressions =
+          typeof b === "string"
+            ? keywordToRow.get(b?.toLowerCase())?.impressions || 0
+            : b.impressions || 0;
+        return bImpressions - aImpressions;
+      })
+      .forEach((item) => {
+        const keyword = typeof item === "string" ? item : item.keyword;
+        if (!keyword) return;
+        const lower = keyword.toLowerCase();
+        if (usedKeywords.has(lower)) return;
+
+        const row =
+          typeof item === "string" ? keywordToRow.get(lower) : item;
+        const pageKey = normalizePageKey(row?.page);
+
+        if (!row || nextAssignments.has(pageKey)) return;
+
+        usedKeywords.add(lower);
+        nextAssignments.set(pageKey, keyword);
+      });
+
+    const entries = assignmentsToEntries(nextAssignments);
+
+    if (!entries.length) {
+      toast.error("We couldn’t find unique keywords per page to suggest yet.");
+      return;
+    }
+
+    const autoKeywords = entries.map((entry) => entry.keyword);
+
+    setFocusKeywordByPage(nextAssignments);
+    setFocusKeywords(autoKeywords);
+
+    setIsSavingFocusKeywords(true);
+    try {
+      await saveFocusKeywords(user.id, entries);
+      setHasAutoSelectedFocusKeywords(true);
+      toast.success("Picked starter focus keywords for you.");
+    } catch (error) {
+      console.error("Failed to save initial focus keywords:", error);
+      toast.error("We couldn’t save your focus keywords. Try again.");
+    } finally {
+      setIsSavingFocusKeywords(false);
+    }
+  };
 
 
   const stripHtmlTags = (html) => {
@@ -605,6 +1145,51 @@ export default function Dashboard() {
           Get insights and recommendations for improving your website&apos;s search
           performance
         </p>
+
+        {data?.siteCrawlStatus === "in-progress" && (
+          <Alert className="mt-4 border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <AlertTitle>Scanning your website…</AlertTitle>
+            <AlertDescription>
+              We&apos;re crawling up to 25 pages so the AI coach can understand your content.
+              This only takes a minute.
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {(data?.siteCrawlStatus === "completed" ||
+          data?.siteCrawlStatus === "completed-with-errors") && (
+          <Alert className="mt-4 border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/20">
+            <CheckCircle className="h-4 w-4 text-green-600" />
+            <AlertTitle>Website scan complete</AlertTitle>
+            <AlertDescription>
+              Your chatbot now uses your site&apos;s content for more personalized answers.
+              <span className="block text-xs text-muted-foreground mt-1">
+                Last crawl: {data?.lastSiteCrawlAt ? new Date(data.lastSiteCrawlAt).toLocaleString() : "Just now"}
+              </span>
+            </AlertDescription>
+          </Alert>
+        )}
+
+        {data?.siteCrawlStatus === "error" && (
+          <Alert className="mt-4 border-red-200 bg-red-50 dark:border-red-900/40 dark:bg-red-900/20">
+            <XCircle className="h-4 w-4 text-red-600" />
+            <AlertTitle>We couldn&apos;t scan your website</AlertTitle>
+            <AlertDescription>
+              Please double-check your website URL in settings, then refresh to try again.
+            </AlertDescription>
+          </Alert>
+        )}
+        {focusKeywords.length === 0 && (
+          <Alert className="mt-4 border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
+            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <AlertTitle>Let&apos;s pick focus keywords</AlertTitle>
+            <AlertDescription>
+              Choose the keywords you want to improve first. We&apos;ll personalize the
+              dashboard and chatbot around them.
+            </AlertDescription>
+          </Alert>
+        )}
       </div>
 
 
@@ -657,6 +1242,66 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
+      {isGscConnected && (
+        <Card className="col-span-full mb-6">
+          <CardHeader className="pb-2">
+            <CardTitle className="flex items-center justify-between">
+              <span>Choose Your Focus Keywords</span>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={defaultFocusKeywords}
+                disabled={isFilteringKeywords || isSavingFocusKeywords}
+              >
+                Smart Suggest
+              </Button>
+            </CardTitle>
+            <CardDescription>
+              Choose the keywords that matter most for each page so the rest of the dashboard can highlight them first.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FocusKeywordSelector
+              keywords={gscKeywords}
+              selectedByPage={focusKeywordByPage}
+              onToggle={handleFocusKeywordToggle}
+              isSaving={isSavingFocusKeywords}
+              suggestions={nonBrandedKeywords}
+              groupedByPage={groupedByPage}
+            />
+          </CardContent>
+        </Card>
+      )}
+      {shouldGateDashboard && (
+        <Card className="mb-6 border-dashed border-primary/40 bg-primary/5">
+          <CardHeader>
+            <CardTitle className="flex flex-col gap-2 text-primary">
+              Start by picking your focus keywords
+            </CardTitle>
+            <CardDescription className="text-primary/80">
+              We&apos;ll tailor Low CTR fixes, Easy Wins, and AI tips around the keywords you select. Once you choose them, the rest of your dashboard will unlock.
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-primary/80">
+              Want to peek at the raw data first?
+            </p>
+            <Button
+              variant="outline"
+              onClick={() => setShowDashboardPreview(true)}
+            >
+              Preview metrics
+            </Button>
+          </CardContent>
+        </Card>
+      )}
+
+      <div
+        className={cn(
+          "space-y-6 transition-all duration-300",
+          shouldGateDashboard && "pointer-events-none opacity-40"
+        )}
+      >
 
             {/* GSC Setup Alert */}
             {gscAlert && (
@@ -770,7 +1415,12 @@ export default function Dashboard() {
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6 mt-6">
 
         {/* Low CTR Fixes Card */}
-        <Card className="col-span-full md:col-span-1 h-full border-red-200 shadow-red-100">
+        <Card
+          className={cn(
+            "col-span-full md:col-span-1 h-full border-red-200 shadow-red-100 transition-all",
+            hasFocusKeywords && "border-primary/40 shadow-[0_0_0_1px_rgba(0,191,99,0.15)]"
+          )}
+        >
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -798,7 +1448,7 @@ export default function Dashboard() {
                   <SquashBounceLoader size="lg" className="mb-4" />
                   <p className="text-sm text-muted-foreground">Loading CTR data...</p>
                 </div>
-              ) : lowCtrPages.length === 0 ? (
+              ) : prioritizedLowCtrPages.length === 0 ? (
                 <div className="text-center py-6">
                   <div className="bg-green-100 dark:bg-green-900/20 inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
                     <CheckCircle2 className="w-6 h-6 text-green-600" />
@@ -812,25 +1462,66 @@ export default function Dashboard() {
                 </div>
               ) : (
                 <ul className="space-y-2">
-                  {lowCtrPages.map((page, idx) => (
-                    <li key={idx} className="flex flex-col">
-                      <div className="flex items-center gap-2">
-                        <AlertTriangle className="text-red-600 h-4 w-4 flex-shrink-0" />
-                        <a
-                          href={page.page}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-[#00BF63] underline truncate"
-                        >
-                          {page.page}
-                        </a>
-                      </div>
-                      <div className="text-sm text-muted-foreground pl-6">
-                        {page.impressions} impressions, {page.clicks} clicks (
-                        {page.ctr} CTR)
-                      </div>
-                    </li>
-                  ))}
+                  {prioritizedLowCtrPages.map((page, idx) => {
+                    const focusKeyword = page.focusKeywords?.[0] || null;
+                    const focusKeywordLower = focusKeyword
+                      ? focusKeyword.toLowerCase()
+                      : null;
+                    const additionalKeywords = (page.keywords || []).filter(
+                      (keyword) =>
+                        keyword &&
+                        keyword.toLowerCase() !== focusKeywordLower &&
+                        keyword !== focusKeyword
+                    );
+
+                    return (
+                      <li key={idx} className="flex flex-col gap-1">
+                        <div className="flex items-center gap-2">
+                          <AlertTriangle className="text-red-600 h-4 w-4 flex-shrink-0" />
+                          <a
+                            href={page.page}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-[#00BF63] underline truncate"
+                          >
+                            {page.page}
+                          </a>
+                          {focusKeyword && (
+                            <Badge variant="secondary" className="ml-auto">
+                              Focus keyword
+                            </Badge>
+                          )}
+                        </div>
+                        <div className="text-sm text-muted-foreground pl-6">
+                          {page.impressions} impressions, {page.clicks} clicks (
+                          {page.ctr} CTR)
+                        </div>
+                        <div className="pl-6 text-xs text-muted-foreground">
+                          {focusKeyword ? (
+                            <div className="flex flex-col gap-1">
+                              <span>
+                                Primary keyword:&nbsp;
+                                <span className="font-medium text-foreground">
+                                  {focusKeyword}
+                                </span>
+                              </span>
+                              {additionalKeywords.length > 0 && (
+                                <span>
+                                  Other low-CTR queries:&nbsp;
+                                  {additionalKeywords.join(", ")}
+                                </span>
+                              )}
+                            </div>
+                          ) : (
+                            <span>
+                              Primary keyword:&nbsp;
+                              {page.primaryKeyword || "—"}
+                            </span>
+                          )}
+                        </div>
+                      </li>
+                    );
+                  })}
                 </ul>
               )
             ) : (
@@ -847,26 +1538,81 @@ export default function Dashboard() {
                 <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
             )}
+            {focusKeywordsNotShownLowCtr.length > 0 && (
+              <div className="mt-4 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-sm">
+                <p className="font-semibold mb-2">Focus keywords not showing up here yet</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  These keywords are on your focus list, but they haven&apos;t hit the Low CTR threshold. Keep optimizing their pages so they start appearing here.
+                </p>
+                <ul className="space-y-2">
+                  {focusKeywordsNotShownLowCtr.map(({ keyword, data, page }) => (
+                    <li key={keyword} className="flex flex-col gap-1 rounded-sm bg-background/60 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{keyword}</span>
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                          Focus
+                        </Badge>
+                      </div>
+                      {data ? (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span>{data.impressions} impressions</span>
+                          <span>Pos. {data.position}</span>
+                          {(page || data.page) && (
+                            <a
+                              href={page || data.page}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00BF63] underline"
+                            >
+                              View page
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span>No Search Console data yet for this keyword.</span>
+                          {page && (
+                            <a
+                              href={page}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00BF63] underline"
+                            >
+                              View page
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
         </Card>
 
-        {/* Easy Win Opportunities Card */}
-        <Card className="col-span-full md:col-span-1 h-full border-yellow-200 shadow-yellow-100">
+        {/* AI-Generated Content Opportunities */}
+        <Card
+          className={cn(
+            "col-span-full md:col-span-1 h-full border-red-200 shadow-red-100 transition-all",
+            hasFocusKeywords && "border-primary/40 shadow-[0_0_0_1px_rgba(0,191,99,0.15)]"
+          )}
+        >
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  Easy Win Opportunities
-                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">
-                    Medium Priority
+                  Extra Opportunities
+                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
+                    High Priority
                   </span>
                 </CardTitle>
                 <CardDescription>
-                  Keywords close to ranking on Page 1 in the last {dateRange === "all" ? "year" : `${dateRange} days`}
+                  Discover new keywords and content ideas to expand your reach and attract new customers.
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">
-                <Link href="/easy-wins">See More</Link>
+                <Link href="/generic-keywords">See More</Link>
               </Button>
             </div>
           </CardHeader>
@@ -877,24 +1623,8 @@ export default function Dashboard() {
                   <SquashBounceLoader size="lg" className="mb-4" />
                   <p className="text-sm text-muted-foreground">Loading opportunities...</p>
                 </div>
-              ) : easyWins.length === 0 ? (
-                <div className="text-center py-6">
-                  <div className="bg-green-100 dark:bg-green-900/20 inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
-                    <CheckCircle2 className="w-6 h-6 text-green-600" />
-                  </div>
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
-                    🎉 No easy wins needed!
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-300">
-                    Your keywords are already performing well
-                  </p>
-                </div>
               ) : (
-                <KeywordTable
-                  keywords={easyWins}
-                  title="Low Hanging Fruit"
-                  description="These keywords are on page 2 of search results. Focus on these for quick wins!"
-                />
+                <GenericKeywordCard gscKeywords={gscKeywords} />
               )
             ) : (
               <div className="text-center py-6">
@@ -905,7 +1635,7 @@ export default function Dashboard() {
                   Connect Google Search Console
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  Find keywords close to ranking on page 1 for quick SEO wins
+                  Find generic keyword opportunities to attract new customers
                 </p>
                 <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
@@ -916,9 +1646,9 @@ export default function Dashboard() {
       </div>
 
       {/* Generic Keyword Opportunities Row */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+      {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"> */}
         {/* Non-Branded Keywords Already Ranking */}
-        <Card className="border-green-200 shadow-green-100">
+        {/* <Card className="border-green-200 shadow-green-100">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
@@ -1000,25 +1730,25 @@ export default function Dashboard() {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card> */}
 
-        {/* AI-Generated Content Opportunities */}
-        <Card className="border-red-200 shadow-red-100">
+        {/* Easy Win Opportunities Card */}
+        {/* <Card className="border-yellow-200 shadow-yellow-100">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
-                  AI-Generated Content Opportunities
-                  <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
-                    High Priority
+                  Easy Win Opportunities
+                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">
+                    Medium Priority
                   </span>
                 </CardTitle>
                 <CardDescription>
-                  Discover new keywords and content ideas to expand your reach and attract new customers.
+                  Keywords close to ranking on Page 1 in the last {dateRange === "all" ? "year" : `${dateRange} days`}
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">
-                <Link href="/generic-keywords">See More</Link>
+                <Link href="/easy-wins">See More</Link>
               </Button>
             </div>
           </CardHeader>
@@ -1029,8 +1759,25 @@ export default function Dashboard() {
                   <SquashBounceLoader size="lg" className="mb-4" />
                   <p className="text-sm text-muted-foreground">Loading opportunities...</p>
                 </div>
+              ) : easyWins.length === 0 ? (
+                <div className="text-center py-6">
+                  <div className="bg-green-100 dark:bg-green-900/20 inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
+                    <CheckCircle2 className="w-6 h-6 text-green-600" />
+                  </div>
+                  <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
+                    🎉 No easy wins needed!
+                  </p>
+                  <p className="text-xs text-green-600 dark:text-green-300">
+                    Your keywords are already performing well
+                  </p>
+                </div>
               ) : (
-                <GenericKeywordCard gscKeywords={gscKeywords} />
+                <KeywordTable
+                  keywords={easyWins}
+                  title="Low Hanging Fruit"
+                  description="These keywords are on page 2 of search results. Focus on these for quick wins!"
+                  showPagination={false}
+                />
               )
             ) : (
               <div className="text-center py-6">
@@ -1041,14 +1788,64 @@ export default function Dashboard() {
                   Connect Google Search Console
                 </h3>
                 <p className="text-muted-foreground text-sm mb-4">
-                  Find generic keyword opportunities to attract new customers
+                  Find keywords close to ranking on page 1 for quick SEO wins
                 </p>
                 <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
               </div>
             )}
+            {focusKeywordsNotShownInEasyWins.length > 0 && (
+              <div className="mt-4 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-sm">
+                <p className="font-semibold mb-2">Focus keywords not in Easy Wins yet</p>
+                <p className="text-xs text-muted-foreground mb-3">
+                  These keywords are on your radar but aren&apos;t close to page one yet. Keep working on their pages so they move into Easy Wins.
+                </p>
+                <ul className="space-y-2">
+                  {focusKeywordsNotShownInEasyWins.map(({ keyword, data, page }) => (
+                    <li key={keyword} className="flex flex-col gap-1 rounded-sm bg-background/60 px-3 py-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-medium">{keyword}</span>
+                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
+                          Focus
+                        </Badge>
+                      </div>
+                      {data ? (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span>{data.impressions} impressions</span>
+                          <span>Pos. {data.position}</span>
+                          {(page || data.page) && (
+                            <a
+                              href={page || data.page}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00BF63] underline"
+                            >
+                              View page
+                            </a>
+                          )}
+                        </div>
+                      ) : (
+                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                          <span>No Search Console data yet for this keyword.</span>
+                          {page && (
+                            <a
+                              href={page}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-[#00BF63] underline"
+                            >
+                              View page
+                            </a>
+                          )}
+                        </div>
+                      )}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </CardContent>
-        </Card>
-      </div>
+        </Card> */}
+      {/* </div> */}
 
       {/* Content Expansion Row - Show for all users */}
       {/* {isGscConnected && (
@@ -1061,14 +1858,14 @@ export default function Dashboard() {
       {/* Bottom Row - Analytics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
         {/* Top Performing Keywords Card */}
-        <Card className="col-span-full md:col-span-1 h-full border-green-200 shadow-green-100">
+        <Card className="col-span-full md:col-span-1 h-full">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
                   Top Performing Keywords
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                    Low Priority
+                  <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-full font-medium">
+                    Insights
                   </span>
                 </CardTitle>
                 <CardDescription>
@@ -1087,20 +1884,20 @@ export default function Dashboard() {
                 <p className="text-sm text-muted-foreground">Loading keywords...</p>
               </div>
             ) : (
-              <KeywordTable keywords={gscKeywords} title="Top Keywords" />
+              <KeywordTable keywords={gscKeywordsWithFocus} title="Top Keywords" />
             )}
           </CardContent>
         </Card>
 
         {/* Top Pages Card */}
-        <Card className="col-span-full md:col-span-1 h-full border-green-200 shadow-green-100">
+        <Card className="col-span-full md:col-span-1 h-full">
           <CardHeader>
             <div className="flex items-center justify-between">
               <div>
                 <CardTitle className="flex items-center gap-2">
                   Top Pages
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                    Low Priority
+                  <span className="text-xs bg-slate-100 text-slate-700 px-2 py-1 rounded-full font-medium">
+                    Insights
                   </span>
                 </CardTitle>
                 <CardDescription>
@@ -1142,6 +1939,8 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
+      </div>
+
       </div>
 
     </MainLayout>

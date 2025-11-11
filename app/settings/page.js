@@ -253,8 +253,8 @@ export default function Settings() {
         description: "All your data has been permanently removed."
       });
       
-      // Redirect to home page
-      router.push("/");
+      // Redirect to auth page
+      router.push("/auth");
     } catch (error) {
       console.error("Error deleting account:", error);
       
