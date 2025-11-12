@@ -647,7 +647,7 @@ export default function Dashboard() {
     if (aiTips.length > 0) {
       fetchTitlesAndDescriptions();
     }
-  }, [aiTips]);
+  }, [aiTips, generateMetaTitle, generateMetaDescription]);
 
   useEffect(() => {
     const loadFocusKeywords = async () => {
@@ -696,7 +696,7 @@ export default function Dashboard() {
     setFocusKeywordByPage((prev) =>
       buildAssignmentsFromKeywords(focusKeywords, prev, gscKeywords)
     );
-  }, [gscKeywords, focusKeywords]);
+  }, [gscKeywords, focusKeywords, buildAssignmentsFromKeywords, focusKeywordByPage.size]);
 
   useEffect(() => {
     if (isLoading || !user?.id) return;
@@ -749,7 +749,7 @@ export default function Dashboard() {
     };
 
     checkGSCConnection();
-  }, [isLoading, user?.id, data?.gscProperty, data?.hasGSC]);
+  }, [isLoading, user?.id, data?.gscProperty, data?.hasGSC, data, fetchAndMatchGSC]);
 
   useEffect(() => {
     if (!user?.id || !data?.websiteUrl) return;
@@ -844,7 +844,7 @@ export default function Dashboard() {
       setIsRefreshingData(true);
       fetchAndMatchGSC(gscAccessToken);
     }
-  }, [dateRange, gscAccessToken, isGscConnected]);
+  }, [dateRange, gscAccessToken, isGscConnected, fetchAndMatchGSC]);
 
   // AI-powered brand filtering effect
   useEffect(() => {
@@ -1739,7 +1739,7 @@ export default function Dashboard() {
                   </>
                 ) : (
                   <div className="rounded-md border border-dashed border-muted-foreground/40 p-4 text-sm text-muted-foreground">
-                    We didn't detect pages to crawl yet. Add a few important URLs below so the AI coach has something to learn from.
+                    We didn&apos;t detect pages to crawl yet. Add a few important URLs below so the AI coach has something to learn from.
                   </div>
                 )}
 
@@ -1815,7 +1815,7 @@ export default function Dashboard() {
                   </Button>
                   {needsCrawlReview && (
                     <span className="text-xs text-muted-foreground">
-                      We'll unlock the rest of your dashboard once this crawl finishes.
+                      We&apos;ll unlock the rest of your dashboard once this crawl finishes.
                     </span>
                   )}
                 </div>
