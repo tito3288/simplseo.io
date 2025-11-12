@@ -61,10 +61,140 @@ const normalizeUrl = (url) => {
   }
 };
 
-const selectRelevantPages = (sortedPages, message, limit = 8) => {
+// Detect page type based on URL, title, and content
+const detectPageType = (page) => {
+  const url = (page.pageUrl || "").toLowerCase();
+  const title = (page.title || "").toLowerCase();
+  const content = (page.textContent || "").toLowerCase();
+  const description = (page.metaDescription || "").toLowerCase();
+  
+  // Common page type patterns
+  const patterns = {
+    about: ['about', 'about-us', 'who-we-are', 'our-story', 'team', 'about me', 'about the company'],
+    services: ['services', 'service', 'what-we-do', 'offerings', 'solutions', 'what we offer', 'our services'],
+    contact: ['contact', 'contact-us', 'get-in-touch', 'reach-us', 'reach out', 'contact us'],
+    blog: ['blog', 'post', 'article', 'news', '/blog/', '/posts/'],
+    portfolio: ['portfolio', 'work', 'projects', 'case-studies', 'case studies', 'my work', 'our work'],
+    pricing: ['pricing', 'plans', 'packages', 'cost', 'price', 'rates'],
+    home: ['', '/', 'home', 'index', 'welcome'],
+    products: ['products', 'product', 'shop', 'store', 'catalog'],
+    testimonials: ['testimonials', 'reviews', 'testimonial', 'what clients say'],
+  };
+  
+  // Check URL path segments
+  try {
+    const urlObj = new URL(page.pageUrl);
+    const pathSegments = urlObj.pathname.split('/').filter(Boolean).map(s => s.toLowerCase());
+    
+    for (const [type, keywords] of Object.entries(patterns)) {
+      // Check URL segments
+      const urlMatch = pathSegments.some(seg => 
+        keywords.some(keyword => seg.includes(keyword) || keyword.includes(seg))
+      );
+      
+      // Check title
+      const titleMatch = keywords.some(keyword => title.includes(keyword));
+      
+      // Check description
+      const descMatch = keywords.some(keyword => description.includes(keyword));
+      
+      // Check content (only for longer keywords to avoid false positives)
+      const contentMatch = keywords
+        .filter(keyword => keyword.length > 5)
+        .some(keyword => content.includes(keyword));
+      
+      if (urlMatch || titleMatch || descMatch || contentMatch) {
+        return type;
+      }
+    }
+  } catch {
+    // If URL parsing fails, just check title and content
+    for (const [type, keywords] of Object.entries(patterns)) {
+      const titleMatch = keywords.some(keyword => title.includes(keyword));
+      const descMatch = keywords.some(keyword => description.includes(keyword));
+      const contentMatch = keywords
+        .filter(keyword => keyword.length > 5)
+        .some(keyword => content.includes(keyword));
+      
+      if (titleMatch || descMatch || contentMatch) {
+        return type;
+      }
+    }
+  }
+  
+  return 'other';
+};
+
+// Build a page index organized by type
+const buildPageIndex = (pages) => {
+  const index = {};
+  
+  pages.forEach(page => {
+    const type = detectPageType(page);
+    if (!index[type]) index[type] = [];
+    index[type].push({
+      url: page.pageUrl,
+      title: page.title || 'Untitled',
+      description: page.metaDescription || '',
+    });
+  });
+  
+  // Format the index for the system prompt
+  const sections = [];
+  
+  for (const [type, pages] of Object.entries(index)) {
+    if (pages.length === 0) continue;
+    
+    const typeLabel = type.charAt(0).toUpperCase() + type.slice(1) + (type === 'services' ? ' Pages' : type === 'products' ? ' Pages' : ' Page' + (pages.length > 1 ? 's' : ''));
+    sections.push(
+      `**${typeLabel}:**\n` +
+      pages.map((p, i) => `  ${i+1}. "${p.title}" - ${p.url}`).join('\n')
+    );
+  }
+  
+  return sections.join('\n\n');
+};
+
+const selectRelevantPages = (sortedPages, message, limit = 15) => {
   if (!sortedPages.length) return [];
 
   const normalizedMessage = message.toLowerCase();
+  
+  // Extract page type queries (semantic matching)
+  const pageTypeQueries = {
+    about: ['about page', 'about us', 'about page', 'tell me about', 'my about', 'the about'],
+    services: ['services page', 'service pages', 'all services', 'my services', 'services pages', 'service page', 'the services'],
+    contact: ['contact page', 'contact us', 'my contact', 'the contact'],
+    blog: ['blog posts', 'blog pages', 'articles', 'blog post', 'my blog'],
+    portfolio: ['portfolio', 'work page', 'projects', 'my work', 'portfolio page'],
+    products: ['products', 'product page', 'product pages', 'my products'],
+    testimonials: ['testimonials', 'reviews', 'testimonial page'],
+    pricing: ['pricing', 'pricing page', 'price page'],
+  };
+  
+  // Detect what type of pages user is asking about
+  let requestedPageType = null;
+  for (const [type, queries] of Object.entries(pageTypeQueries)) {
+    if (queries.some(q => normalizedMessage.includes(q))) {
+      requestedPageType = type;
+      break;
+    }
+  }
+  
+  // If asking for a specific page type, return all matching pages
+  if (requestedPageType) {
+    const matchingPages = sortedPages
+      .filter(page => detectPageType(page) === requestedPageType)
+      .slice(0, limit);
+    
+    // If we found matching pages, return them
+    if (matchingPages.length > 0) {
+      return matchingPages;
+    }
+    // If no exact match, fall through to keyword matching
+  }
+
+  // URL matching
   const urlRegex = /(https?:\/\/[^\s'"]+)/g;
   const referencedUrls = new Set();
   let match;
@@ -72,6 +202,7 @@ const selectRelevantPages = (sortedPages, message, limit = 8) => {
     referencedUrls.add(normalizeUrl(match[1]));
   }
 
+  // Keyword extraction
   const keywords = new Set(
     normalizedMessage.split(/\W+/).filter((word) => word.length >= 3)
   );
@@ -87,41 +218,61 @@ const selectRelevantPages = (sortedPages, message, limit = 8) => {
     }
   };
 
+  // First pass: URL matches
   for (const page of sortedPages) {
     if (result.length >= limit) break;
-
     const normalizedPageUrl = normalizeUrl(page.pageUrl || "");
-    const urlMatch =
-      normalizedPageUrl && referencedUrls.has(normalizedPageUrl);
-
-    let keywordMatch = false;
-    if (!urlMatch) {
-      try {
-        const { pathname } = new URL(page.pageUrl);
-        const segments = pathname
-          .split("/")
-          .filter(Boolean)
-          .map((seg) => seg.toLowerCase());
-        keywordMatch = segments.some(
-          (seg) => seg.length >= 3 && normalizedMessage.includes(seg)
-        );
-      } catch {
-        keywordMatch = false;
-      }
-      if (!keywordMatch && page.title) {
-        const titleWords = page.title
-          .toLowerCase()
-          .split(/\W+/)
-          .filter((word) => word.length >= 3);
-        keywordMatch = titleWords.some((word) => keywords.has(word));
-      }
-    }
-
-    if (urlMatch || keywordMatch) {
+    if (normalizedPageUrl && referencedUrls.has(normalizedPageUrl)) {
       addPage(page);
     }
   }
 
+  // Second pass: Keyword matches in URL, title, or content
+  for (const page of sortedPages) {
+    if (result.length >= limit) break;
+    
+    const normalizedPageUrl = normalizeUrl(page.pageUrl || "");
+    if (seen.has(normalizedPageUrl)) continue;
+
+    let keywordMatch = false;
+    
+    // Check URL path segments
+    try {
+      const { pathname } = new URL(page.pageUrl);
+      const segments = pathname
+        .split("/")
+        .filter(Boolean)
+        .map((seg) => seg.toLowerCase());
+      keywordMatch = segments.some(
+        (seg) => seg.length >= 3 && normalizedMessage.includes(seg)
+      );
+    } catch {
+      keywordMatch = false;
+    }
+    
+    // Check title
+    if (!keywordMatch && page.title) {
+      const titleWords = page.title
+        .toLowerCase()
+        .split(/\W+/)
+        .filter((word) => word.length >= 3);
+      keywordMatch = titleWords.some((word) => keywords.has(word));
+    }
+    
+    // Check content (for longer keywords)
+    if (!keywordMatch && page.textContent) {
+      const contentLower = page.textContent.toLowerCase();
+      keywordMatch = Array.from(keywords)
+        .filter(word => word.length > 4)
+        .some(word => contentLower.includes(word));
+    }
+
+    if (keywordMatch) {
+      addPage(page);
+    }
+  }
+
+  // Third pass: Fill remaining slots with high-priority pages
   if (result.length < limit) {
     for (const page of sortedPages) {
       if (result.length >= limit) break;
@@ -162,9 +313,17 @@ const buildPageSummary = (page) => {
 export async function POST(req) {
   const { message, context, userId } = await req.json();
 
-  const cachedPages = await getCachedSitePages(userId, 10);
-  const selectedPages = selectRelevantPages(cachedPages, message, 8);
+  // Get all cached pages (increase limit to get more pages for better indexing)
+  const cachedPages = await getCachedSitePages(userId, 25);
+  
+  // Select relevant pages based on the message
+  const selectedPages = selectRelevantPages(cachedPages, message, 15);
   const pageSummaries = selectedPages.map(buildPageSummary);
+  
+  // Build full page index for reference
+  const pageIndex = buildPageIndex(cachedPages);
+  
+  // Build detailed summaries for selected pages
   const renderedPageSummaries = pageSummaries.length
     ? pageSummaries
         .map((page, idx) => {
@@ -219,11 +378,36 @@ ${headingsFormatted || "      • (none)"}`;
   ${context.currentPage === '/top-keywords' ? 'Focus on maintaining and improving top-performing keywords.' : ''}
   ${context.currentPage === '/dashboard' ? 'Focus on overall SEO strategy and next steps.' : ''}
 
-  **Website Content Summaries (use when relevant):**
+  **Complete Website Page Index:**
+  When users ask about pages without providing URLs, use this index to find the right pages:
+${pageIndex || '  (No pages indexed yet)'}
+
+  **Understanding Page Queries:**
+  - When user says "my about page" or "the about page", find pages with type "about" from the index above
+  - When user says "services pages" or "all services", find ALL pages with type "services" from the index above
+  - When user says "contact page", find pages with type "contact"
+  - Always identify which specific page(s) the user is referring to before answering
+  - If multiple pages match, mention all of them and their URLs
+  - Use the full content from the identified page(s) to answer questions
+
+  **Detailed Page Content (for selected relevant pages):**
 ${renderedPageSummaries}
   
-  Only mention what&apos;s relevant. If something doesn&apos;t apply, just skip it.  
-  Your goal is to help the user *understand* and *take action*, not overwhelm them.`;
+  **Important Guidelines:**
+  - When answering questions about specific pages, FIRST identify which page(s) from the index match the query
+  - Use the detailed content summaries above to provide accurate, specific answers
+  - Always include the page URL when referencing a specific page
+  - If user asks about "all [type] pages", provide information about ALL matching pages
+  - Only mention what&apos;s relevant. If something doesn&apos;t apply, just skip it.  
+  - Your goal is to help the user *understand* and *take action*, not overwhelm them.
+
+  **Fallback When Page Not Found:**
+  If you cannot find the specific page the user is asking about:
+  1. First, check the page index above to see if there are similar pages (e.g., if they ask about "pricing" but only "services" pages exist, suggest those)
+  2. Recommend 2-3 relevant pages from the index that might be what they&apos;re looking for, with their URLs
+  3. If no similar pages exist, politely ask: "I couldn&apos;t find that page in your website. Could you share the URL of the page you&apos;d like help with? That way I can give you specific recommendations."
+  4. Always be helpful and suggest alternative pages that might be relevant to their question
+  5. Example response: "I couldn&apos;t find a specific [requested page type] page, but I found these related pages: [list with URLs]. Would any of these help, or could you share the URL of the page you&apos;re thinking of?"`;
 
   const completion = await openai.chat.completions.create({
     model: "gpt-4",

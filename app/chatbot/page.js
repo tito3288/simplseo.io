@@ -384,6 +384,7 @@ export default function Chatbot() {
         body: JSON.stringify({
           message: userInput,
           userData: {
+            userId: user?.id,
             userFirstName: data?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there',
             businessName: data?.businessName,
             businessLocation: data?.businessLocation,

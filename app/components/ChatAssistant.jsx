@@ -525,6 +525,9 @@ const ChatAssistant = ({
         timestamp: new Date(),
       },
     ]);
+    
+    // Close the window like clicking the X button
+    onClose();
   };
 
   return (

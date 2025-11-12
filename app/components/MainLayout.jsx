@@ -216,19 +216,31 @@ const MainLayout = ({
 
           <div className="flex items-center gap-2">
             {/* Dark Mode Toggle */}
-            <Button
-              variant="ghost"
-              size="icon"
+            <button
               onClick={toggleTheme}
-              className="hover:bg-muted"
+              className="relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              style={{
+                backgroundColor: isDarkMode ? '#9ca3af' : '#000000'
+              }}
               title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
             >
-              {isDarkMode ? (
-                <Sun className="w-5 h-5" />
-              ) : (
-                <Moon className="w-5 h-5" />
-              )}
-            </Button>
+              {/* Sun Icon (Light Mode) - Always visible */}
+              <div className="absolute left-1.5 flex items-center justify-center z-10">
+                <Sun className="w-3.5 h-3.5 text-white" />
+              </div>
+              
+              {/* Moon Icon (Dark Mode) - Always visible */}
+              <div className="absolute right-1.5 flex items-center justify-center z-10">
+                <Moon className="w-3.5 h-3.5 text-white" />
+              </div>
+              
+              {/* Toggle Knob */}
+              <span
+                className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ease-in-out z-20 ${
+                  isDarkMode ? 'translate-x-7' : 'translate-x-1'
+                }`}
+              />
+            </button>
 
             <div className="hidden sm:flex items-center gap-2">
               <div className="text-sm text-muted-foreground">
@@ -264,20 +276,6 @@ const MainLayout = ({
                   </Button>
                 </Link>
               ))}
-              <Button
-                variant="ghost"
-                className="w-full justify-start"
-                onClick={toggleTheme}
-              >
-                {isDarkMode ? (
-                  <Sun className="w-5 h-5" />
-                ) : (
-                  <Moon className="w-5 h-5" />
-                )}
-                <span className="ml-2">
-                  {isDarkMode ? "Light Mode" : "Dark Mode"}
-                </span>
-              </Button>
               <Button
                 variant="ghost"
                 className="w-full justify-start"

@@ -1,11 +1,162 @@
 // app/api/chatbot/chat/route.js
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
+import { db } from "../../../lib/firebaseAdmin";
 
 // Create the OpenAI instance
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
 });
+
+// Helper functions for page type detection and indexing (same as SEO assistant)
+const normalizeUrl = (url) => {
+  try {
+    const parsed = new URL(url);
+    parsed.hash = "";
+    return parsed.toString().replace(/\/$/, "");
+  } catch {
+    return url.replace(/\/$/, "");
+  }
+};
+
+const detectPageType = (page) => {
+  const url = (page.pageUrl || "").toLowerCase();
+  const title = (page.title || "").toLowerCase();
+  const content = (page.textContent || "").toLowerCase();
+  const description = (page.metaDescription || "").toLowerCase();
+  
+  const patterns = {
+    about: ['about', 'about-us', 'who-we-are', 'our-story', 'team', 'about me', 'about the company'],
+    services: ['services', 'service', 'what-we-do', 'offerings', 'solutions', 'what we offer', 'our services'],
+    contact: ['contact', 'contact-us', 'get-in-touch', 'reach-us', 'reach out', 'contact us'],
+    blog: ['blog', 'post', 'article', 'news', '/blog/', '/posts/'],
+    portfolio: ['portfolio', 'work', 'projects', 'case-studies', 'case studies', 'my work', 'our work'],
+    pricing: ['pricing', 'plans', 'packages', 'cost', 'price', 'rates'],
+    home: ['', '/', 'home', 'index', 'welcome'],
+    products: ['products', 'product', 'shop', 'store', 'catalog'],
+    testimonials: ['testimonials', 'reviews', 'testimonial', 'what clients say'],
+  };
+  
+  try {
+    const urlObj = new URL(page.pageUrl);
+    const pathSegments = urlObj.pathname.split('/').filter(Boolean).map(s => s.toLowerCase());
+    
+    for (const [type, keywords] of Object.entries(patterns)) {
+      const urlMatch = pathSegments.some(seg => 
+        keywords.some(keyword => seg.includes(keyword) || keyword.includes(seg))
+      );
+      const titleMatch = keywords.some(keyword => title.includes(keyword));
+      const descMatch = keywords.some(keyword => description.includes(keyword));
+      const contentMatch = keywords
+        .filter(keyword => keyword.length > 5)
+        .some(keyword => content.includes(keyword));
+      
+      if (urlMatch || titleMatch || descMatch || contentMatch) {
+        return type;
+      }
+    }
+  } catch {
+    for (const [type, keywords] of Object.entries(patterns)) {
+      const titleMatch = keywords.some(keyword => title.includes(keyword));
+      const descMatch = keywords.some(keyword => description.includes(keyword));
+      const contentMatch = keywords
+        .filter(keyword => keyword.length > 5)
+        .some(keyword => content.includes(keyword));
+      
+      if (titleMatch || descMatch || contentMatch) {
+        return type;
+      }
+    }
+  }
+  
+  return 'other';
+};
+
+const buildPageIndex = (pages) => {
+  const index = {};
+  
+  pages.forEach(page => {
+    const type = detectPageType(page);
+    if (!index[type]) index[type] = [];
+    index[type].push({
+      url: page.pageUrl,
+      title: page.title || 'Untitled',
+      description: page.metaDescription || '',
+    });
+  });
+  
+  const sections = [];
+  
+  for (const [type, pages] of Object.entries(index)) {
+    if (pages.length === 0) continue;
+    
+    const typeLabel = type.charAt(0).toUpperCase() + type.slice(1) + (type === 'services' ? ' Pages' : type === 'products' ? ' Pages' : ' Page' + (pages.length > 1 ? 's' : ''));
+    sections.push(
+      `**${typeLabel}:**\n` +
+      pages.map((p, i) => `  ${i+1}. "${p.title}" - ${p.url}`).join('\n')
+    );
+  }
+  
+  return sections.join('\n\n');
+};
+
+const buildPageSummaries = (pages) => {
+  const cleanText = (text = "", length = 200) => {
+    if (!text) return "";
+    const trimmed = text.replace(/\s+/g, " ").trim();
+    return trimmed.length > length ? `${trimmed.slice(0, length)}…` : trimmed;
+  };
+
+  return pages.map((page, idx) => {
+    const headings = Array.isArray(page.headings)
+      ? page.headings
+          .map((h) => (typeof h === "string" ? h : h?.text || h?.value || ""))
+          .filter(Boolean)
+          .slice(0, 5)
+      : [];
+
+    const headingsFormatted = headings.map((h) => `      • ${h}`).join("\n");
+    
+    return `    ${idx + 1}. URL: ${page.pageUrl}
+       Title: ${page.title || "N/A"}
+       Description: ${page.metaDescription || "N/A"}
+       Summary: ${cleanText(page.textContent || "", 200)}
+       Headings:
+${headingsFormatted || "      • (none)"}`;
+  }).join("\n\n");
+};
+
+const getCachedSitePages = async (userId, desiredCount = 25) => {
+  if (!userId) return [];
+  try {
+    const snapshot = await db
+      .collection("pageContentCache")
+      .where("userId", "==", userId)
+      .where("source", "==", "site-crawl")
+      .limit(Math.max(desiredCount * 3, 50))
+      .get();
+
+    const pages = snapshot.docs.map((docRef) => docRef.data());
+
+    pages.sort((a, b) => {
+      const navScore = (b.isNavLink ? 1 : 0) - (a.isNavLink ? 1 : 0);
+      if (navScore !== 0) return navScore;
+
+      const orderA = typeof a.crawlOrder === "number" ? a.crawlOrder : Number.MAX_SAFE_INTEGER;
+      const orderB = typeof b.crawlOrder === "number" ? b.crawlOrder : Number.MAX_SAFE_INTEGER;
+      if (orderA !== orderB) return orderA - orderB;
+
+      const aTime = a.cachedAt ? new Date(a.cachedAt).getTime() : 0;
+      const bTime = b.cachedAt ? new Date(b.cachedAt).getTime() : 0;
+      return bTime - aTime;
+    });
+
+    return pages;
+  } catch (error) {
+    console.error("Failed to fetch cached site pages:", error);
+    return [];
+  }
+};
 
 export async function POST(req) {
   try {
@@ -18,6 +169,12 @@ export async function POST(req) {
     if (!process.env.OPENAI_API_KEY) {
       return NextResponse.json({ error: "OpenAI API key not configured" }, { status: 500 });
     }
+
+    // Get cached pages for this user
+    const userId = userData?.userId || null;
+    const cachedPages = userId ? await getCachedSitePages(userId, 25) : [];
+    const pageIndex = cachedPages.length > 0 ? buildPageIndex(cachedPages) : null;
+    const pageSummaries = cachedPages.length > 0 ? buildPageSummaries(cachedPages.slice(0, 15)) : null;
 
     // Create a comprehensive system prompt with all user data
     const systemPrompt = `You are an expert SEO coach and mentor for ${userData?.userFirstName || 'the user'}.
@@ -84,7 +241,39 @@ ${userData?.aiTips?.slice(0, 5).map(tip => `- ${tip}`).join('\n') || 'No data av
 - Actionable next steps
 - Time period context
 
-Remember: You have access to their real Google Search Console data from the last 28 days, so use it to give personalized, data-driven advice!`;
+${pageIndex ? `**Complete Website Page Index:**
+When users ask about pages without providing URLs, use this index to find the right pages:
+${pageIndex}
+
+**Understanding Page Queries:**
+- When user says "my about page" or "the about page", find pages with type "about" from the index above
+- When user says "services pages" or "all services", find ALL pages with type "services" from the index above
+- When user says "contact page", find pages with type "contact"
+- When user asks to "optimize all my services pages", provide recommendations for ALL service pages
+- Always identify which specific page(s) the user is referring to before answering
+- If multiple pages match, mention all of them and their URLs
+- Use the full content from the identified page(s) to answer questions
+
+**Detailed Page Content:**
+${pageSummaries || '(No cached pages available yet)'}
+
+**Important Guidelines:**
+- When answering questions about specific pages, FIRST identify which page(s) from the index match the query
+- Use the detailed content summaries above to provide accurate, specific answers
+- Always include the page URL when referencing a specific page
+- If user asks about "all [type] pages", provide information about ALL matching pages
+- When user asks "what's in my about page", use the content from the about page(s) to answer
+- When user asks to "optimize my services pages", provide specific recommendations for each service page
+
+**Fallback When Page Not Found:**
+If you cannot find the specific page the user is asking about:
+1. First, check the page index above to see if there are similar pages (e.g., if they ask about "pricing" but only "services" pages exist, suggest those)
+2. Recommend 2-3 relevant pages from the index that might be what they're looking for, with their URLs
+3. If no similar pages exist, politely ask: "I couldn't find that page in your website. Could you share the URL of the page you'd like help with? That way I can give you specific recommendations."
+4. Always be helpful and suggest alternative pages that might be relevant to their question
+5. Example response: "I couldn't find a specific [requested page type] page, but I found these related pages: [list with URLs]. Would any of these help, or could you share the URL of the page you're thinking of?"` : ''}
+
+Remember: You have access to their real Google Search Console data from the last 28 days${pageIndex ? ' and their complete website content' : ''}, so use it to give personalized, data-driven advice!`;
 
     // Call OpenAI API
     const completion = await openai.chat.completions.create({

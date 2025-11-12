@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { doc, getDoc, setDoc } from "firebase/firestore";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
@@ -38,6 +38,8 @@ import {
   Unlink,
   AlertTriangle,
   FileText,
+  Plus,
+  X,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
@@ -54,6 +56,8 @@ import {
 import FocusKeywordSelector from "../components/dashboard/FocusKeywordSelector";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
+import { Checkbox } from "@/components/ui/checkbox";
+import { Input } from "@/components/ui/input";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -62,7 +66,7 @@ if (typeof window !== "undefined") {
 }
 
 export default function Dashboard() {
-  const { data } = useOnboarding();
+  const { data, updateData } = useOnboarding();
   const { user, isLoading } = useAuth();
   const router = useRouter();
   const [isGscConnected, setIsGscConnected] = useState(false);
@@ -92,6 +96,15 @@ export default function Dashboard() {
   const [hasAutoSelectedFocusKeywords, setHasAutoSelectedFocusKeywords] =
     useState(false);
   const [showDashboardPreview, setShowDashboardPreview] = useState(false);
+  const [crawlPages, setCrawlPages] = useState([]);
+  const [isLoadingCrawlReview, setIsLoadingCrawlReview] = useState(false);
+  const [hasLoadedCrawlReview, setHasLoadedCrawlReview] = useState(false);
+  const [needsCrawlReview, setNeedsCrawlReview] = useState(false);
+  const [reviewSelections, setReviewSelections] = useState(new Map());
+  const [manualReviewUrls, setManualReviewUrls] = useState([]);
+  const [newUrlInput, setNewUrlInput] = useState("");
+  const [isRecrawling, setIsRecrawling] = useState(false);
+  const [isInitialCrawlRunning, setIsInitialCrawlRunning] = useState(false);
 
   const normalizePageKey = (page) => page || "__unknown__";
   const assignmentsToEntries = (assignments) =>
@@ -125,6 +138,89 @@ export default function Dashboard() {
     });
     return map;
   }, [focusKeywordByPage]);
+
+  const normalizeManualUrl = useCallback(
+    (value) => {
+      if (!value || !data?.websiteUrl) return null;
+      try {
+        const raw = value.trim();
+        if (!raw) return null;
+        const base = data.websiteUrl.startsWith("http")
+          ? data.websiteUrl
+          : `https://${data.websiteUrl}`;
+        const baseOrigin = new URL(base).origin;
+        const normalized = new URL(raw, baseOrigin).toString();
+        const cleaned = normalized.split("#")[0].replace(/\/$/, "");
+        if (!cleaned.startsWith(baseOrigin)) return null;
+        return cleaned;
+      } catch {
+        return null;
+      }
+    },
+    [data?.websiteUrl]
+  );
+
+  const loadCrawlReview = useCallback(
+    async (force = false) => {
+      if (!user?.id) return;
+      if (isLoadingCrawlReview) return;
+      if (!force && hasLoadedCrawlReview) return;
+      try {
+        setIsLoadingCrawlReview(true);
+        const res = await fetch(`/api/crawl-site/review?userId=${user.id}`);
+        if (!res.ok) {
+          throw new Error("Failed to load crawl pages");
+        }
+        const json = await res.json();
+        const prefs = json?.preferences || {};
+        const manualSet = new Set(prefs.manualUrls || []);
+        const approvedSet = new Set(prefs.approvedUrls || []);
+        const excludedSet = new Set(prefs.excludedUrls || []);
+
+        const pages = (json?.pages || []).map((page) => {
+          const tags = Array.isArray(page.tags) ? [...page.tags] : [];
+          if (page.isNavLink && !tags.includes("Navigation")) {
+            tags.push("Navigation");
+          }
+          if (manualSet.has(page.pageUrl) && !tags.includes("Added")) {
+            tags.push("Added");
+          }
+          if (approvedSet.has(page.pageUrl) && !tags.includes("Priority")) {
+            tags.push("Priority");
+          }
+
+          return {
+            ...page,
+            tags,
+            kept: page.kept !== false && !excludedSet.has(page.pageUrl),
+          };
+        });
+
+        const selectionMap = new Map();
+        pages.forEach((page) => {
+          selectionMap.set(page.pageUrl, page.kept !== false);
+        });
+
+        setCrawlPages(pages);
+        setReviewSelections(selectionMap);
+        setManualReviewUrls(Array.from(new Set(prefs.manualUrls || [])));
+        setHasLoadedCrawlReview(true);
+        const requiresReview =
+          typeof json?.requiresReview === "boolean"
+            ? json.requiresReview
+            : json?.status === "awaiting-review";
+        setNeedsCrawlReview(requiresReview && pages.length > 0);
+      } catch (error) {
+        console.error("⚠️ Failed to load crawl review:", error);
+        toast.error("Could not load crawled pages.", {
+          description: error?.message || "Please try again.",
+        });
+      } finally {
+        setIsLoadingCrawlReview(false);
+      }
+    },
+    [user?.id, isLoadingCrawlReview, hasLoadedCrawlReview]
+  );
   const hasFocusKeywords = focusKeywords.length > 0;
   const shouldGateDashboard =
     isGscConnected && !hasFocusKeywords && !showDashboardPreview;
@@ -133,7 +229,341 @@ export default function Dashboard() {
       setShowDashboardPreview(true);
     }
   }, [hasFocusKeywords]);
+  useEffect(() => {
+    if (
+      data?.siteCrawlStatus === "completed" ||
+      data?.siteCrawlStatus === "completed-with-errors" ||
+      data?.siteCrawlStatus === "awaiting-review"
+    ) {
+      loadCrawlReview();
+    }
+  }, [data?.siteCrawlStatus, loadCrawlReview]);
   const crawlTriggeredRef = useRef(false);
+
+  const handleTogglePage = (pageUrl, checked) => {
+    setReviewSelections((prev) => {
+      const updated = new Map(prev);
+      updated.set(pageUrl, checked === true);
+      return updated;
+    });
+  };
+
+  const handleAddManualUrl = () => {
+    const normalized = normalizeManualUrl(newUrlInput);
+    if (!normalized) {
+      toast.error("Enter a valid URL on your website.");
+      return;
+    }
+    if (
+      manualReviewUrls.includes(normalized) ||
+      crawlPages.some((page) => page.pageUrl === normalized)
+    ) {
+      toast.info("That page is already included.");
+      setNewUrlInput("");
+      return;
+    }
+    setManualReviewUrls((prev) => [...prev, normalized]);
+    setNewUrlInput("");
+  };
+
+  const handleRemoveManualUrl = (url) => {
+    setManualReviewUrls((prev) => prev.filter((item) => item !== url));
+  };
+
+  const handleManualUrlKeyDown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      handleAddManualUrl();
+    }
+  };
+
+  // Detect if there are new manual URLs that aren't in crawlPages yet
+  const hasNewManualUrls = useMemo(() => {
+    if (!manualReviewUrls.length || !crawlPages.length) {
+      return manualReviewUrls.length > 0;
+    }
+    const existingPageUrls = new Set(crawlPages.map((p) => p.pageUrl));
+    return manualReviewUrls.some((url) => !existingPageUrls.has(url));
+  }, [manualReviewUrls, crawlPages]);
+
+  const handleInitialCrawl = async () => {
+    if (!user?.id || !data?.websiteUrl) return;
+    try {
+      setIsInitialCrawlRunning(true);
+      updateData?.({
+        siteCrawlStatus: "in-progress",
+      });
+      const keepUrls = crawlPages
+        .filter((page) => reviewSelections.get(page.pageUrl) !== false)
+        .map((page) => page.pageUrl);
+      const removedUrls = crawlPages
+        .filter((page) => reviewSelections.get(page.pageUrl) === false)
+        .map((page) => page.pageUrl);
+
+      const priorityUrls = Array.from(
+        new Set([
+          ...keepUrls,
+          ...topPages.map((page) => page.page).filter(Boolean),
+          ...manualReviewUrls,
+        ])
+      );
+
+      const res = await fetch("/api/crawl-site", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          websiteUrl: data.websiteUrl,
+          mode: "initial",
+          priorityUrls,
+          approvedUrls: keepUrls,
+          excludedUrls: removedUrls,
+          manualUrls: manualReviewUrls,
+        }),
+      });
+
+      const responseJson = await res.json();
+      if (!res.ok) {
+        throw new Error(responseJson?.error || "Initial crawl failed");
+      }
+
+      const requiresReview = Boolean(responseJson?.requiresReview);
+      const hadErrors =
+        Array.isArray(responseJson?.errors) && responseJson.errors.length > 0;
+      const completedStatus = requiresReview
+        ? "awaiting-review"
+        : hadErrors
+        ? "completed-with-errors"
+        : "completed";
+
+      updateData?.({
+        siteCrawlStatus: completedStatus,
+        lastSiteCrawlAt: new Date().toISOString(),
+      });
+
+      setHasLoadedCrawlReview(false);
+      setNeedsCrawlReview(requiresReview);
+      await loadCrawlReview(true);
+
+      toast.success(
+        requiresReview
+          ? "Initial crawl finished. Review the pages below."
+          : "Initial crawl finished."
+      );
+    } catch (error) {
+      console.error("❌ Initial crawl failed:", error);
+      updateData?.({
+        siteCrawlStatus: "error",
+      });
+      toast.error("Failed to run initial crawl", {
+        description: error?.message || "Please try again.",
+      });
+    } finally {
+      setIsInitialCrawlRunning(false);
+    }
+  };
+
+  const handleSave = async () => {
+    if (!user?.id || !data?.websiteUrl) return;
+    const keepUrls = crawlPages
+      .filter((page) => reviewSelections.get(page.pageUrl) !== false)
+      .map((page) => page.pageUrl);
+    const removedUrls = crawlPages
+      .filter((page) => reviewSelections.get(page.pageUrl) === false)
+      .map((page) => page.pageUrl);
+    const manualUrls = Array.from(new Set(manualReviewUrls)).filter(
+      (url) => !removedUrls.includes(url)
+    );
+    try {
+      setIsRecrawling(true);
+
+      // Save approved pages to pageContentCache without recrawling
+      const res = await fetch("/api/crawl-site/save", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          approvedUrls: keepUrls,
+          excludedUrls: removedUrls,
+          manualUrls,
+        }),
+      });
+
+      const responseJson = await res.json();
+
+      if (!res.ok) {
+        throw new Error(responseJson?.error || "Failed to save pages");
+      }
+
+      const completedStatus =
+        responseJson?.errors?.length > 0
+          ? "completed-with-errors"
+          : "completed";
+
+      updateData?.({
+        siteCrawlStatus: completedStatus,
+        lastSiteCrawlAt: new Date().toISOString(),
+      });
+
+      // Reload the review to show updated status, but don't reload pages
+      // since we're not recrawling - just update the status
+      setHasLoadedCrawlReview(false);
+      await loadCrawlReview(true);
+      setNeedsCrawlReview(false);
+
+      const savedCount = responseJson.saved || 0;
+      const removedCount = responseJson.removed || 0;
+      
+      if (savedCount > 0 && removedCount > 0) {
+        toast.success(
+          `Saved ${savedCount} page${savedCount !== 1 ? "s" : ""} and removed ${removedCount} page${removedCount !== 1 ? "s" : ""} from your content cache.`
+        );
+      } else if (savedCount > 0) {
+        toast.success(
+          `Saved ${savedCount} page${savedCount !== 1 ? "s" : ""} to your content cache.`
+        );
+      } else if (removedCount > 0) {
+        toast.success(
+          `Removed ${removedCount} page${removedCount !== 1 ? "s" : ""} from your content cache.`
+        );
+      }
+    } catch (error) {
+      console.error("❌ Save failed:", error);
+      updateData?.({
+        siteCrawlStatus: "error",
+      });
+      toast.error("Failed to save pages", {
+        description: error?.message || "Please try again.",
+      });
+    } finally {
+      setIsRecrawling(false);
+    }
+  };
+
+  const handleAddAndSave = async () => {
+    if (!user?.id || !data?.websiteUrl) return;
+
+    // Find new manual URLs that aren't in crawlPages yet
+    const existingPageUrls = new Set(crawlPages.map((p) => p.pageUrl));
+    const newManualUrls = manualReviewUrls.filter(
+      (url) => !existingPageUrls.has(url)
+    );
+
+    if (newManualUrls.length === 0) {
+      toast.info("No new URLs to add.");
+      return;
+    }
+
+    try {
+      setIsRecrawling(true);
+
+      // Process each new URL one by one with validation
+      const { doc, getDoc, setDoc } = await import("firebase/firestore");
+      const { db } = await import("../lib/firebaseConfig");
+
+      const successfullyAddedUrls = [];
+
+      for (const url of newManualUrls) {
+        // 1. Validate URL belongs to domain (already done via normalizeManualUrl, but double-check)
+        const normalized = normalizeManualUrl(url);
+        if (!normalized || normalized !== url) {
+          toast.error(`Invalid URL: ${url} does not belong to your website domain.`);
+          continue;
+        }
+
+        // 2. Check if URL already exists in pageContentCache
+        const docId = `${user.id}_${encodeURIComponent(url)}`;
+        const existingDoc = await getDoc(doc(db, "pageContentCache", docId));
+        if (existingDoc.exists()) {
+          toast.warning(`URL already saved: ${url}`);
+          continue;
+        }
+
+        // 3. Scrape and verify content exists
+        const scrapeRes = await fetch("/api/scrape-content", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ pageUrl: url }),
+        });
+
+        if (!scrapeRes.ok) {
+          toast.error(`Failed to crawl ${url}: Invalid URL or no content found.`);
+          continue;
+        }
+
+        const scrapeJson = await scrapeRes.json();
+        if (!scrapeJson?.data || !scrapeJson.data.textContent) {
+          toast.error(`Invalid URL: ${url} has no crawlable content.`);
+          continue;
+        }
+
+        // 4. Save to pageContentCache
+        await setDoc(
+          doc(db, "pageContentCache", docId),
+          {
+            ...scrapeJson.data,
+            userId: user.id,
+            pageUrl: url,
+            source: "site-crawl",
+            isNavLink: false,
+            crawlOrder: null,
+            cachedAt: new Date().toISOString(),
+            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
+            crawlTags: ["manual", "Added"],
+          },
+          { merge: true }
+        );
+
+        successfullyAddedUrls.push(url);
+        toast.success(`Added ${url} to your content cache.`);
+      }
+
+      // Update preferences to include the new manual URLs
+      const keepUrls = crawlPages
+        .filter((page) => reviewSelections.get(page.pageUrl) !== false)
+        .map((page) => page.pageUrl);
+      const removedUrls = crawlPages
+        .filter((page) => reviewSelections.get(page.pageUrl) === false)
+        .map((page) => page.pageUrl);
+
+      await fetch("/api/crawl-site/review", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          approvedUrls: [...keepUrls, ...successfullyAddedUrls],
+          excludedUrls: removedUrls,
+          manualUrls: manualReviewUrls,
+        }),
+      });
+
+      // Reload the list to show newly added pages
+      if (successfullyAddedUrls.length > 0) {
+        setHasLoadedCrawlReview(false);
+        await loadCrawlReview(true);
+      }
+
+      // Clear the processed URLs from manualReviewUrls and clear the input field
+      // Remove all processed URLs (both successful and failed) from the manual review URLs
+      setManualReviewUrls((prev) => 
+        prev.filter((url) => !newManualUrls.includes(url))
+      );
+      setNewUrlInput("");
+    } catch (error) {
+      console.error("❌ Add & Save failed:", error);
+      toast.error("Failed to add URL", {
+        description: error?.message || "Please try again.",
+      });
+      
+      // Still clear the URLs and input even on error
+      setManualReviewUrls((prev) => 
+        prev.filter((url) => !newManualUrls.includes(url))
+      );
+      setNewUrlInput("");
+    } finally {
+      setIsRecrawling(false);
+    }
+  };
   
   // Use minimum loading time for professional UX
   const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
@@ -326,7 +756,12 @@ export default function Dashboard() {
     if (!data?.hasGSC) return;
 
     const status = data?.siteCrawlStatus;
-    if (status === "in-progress" || status === "completed" || status === "completed-with-errors") {
+    if (
+      status === "in-progress" ||
+      status === "completed" ||
+      status === "completed-with-errors" ||
+      status === "awaiting-review"
+    ) {
       return;
     }
 
@@ -339,30 +774,61 @@ export default function Dashboard() {
     const startCrawl = async () => {
       try {
         console.log("🌐 Starting site crawl for:", data.websiteUrl);
+        updateData?.({ siteCrawlStatus: "in-progress" });
+        const priorityUrls = Array.from(
+          new Set(topPages.map((page) => page.page).filter(Boolean))
+        );
         const res = await fetch("/api/crawl-site", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: user.id,
             websiteUrl: data.websiteUrl,
+            mode: "initial",
+            priorityUrls,
           }),
         });
 
         const result = await res.json();
         if (!res.ok) {
           console.error("❌ Site crawl failed:", result?.error || result);
+          updateData?.({ siteCrawlStatus: "error" });
           crawlTriggeredRef.current = false;
         } else {
-          console.log("✅ Site crawl started:", result);
+          const requiresReview = Boolean(result?.requiresReview);
+          const hadErrors = Array.isArray(result?.errors) && result.errors.length > 0;
+          const completedStatus = requiresReview
+            ? "awaiting-review"
+            : hadErrors
+            ? "completed-with-errors"
+            : "completed";
+          updateData?.({
+            siteCrawlStatus: completedStatus,
+            lastSiteCrawlAt: new Date().toISOString(),
+          });
+          setHasLoadedCrawlReview(false);
+          setNeedsCrawlReview(requiresReview);
+          await loadCrawlReview(true);
+          crawlTriggeredRef.current = false;
+          console.log("✅ Site crawl completed:", result);
         }
       } catch (error) {
         crawlTriggeredRef.current = false;
+        updateData?.({ siteCrawlStatus: "error" });
         console.error("❌ Failed to start site crawl:", error);
       }
     };
 
     startCrawl();
-  }, [user?.id, data?.websiteUrl, data?.hasGSC, data?.siteCrawlStatus]);
+  }, [
+    user?.id,
+    data?.websiteUrl,
+    data?.hasGSC,
+    data?.siteCrawlStatus,
+    updateData,
+    loadCrawlReview,
+    topPages,
+  ]);
 
   // Commented out to prevent duplicate calls
   // useEffect(() => {
@@ -1044,7 +1510,7 @@ export default function Dashboard() {
       toast.success("Focus keywords updated.");
     } catch (error) {
       console.error("Failed to save focus keywords:", error);
-      toast.error("We couldn’t save your focus keywords. Try again.");
+      toast.error("We couldn't save your focus keywords. Try again.");
     } finally {
       setIsSavingFocusKeywords(false);
     }
@@ -1097,7 +1563,7 @@ export default function Dashboard() {
     const entries = assignmentsToEntries(nextAssignments);
 
     if (!entries.length) {
-      toast.error("We couldn’t find unique keywords per page to suggest yet.");
+      toast.error("We couldn't find unique keywords per page to suggest yet.");
       return;
     }
 
@@ -1113,7 +1579,7 @@ export default function Dashboard() {
       toast.success("Picked starter focus keywords for you.");
     } catch (error) {
       console.error("Failed to save initial focus keywords:", error);
-      toast.error("We couldn’t save your focus keywords. Try again.");
+      toast.error("We couldn't save your focus keywords. Try again.");
     } finally {
       setIsSavingFocusKeywords(false);
     }
@@ -1158,16 +1624,203 @@ export default function Dashboard() {
         )}
 
         {(data?.siteCrawlStatus === "completed" ||
-          data?.siteCrawlStatus === "completed-with-errors") && (
+          data?.siteCrawlStatus === "completed-with-errors" ||
+          data?.siteCrawlStatus === "awaiting-review") && (
           <Alert className="mt-4 border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/20">
-            <CheckCircle className="h-4 w-4 text-green-600" />
-            <AlertTitle>Website scan complete</AlertTitle>
-            <AlertDescription>
-              Your chatbot now uses your site&apos;s content for more personalized answers.
-              <span className="block text-xs text-muted-foreground mt-1">
-                Last crawl: {data?.lastSiteCrawlAt ? new Date(data.lastSiteCrawlAt).toLocaleString() : "Just now"}
-              </span>
-            </AlertDescription>
+            <CheckCircle className="h-4 w-4 text-green-600 mt-1" />
+            <div className="flex flex-col gap-4 w-full">
+              <div className="min-w-0">
+                <AlertTitle>Website scan complete</AlertTitle>
+                <AlertDescription>
+                  We crawled these pages so your SEO Mentor understands your business. Now the chatbot and AI tips use your real services and wording, not generic guesses.
+                  <span className="block text-xs text-muted-foreground mt-1">
+                    Last crawl:{" "}
+                    {data?.lastSiteCrawlAt
+                      ? new Date(data.lastSiteCrawlAt).toLocaleString()
+                      : "Just now"}
+                  </span>
+                </AlertDescription>
+              </div>
+
+              <div className="space-y-3">
+                <p className="text-sm font-medium text-foreground">
+                  {needsCrawlReview
+                    ? "Finish this step to personalize your SEO Mentor."
+                    : "Keep or remove pages anytime—your SEO Mentor uses this list for guidance."}
+                </p>
+
+                {crawlPages.length > 0 ? (
+                  <>
+                    <div className="space-y-2 rounded-md border border-border bg-background/80 p-3">
+                      {crawlPages
+                        .filter((page) => reviewSelections.get(page.pageUrl) !== false)
+                        .map((page) => (
+                          <div
+                            key={`kept-${page.pageUrl}`}
+                            className="flex flex-col gap-2 rounded-md border border-border/60 bg-background p-3"
+                          >
+                            <div className="flex items-start gap-3">
+                              <Checkbox
+                                checked
+                                onCheckedChange={(checked) =>
+                                  handleTogglePage(page.pageUrl, checked)
+                                }
+                                className="mt-1"
+                              />
+                              <div className="flex-1 min-w-0 space-y-1">
+                                <p className="text-sm font-medium text-foreground">
+                                  {page.title}
+                                </p>
+                                <a
+                                  href={page.pageUrl}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="text-xs text-primary underline break-all"
+                                >
+                                  {page.pageUrl}
+                                </a>
+                              </div>
+                            </div>
+                            {Array.isArray(page.tags) && page.tags.length > 0 && (
+                              <div className="flex flex-wrap gap-1 pl-7">
+                                {page.tags.map((tag) => (
+                                  <Badge
+                                    key={`${page.pageUrl}-${tag}`}
+                                    variant="secondary"
+                                    className="text-[10px]"
+                                  >
+                                    {tag}
+                                  </Badge>
+                                ))}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+
+                    {crawlPages.some((page) => reviewSelections.get(page.pageUrl) === false) && (
+                      <div className="space-y-2 rounded-md border border-dashed border-muted-foreground/40 bg-muted/20 p-3">
+                        <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+                          Removed from this crawl (these pages will be skipped unless you re-check them)
+                        </p>
+                        {crawlPages
+                          .filter((page) => reviewSelections.get(page.pageUrl) === false)
+                          .map((page) => (
+                            <div
+                              key={`removed-${page.pageUrl}`}
+                              className="flex flex-col gap-2 rounded-md border border-border/40 bg-background/60 p-3"
+                            >
+                              <div className="flex items-start gap-3">
+                                <Checkbox
+                                  checked={false}
+                                  onCheckedChange={(checked) =>
+                                    handleTogglePage(page.pageUrl, checked)
+                                  }
+                                  className="mt-1"
+                                />
+                                <div className="flex-1 min-w-0 space-y-1 text-muted-foreground">
+                                  <p className="text-sm font-medium line-through">
+                                    {page.title}
+                                  </p>
+                                  <a
+                                    href={page.pageUrl}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="text-xs underline"
+                                  >
+                                    {page.pageUrl}
+                                  </a>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                      </div>
+                    )}
+                  </>
+                ) : (
+                  <div className="rounded-md border border-dashed border-muted-foreground/40 p-4 text-sm text-muted-foreground">
+                    We didn't detect pages to crawl yet. Add a few important URLs below so the AI coach has something to learn from.
+                  </div>
+                )}
+
+                <div className="flex flex-col gap-2 sm:flex-row">
+                  <Input
+                    value={newUrlInput}
+                    onChange={(event) => setNewUrlInput(event.target.value)}
+                    onKeyDown={handleManualUrlKeyDown}
+                    placeholder="https://yourdomain.com/page"
+                    className="sm:flex-1"
+                    disabled={isRecrawling || isLoadingCrawlReview}
+                  />
+                  <Button
+                    type="button"
+                    onClick={handleAddManualUrl}
+                    disabled={isRecrawling || isLoadingCrawlReview}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add URL
+                  </Button>
+                </div>
+                {manualReviewUrls.length > 0 && (
+                  <div className="flex flex-wrap gap-2">
+                    {manualReviewUrls.map((url) => (
+                      <Badge
+                        key={url}
+                        variant="secondary"
+                        className="flex items-center gap-2"
+                      >
+                        <span className="max-w-[220px] truncate">{url}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveManualUrl(url)}
+                          className="rounded-full p-0.5 hover:bg-muted"
+                          disabled={isRecrawling}
+                        >
+                          <X className="h-3 w-3" />
+                        </button>
+                      </Badge>
+                    ))}
+                  </div>
+                )}
+
+                <div className="flex flex-wrap items-center gap-3">
+                  <Button
+                    variant="outline"
+                    onClick={handleInitialCrawl}
+                    disabled={
+                      isInitialCrawlRunning ||
+                      isRecrawling ||
+                      isLoadingCrawlReview ||
+                      data?.siteCrawlStatus === "in-progress"
+                    }
+                  >
+                    {isInitialCrawlRunning ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    Initial Crawl
+                  </Button>
+                  <Button
+                    onClick={hasNewManualUrls ? handleAddAndSave : handleSave}
+                    disabled={
+                      isRecrawling ||
+                      isInitialCrawlRunning ||
+                      isLoadingCrawlReview ||
+                      data?.siteCrawlStatus === "in-progress"
+                    }
+                  >
+                    {isRecrawling ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : null}
+                    {hasNewManualUrls ? "Add & Save" : "Save"}
+                  </Button>
+                  {needsCrawlReview && (
+                    <span className="text-xs text-muted-foreground">
+                      We'll unlock the rest of your dashboard once this crawl finishes.
+                    </span>
+                  )}
+                </div>
+              </div>
+            </div>
           </Alert>
         )}
 
@@ -1192,6 +1845,97 @@ export default function Dashboard() {
         )}
       </div>
 
+      <section
+        className={cn(
+          "space-y-6 transition-all duration-300",
+          needsCrawlReview && "pointer-events-none opacity-40"
+        )}
+      >
+        {isGscConnected && (
+          <Card className="col-span-full mb-6">
+            <CardHeader className="pb-2">
+              <CardTitle className="flex items-center justify-between">
+                <span>Choose Your Focus Keywords</span>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={defaultFocusKeywords}
+                  disabled={isFilteringKeywords || isSavingFocusKeywords}
+                >
+                  Smart Suggest
+                </Button>
+              </CardTitle>
+              <CardDescription>
+                Choose the keywords that matter most for each page so the rest of the dashboard can highlight them first.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <FocusKeywordSelector
+                keywords={gscKeywords}
+                selectedByPage={focusKeywordByPage}
+                onToggle={handleFocusKeywordToggle}
+                isSaving={isSavingFocusKeywords}
+                suggestions={nonBrandedKeywords}
+                groupedByPage={groupedByPage}
+              />
+            </CardContent>
+          </Card>
+        )}
+
+        {shouldGateDashboard && (
+          <Card className="mb-6 border-dashed border-primary/40 bg-primary/5">
+            <CardHeader>
+              <CardTitle className="flex flex-col gap-2 text-primary">
+                Start by picking your focus keywords
+              </CardTitle>
+              <CardDescription className="text-primary/80">
+                We&apos;ll tailor Low CTR fixes, Easy Wins, and AI tips around the keywords you select. Once you choose them, the rest of your dashboard will unlock.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+              <p className="text-sm text-primary/80">
+                Want to peek at the raw data first?
+              </p>
+              <Button
+                variant="outline"
+                onClick={() => setShowDashboardPreview(true)}
+              >
+                Preview metrics
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* GSC Setup Alert */}
+        {gscAlert && (
+        <Card className="mb-6 border-red-200 bg-red-50">
+          <CardContent className="pt-6">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-red-800 mb-2">
+                  {gscAlert.title}
+                </h3>
+                <p className="text-red-700 mb-4">
+                  {gscAlert.description}
+                </p>
+                <Button 
+                  onClick={() => {
+                    if (gscAlert.type === "no-property-selected") {
+                      router.push("/onboarding");
+                    } else {
+                      window.open("https://search.google.com/search-console", "_blank");
+                    }
+                  }}
+                  className="bg-red-600 hover:bg-red-700 text-white"
+                >
+                  {gscAlert.action}
+                </Button>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       <Card className="col-span-full mb-6">
         <CardHeader className="pb-2">
@@ -1242,97 +1986,6 @@ export default function Dashboard() {
           )}
         </CardContent>
       </Card>
-      {isGscConnected && (
-        <Card className="col-span-full mb-6">
-          <CardHeader className="pb-2">
-            <CardTitle className="flex items-center justify-between">
-              <span>Choose Your Focus Keywords</span>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={defaultFocusKeywords}
-                disabled={isFilteringKeywords || isSavingFocusKeywords}
-              >
-                Smart Suggest
-              </Button>
-            </CardTitle>
-            <CardDescription>
-              Choose the keywords that matter most for each page so the rest of the dashboard can highlight them first.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <FocusKeywordSelector
-              keywords={gscKeywords}
-              selectedByPage={focusKeywordByPage}
-              onToggle={handleFocusKeywordToggle}
-              isSaving={isSavingFocusKeywords}
-              suggestions={nonBrandedKeywords}
-              groupedByPage={groupedByPage}
-            />
-          </CardContent>
-        </Card>
-      )}
-      {shouldGateDashboard && (
-        <Card className="mb-6 border-dashed border-primary/40 bg-primary/5">
-          <CardHeader>
-            <CardTitle className="flex flex-col gap-2 text-primary">
-              Start by picking your focus keywords
-            </CardTitle>
-            <CardDescription className="text-primary/80">
-              We&apos;ll tailor Low CTR fixes, Easy Wins, and AI tips around the keywords you select. Once you choose them, the rest of your dashboard will unlock.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-primary/80">
-              Want to peek at the raw data first?
-            </p>
-            <Button
-              variant="outline"
-              onClick={() => setShowDashboardPreview(true)}
-            >
-              Preview metrics
-            </Button>
-          </CardContent>
-        </Card>
-      )}
-
-      <div
-        className={cn(
-          "space-y-6 transition-all duration-300",
-          shouldGateDashboard && "pointer-events-none opacity-40"
-        )}
-      >
-
-            {/* GSC Setup Alert */}
-            {gscAlert && (
-        <Card className="mb-6 border-red-200 bg-red-50">
-          <CardContent className="pt-6">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="h-5 w-5 text-red-600 mt-0.5 flex-shrink-0" />
-              <div className="flex-1">
-                <h3 className="text-lg font-semibold text-red-800 mb-2">
-                  {gscAlert.title}
-                </h3>
-                <p className="text-red-700 mb-4">
-                  {gscAlert.description}
-                </p>
-                <Button 
-                  onClick={() => {
-                    if (gscAlert.type === "no-property-selected") {
-                      router.push("/onboarding");
-                    } else {
-                      window.open("https://search.google.com/search-console", "_blank");
-                    }
-                  }}
-                  className="bg-red-600 hover:bg-red-700 text-white"
-                >
-                  {gscAlert.action}
-                </Button>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      )}
 
       <Alert className="mb-6 border-primary/20 bg-primary/5">
         <AlertCircle className="h-4 w-4" />
@@ -1642,218 +2295,7 @@ export default function Dashboard() {
             )}
           </CardContent>
         </Card>
-
-      </div>
-
-      {/* Generic Keyword Opportunities Row */}
-      {/* <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6"> */}
-        {/* Non-Branded Keywords Already Ranking */}
-        {/* <Card className="border-green-200 shadow-green-100">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  Generic Keywords Already Ranking
-                  <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full font-medium">
-                    Low Priority
-                  </span>
-                </CardTitle>
-                <CardDescription>
-                  Non-branded keywords you&apos;re already ranking for in the last {dateRange === "all" ? "year" : `${dateRange} days`} (showing top 4)
-                </CardDescription>
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/generic-keywords-ranking">See More</Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isGscConnected ? (
-              shouldShowLoader || isFilteringKeywords ? (
-                <div className="text-center py-8">
-                  <SquashBounceLoader size="lg" className="mb-4" />
-                  <p className="text-sm text-muted-foreground">
-                    {isFilteringKeywords ? 'AI is filtering keywords...' : 'Loading keywords...'}
-                  </p>
-                </div>
-              ) : nonBrandedKeywords.length === 0 ? (
-                <div className="text-center py-6">
-                  <div className="bg-muted inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
-                    <FileText className="w-6 h-6 text-muted-foreground" />
-                  </div>
-                  <p className="text-sm font-medium text-muted-foreground mb-1">
-                    No generic keywords found
-                  </p>
-                  <p className="text-xs text-muted-foreground">
-                    Most of your keywords appear to be branded
-                  </p>
-                </div>
-              ) : (
-                <div className="space-y-3">
-                  {nonBrandedKeywords.map((keyword, index) => (
-                    <div key={index} className="p-3 bg-white dark:bg-gray-800 rounded-lg border border-green-200">
-                      <div className="flex items-center justify-between mb-2">
-                        <h4 className="font-semibold text-green-800 dark:text-green-200 text-sm">
-                          &quot;{keyword.keyword}&quot;
-                        </h4>
-                        <span className="text-xs bg-green-100 text-green-700 px-2 py-1 rounded-full">
-                          Position {keyword.position}
-                        </span>
-                      </div>
-                      <div className="grid grid-cols-3 gap-2 text-xs text-muted-foreground">
-                        <div>
-                          <span className="font-medium text-green-600">{keyword.clicks}</span> clicks
-                        </div>
-                        <div>
-                          <span className="font-medium text-green-600">{keyword.impressions}</span> impressions
-                        </div>
-                        <div>
-                          <span className="font-medium text-green-600">{keyword.ctr}</span> CTR
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )
-            ) : (
-              <div className="text-center py-6">
-                <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
-                  <Unlink className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-medium mb-2">
-                  Connect Google Search Console
-                </h3>
-                <p className="text-muted-foreground text-sm mb-4">
-                  See your generic keywords that are already ranking
-                </p>
-                <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
-              </div>
-            )}
-          </CardContent>
-        </Card> */}
-
-        {/* Easy Win Opportunities Card */}
-        {/* <Card className="border-yellow-200 shadow-yellow-100">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
-                  Easy Win Opportunities
-                  <span className="text-xs bg-yellow-100 text-yellow-700 px-2 py-1 rounded-full font-medium">
-                    Medium Priority
-                  </span>
-                </CardTitle>
-                <CardDescription>
-                  Keywords close to ranking on Page 1 in the last {dateRange === "all" ? "year" : `${dateRange} days`}
-                </CardDescription>
-              </div>
-              <Button asChild variant="outline" size="sm">
-                <Link href="/easy-wins">See More</Link>
-              </Button>
-            </div>
-          </CardHeader>
-          <CardContent>
-            {isGscConnected ? (
-              shouldShowLoader ? (
-                <div className="text-center py-8">
-                  <SquashBounceLoader size="lg" className="mb-4" />
-                  <p className="text-sm text-muted-foreground">Loading opportunities...</p>
-                </div>
-              ) : easyWins.length === 0 ? (
-                <div className="text-center py-6">
-                  <div className="bg-green-100 dark:bg-green-900/20 inline-flex items-center justify-center w-12 h-12 rounded-full mb-3">
-                    <CheckCircle2 className="w-6 h-6 text-green-600" />
-                  </div>
-                  <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
-                    🎉 No easy wins needed!
-                  </p>
-                  <p className="text-xs text-green-600 dark:text-green-300">
-                    Your keywords are already performing well
-                  </p>
-                </div>
-              ) : (
-                <KeywordTable
-                  keywords={easyWins}
-                  title="Low Hanging Fruit"
-                  description="These keywords are on page 2 of search results. Focus on these for quick wins!"
-                  showPagination={false}
-                />
-              )
-            ) : (
-              <div className="text-center py-6">
-                <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
-                  <Unlink className="h-8 w-8 text-muted-foreground" />
-                </div>
-                <h3 className="text-lg font-medium mb-2">
-                  Connect Google Search Console
-                </h3>
-                <p className="text-muted-foreground text-sm mb-4">
-                  Find keywords close to ranking on page 1 for quick SEO wins
-                </p>
-                <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
-              </div>
-            )}
-            {focusKeywordsNotShownInEasyWins.length > 0 && (
-              <div className="mt-4 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-sm">
-                <p className="font-semibold mb-2">Focus keywords not in Easy Wins yet</p>
-                <p className="text-xs text-muted-foreground mb-3">
-                  These keywords are on your radar but aren&apos;t close to page one yet. Keep working on their pages so they move into Easy Wins.
-                </p>
-                <ul className="space-y-2">
-                  {focusKeywordsNotShownInEasyWins.map(({ keyword, data, page }) => (
-                    <li key={keyword} className="flex flex-col gap-1 rounded-sm bg-background/60 px-3 py-2">
-                      <div className="flex items-center gap-2">
-                        <span className="font-medium">{keyword}</span>
-                        <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
-                          Focus
-                        </Badge>
-                      </div>
-                      {data ? (
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>{data.impressions} impressions</span>
-                          <span>Pos. {data.position}</span>
-                          {(page || data.page) && (
-                            <a
-                              href={page || data.page}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#00BF63] underline"
-                            >
-                              View page
-                            </a>
-                          )}
-                        </div>
-                      ) : (
-                        <div className="flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                          <span>No Search Console data yet for this keyword.</span>
-                          {page && (
-                            <a
-                              href={page}
-                              target="_blank"
-                              rel="noopener noreferrer"
-                              className="text-[#00BF63] underline"
-                            >
-                              View page
-                            </a>
-                          )}
-                        </div>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </CardContent>
-        </Card> */}
-      {/* </div> */}
-
-      {/* Content Expansion Row - Show for all users */}
-      {/* {isGscConnected && (
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
-          <ContentExpansionCard gscKeywords={gscKeywords} />
-          <LongTailKeywordCard gscKeywords={gscKeywords} />
         </div>
-      )} */}
 
       {/* Bottom Row - Analytics */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
@@ -1941,8 +2383,9 @@ export default function Dashboard() {
         </Card>
       </div>
 
-      </div>
+    
 
+  </section>
     </MainLayout>
   );
 }
