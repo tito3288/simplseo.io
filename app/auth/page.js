@@ -114,14 +114,14 @@ const Auth = () => {
             <CardTitle>{isLogin ? "Log In" : "Create Account"}</CardTitle>
             <CardDescription>
               {isLogin
-                ? "Welcome back! Enter your details to access your account."
-                : "Get started with your free SEO optimization account."}
+                ? "Welcome back! Sign in with your Google account to access your dashboard."
+                : "Get started! Create an account with your Google account to begin optimizing your SEO."}
             </CardDescription>
           </CardHeader>
           <CardContent>
             <Button
               variant="outline"
-              className="w-full mb-4 flex items-center justify-center gap-2"
+              className="w-full mb-6 flex items-center justify-center gap-2"
               type="button"
               onClick={handleGoogleLogin}
               disabled={isLoading}
@@ -134,7 +134,8 @@ const Auth = () => {
               Continue with Google
             </Button>
 
-            <form onSubmit={handleSubmit} className="space-y-4">
+            {/* Email/Password form - Hidden but logic preserved for future use */}
+            <form onSubmit={handleSubmit} className="space-y-4 hidden">
               <div className="space-y-2">
                 <Label htmlFor="email">Email</Label>
                 <Input
@@ -170,6 +171,7 @@ const Auth = () => {
               </Button>
             </form>
 
+            {/* Toggle between login/signup */}
             <div className="mt-6 text-center">
               <p className="text-sm text-muted-foreground">
                 {isLogin

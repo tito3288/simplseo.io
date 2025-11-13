@@ -21,9 +21,16 @@ const WEIGHTS = {
 const normalizeCandidateUrl = (url, origin) => {
   if (!url) return null;
   try {
+    const originUrl = new URL(origin);
+    const originHostname = originUrl.hostname.replace(/^www\./, ""); // Normalize: remove www
+    
     const normalized = new URL(url, origin).toString();
     const cleaned = normalized.split("#")[0].replace(/\/$/, "");
-    if (!cleaned.startsWith(origin)) {
+    const cleanedUrl = new URL(cleaned);
+    const cleanedHostname = cleanedUrl.hostname.replace(/^www\./, ""); // Normalize: remove www
+    
+    // Compare hostnames (without www) instead of full origins
+    if (cleanedHostname !== originHostname) {
       return null;
     }
     return cleaned;

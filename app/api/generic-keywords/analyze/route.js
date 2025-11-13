@@ -1,6 +1,18 @@
 import { NextResponse } from "next/server";
 import { db } from "../../../lib/firebaseAdmin";
 
+// Helper function to sanitize URL for use in Firestore document IDs
+function sanitizeUrlForCache(url) {
+  if (!url) return '';
+  // Remove protocol (http:// or https://)
+  let sanitized = url.replace(/^https?:\/\//, '');
+  // Replace any remaining special characters with underscores
+  sanitized = sanitized.replace(/[^a-zA-Z0-9]/g, '_');
+  // Remove leading/trailing underscores
+  sanitized = sanitized.replace(/^_+|_+$/g, '');
+  return sanitized;
+}
+
 export async function POST(req) {
   try {
     const { gscKeywords, businessType, businessLocation, websiteUrl, customBusinessType, userId } = await req.json();
@@ -19,7 +31,8 @@ export async function POST(req) {
 
     // Check for cached results first
     if (userId) {
-      const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${websiteUrl}`;
+      const sanitizedUrl = sanitizeUrlForCache(websiteUrl);
+      const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${sanitizedUrl}`;
       console.log("🔍 Checking cache for key:", cacheKey);
       
       try {
@@ -117,7 +130,8 @@ export async function POST(req) {
 
     // Cache the results if userId is provided
     if (userId) {
-      const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${websiteUrl}`;
+      const sanitizedUrl = sanitizeUrlForCache(websiteUrl);
+      const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${sanitizedUrl}`;
       console.log("💾 Caching generic keywords data for key:", cacheKey);
       
       try {

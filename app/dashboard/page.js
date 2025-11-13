@@ -40,6 +40,7 @@ import {
   FileText,
   Plus,
   X,
+  RefreshCw,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
@@ -95,7 +96,6 @@ export default function Dashboard() {
   const [isSavingFocusKeywords, setIsSavingFocusKeywords] = useState(false);
   const [hasAutoSelectedFocusKeywords, setHasAutoSelectedFocusKeywords] =
     useState(false);
-  const [showDashboardPreview, setShowDashboardPreview] = useState(false);
   const [crawlPages, setCrawlPages] = useState([]);
   const [isLoadingCrawlReview, setIsLoadingCrawlReview] = useState(false);
   const [hasLoadedCrawlReview, setHasLoadedCrawlReview] = useState(false);
@@ -148,10 +148,18 @@ export default function Dashboard() {
         const base = data.websiteUrl.startsWith("http")
           ? data.websiteUrl
           : `https://${data.websiteUrl}`;
-        const baseOrigin = new URL(base).origin;
+        const baseUrl = new URL(base);
+        const baseHostname = baseUrl.hostname.replace(/^www\./, ""); // Normalize: remove www
+        const baseOrigin = baseUrl.origin;
+        
         const normalized = new URL(raw, baseOrigin).toString();
         const cleaned = normalized.split("#")[0].replace(/\/$/, "");
-        if (!cleaned.startsWith(baseOrigin)) return null;
+        const cleanedUrl = new URL(cleaned);
+        const cleanedHostname = cleanedUrl.hostname.replace(/^www\./, ""); // Normalize: remove www
+        
+        // Compare hostnames (without www) instead of full origins
+        if (cleanedHostname !== baseHostname) return null;
+        
         return cleaned;
       } catch {
         return null;
@@ -222,13 +230,6 @@ export default function Dashboard() {
     [user?.id, isLoadingCrawlReview, hasLoadedCrawlReview]
   );
   const hasFocusKeywords = focusKeywords.length > 0;
-  const shouldGateDashboard =
-    isGscConnected && !hasFocusKeywords && !showDashboardPreview;
-  useEffect(() => {
-    if (hasFocusKeywords) {
-      setShowDashboardPreview(true);
-    }
-  }, [hasFocusKeywords]);
   useEffect(() => {
     if (
       data?.siteCrawlStatus === "completed" ||
@@ -568,7 +569,7 @@ export default function Dashboard() {
   // Use minimum loading time for professional UX
   const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
 
-  const generateMetaDescription = async (pageUrl) => {
+  const generateMetaDescription = useCallback(async (pageUrl) => {
     try {
       const res = await fetch("/api/seo-assistant/meta-description", {
         method: "POST",
@@ -596,9 +597,9 @@ export default function Dashboard() {
       console.error("❌ Failed to fetch AI meta description", err);
       return "Meta description could not be generated.";
     }
-  };
+  }, [data, lowCtrPages, aiTips, user?.id]);
 
-  const generateMetaTitle = async (pageUrl) => {
+  const generateMetaTitle = useCallback(async (pageUrl) => {
     try {
       const res = await fetch("/api/seo-assistant/meta-title", {
         method: "POST",
@@ -623,7 +624,7 @@ export default function Dashboard() {
       console.error("❌ Failed to fetch AI meta title", err);
       return "Suggested Meta Title";
     }
-  };
+  }, [data, lowCtrPages, aiTips, user?.id]);
 
   useEffect(() => {
     const fetchTitlesAndDescriptions = async () => {
@@ -685,6 +686,73 @@ export default function Dashboard() {
     loadFocusKeywords();
   }, [user?.id]);
 
+  // Define buildAssignmentsFromKeywords before using it in useEffect
+  const buildAssignmentsFromKeywords = useCallback((
+    keywordsList = [],
+    currentAssignments = new Map(),
+    rows = []
+  ) => {
+    if (!keywordsList.length || !rows.length) {
+      return new Map();
+    }
+
+    const next = new Map();
+    const reservedPages = new Set();
+    const previousByKeyword = new Map();
+
+    currentAssignments?.forEach((keyword, pageKey) => {
+      if (!keyword) return;
+      previousByKeyword.set(keyword.toLowerCase(), pageKey);
+    });
+
+    const rowsByKeyword = new Map();
+    rows.forEach((row) => {
+      const key = row.keyword?.toLowerCase();
+      if (!key) return;
+      if (!rowsByKeyword.has(key)) {
+        rowsByKeyword.set(key, []);
+      }
+      rowsByKeyword.get(key).push(row);
+    });
+
+    rowsByKeyword.forEach((list) => {
+      list.sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
+    });
+
+    keywordsList.forEach((keyword) => {
+      const lower = keyword?.toLowerCase();
+      if (!lower) return;
+
+      const keywordRows = rowsByKeyword.get(lower) || [];
+      if (!keywordRows.length) return;
+
+      let chosenPageKey = previousByKeyword.get(lower);
+
+      if (chosenPageKey) {
+        const stillValid = keywordRows.some(
+          (row) => normalizePageKey(row.page) === chosenPageKey
+        );
+        if (!stillValid || reservedPages.has(chosenPageKey)) {
+          chosenPageKey = null;
+        }
+      }
+
+      if (!chosenPageKey) {
+        const candidate = keywordRows.find(
+          (row) => !reservedPages.has(normalizePageKey(row.page))
+        );
+        chosenPageKey = normalizePageKey((candidate || keywordRows[0]).page);
+      }
+
+      if (chosenPageKey && !reservedPages.has(chosenPageKey)) {
+        next.set(chosenPageKey, keyword);
+        reservedPages.add(chosenPageKey);
+      }
+    });
+
+    return next;
+  }, []); // Empty deps since it's a pure function
+
   useEffect(() => {
     if (!gscKeywords.length) {
       if (focusKeywords.length === 0 && focusKeywordByPage.size) {
@@ -696,7 +764,344 @@ export default function Dashboard() {
     setFocusKeywordByPage((prev) =>
       buildAssignmentsFromKeywords(focusKeywords, prev, gscKeywords)
     );
-  }, [gscKeywords, focusKeywords, buildAssignmentsFromKeywords, focusKeywordByPage.size]);
+  }, [gscKeywords, focusKeywords, buildAssignmentsFromKeywords]);
+
+  // Define fetchSearchAnalyticsData before fetchAndMatchGSC (which depends on it)
+  const fetchSearchAnalyticsData = useCallback(async (siteUrl, token, range) => {
+    setIsLoadingGscData(true);
+    const today = new Date();
+    const startDate = new Date();
+    if (range === "all") {
+      startDate.setFullYear(today.getFullYear() - 1);
+    } else {
+      startDate.setDate(today.getDate() - parseInt(range));
+    }
+
+    const formatDate = (d) => d.toISOString().split("T")[0];
+    const from = formatDate(startDate);
+    const to = formatDate(today);
+
+    try {
+      // 🔹 Fetch keyword + page performance
+      const keywordRes = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+          siteUrl
+        )}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: from,
+            endDate: to,
+            dimensions: ["query", "page"],
+            rowLimit: 500,
+          }),
+        }
+      );
+
+      const keywordJson = await keywordRes.json();
+
+      console.log("🔍 GSC API Response:", {
+        totalRows: keywordJson.rows?.length || 0,
+        requestedLimit: 500,
+        hasRows: !!keywordJson.rows
+      });
+
+      if (keywordJson.rows) {
+        const formatted = keywordJson.rows.map((row) => ({
+          keyword: row.keys[0].replace(/^\[|\]$/g, ""),
+          page: row.keys[1],
+          clicks: row.clicks,
+          impressions: row.impressions,
+          position: Math.round(row.position),
+          ctr: `${(row.ctr * 100).toFixed(1)}%`,
+        }));
+
+        console.log("✅ Setting GSC keywords (dashboard metrics):", {
+          totalKeywords: formatted.length,
+          uniquePages: new Set(formatted.map(f => f.page)).size,
+          uniqueKeywords: new Set(formatted.map(f => f.keyword)).size,
+          dateRange: range,
+          sampleKeywords: formatted.slice(0, 5).map(f => f.keyword)
+        });
+
+        // Merge dashboard metrics keywords (don't overwrite focus keywords if they exist)
+        setGscKeywords((prevKeywords) => {
+          // If focus keywords already loaded, merge dashboard metrics into them
+          // Otherwise, use dashboard metrics as base
+          if (prevKeywords.length === 0) {
+            return formatted;
+          }
+          
+          // Merge: dashboard metrics for recent data, keep focus keywords for older data
+          const existingMap = new Map();
+          prevKeywords.forEach((kw) => {
+            const key = `${kw.keyword?.toLowerCase()}_${kw.page}`;
+            existingMap.set(key, kw);
+          });
+
+          // Add/update with dashboard metrics (recent data takes precedence for metrics)
+          formatted.forEach((kw) => {
+            const key = `${kw.keyword?.toLowerCase()}_${kw.page}`;
+            existingMap.set(key, kw);
+          });
+
+          return Array.from(existingMap.values());
+        });
+
+        // 🔹 Top pages by clicks
+        const pageClickMap = {};
+        formatted.forEach((row) => {
+          pageClickMap[row.page] = (pageClickMap[row.page] || 0) + row.clicks;
+        });
+
+        const sortedPages = Object.entries(pageClickMap)
+          .map(([page, clicks]) => ({ page, clicks }))
+          .sort((a, b) => b.clicks - a.clicks)
+          .slice(0, 5);
+
+        setTopPages(sortedPages);
+
+        // 🔹 Low CTR pages
+        const lowCtr = formatted.filter(
+          (kw) =>
+            parseFloat(kw.ctr.replace("%", "")) <= 2 && kw.impressions > 20
+        );
+
+        const grouped = Object.values(
+          lowCtr.reduce((acc, item) => {
+            if (!acc[item.page]) {
+              acc[item.page] = { ...item, clicks: 0, impressions: 0, keywords: new Set() };
+            }
+            acc[item.page].clicks += item.clicks;
+            acc[item.page].impressions += item.impressions;
+            if (item.keyword) {
+              acc[item.page].keywords.add(item.keyword);
+            }
+            return acc;
+          }, {})
+        ).map((entry) => ({
+          ...entry,
+          keywords: Array.from(entry.keywords || []),
+        }));
+
+        setLowCtrPages(grouped);
+
+        // 🔹 AI tips
+        const ai = grouped.map((kw) => {
+          return `Your page <a href="${kw.page}" class="underline">${kw.page}</a> is ranking but not getting clicks. Consider improving your title or meta description.`;
+        });
+
+        setAiTips(ai);
+
+        if (
+          initialFocusKeywordsLoaded &&
+          !hasAutoSelectedFocusKeywords &&
+          focusKeywords.length === 0 &&
+          user?.id
+        ) {
+          try {
+            const defaultAssignments = new Map();
+            const sortedCandidates = formatted
+              .filter((kw) => kw.clicks >= 1 && kw.impressions >= 20)
+              .sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
+
+            sortedCandidates.forEach((kw) => {
+              const keyword = kw.keyword;
+              if (!keyword) return;
+              const pageKey = normalizePageKey(kw.page);
+              if (defaultAssignments.has(pageKey)) return;
+              defaultAssignments.set(pageKey, keyword);
+            });
+
+            const defaultEntries = assignmentsToEntries(defaultAssignments);
+
+            if (defaultEntries.length > 0) {
+              await saveFocusKeywords(user.id, defaultEntries);
+              setFocusKeywordByPage(defaultAssignments);
+              setFocusKeywords(defaultEntries.map((entry) => entry.keyword));
+              setHasAutoSelectedFocusKeywords(true);
+            }
+          } catch (error) {
+            console.error("Failed to save initial focus keywords:", error);
+          }
+        }
+      } else {
+        setGscKeywords([]);
+        setTopPages([]);
+      }
+
+      // 🔹 Fetch daily impressions for the chart
+      const trendsRes = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+          siteUrl
+        )}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: from,
+            endDate: to,
+            dimensions: ["date"],
+            rowLimit: 1000,
+          }),
+        }
+      );
+
+      const trendsJson = await trendsRes.json();
+
+      if (trendsJson.rows) {
+        const trends = trendsJson.rows.map((row) => {
+          const dateObj = new Date(row.keys[0]);
+          const formattedDate = `${
+            dateObj.getMonth() + 1
+          }/${dateObj.getDate()}/${dateObj.getFullYear().toString().slice(-2)}`;
+          return {
+            date: formattedDate,
+            impressions: row.impressions,
+          };
+        });
+
+        setGscImpressionTrends(trends);
+      } else {
+        setGscImpressionTrends([]);
+      }
+    } catch (err) {
+      console.error("❌ Failed to fetch GSC data:", err);
+    } finally {
+      setIsLoadingGscData(false);
+      setIsRefreshingData(false); // Reset refreshing state after data fetch
+    }
+  }, [initialFocusKeywordsLoaded, hasAutoSelectedFocusKeywords, focusKeywords.length, user?.id]);
+
+  // Fetch focus keywords with 90-day period (separate from dashboard metrics)
+  const fetchFocusKeywords = useCallback(async (siteUrl, token) => {
+    try {
+      const today = new Date();
+      const startDate = new Date();
+      startDate.setDate(today.getDate() - 90); // Fixed 90-day period for focus keywords
+
+      const formatDate = (d) => d.toISOString().split("T")[0];
+      const from = formatDate(startDate);
+      const to = formatDate(today);
+
+      console.log("🔑 Fetching focus keywords with 90-day period:", { from, to });
+
+      const keywordRes = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+          siteUrl
+        )}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: from,
+            endDate: to,
+            dimensions: ["query", "page"],
+            rowLimit: 500,
+          }),
+        }
+      );
+
+      const keywordJson = await keywordRes.json();
+
+      console.log("🔑 Focus Keywords API Response:", {
+        totalRows: keywordJson.rows?.length || 0,
+        requestedLimit: 500,
+        hasRows: !!keywordJson.rows,
+        dateRange: "90 days"
+      });
+
+      if (keywordJson.rows) {
+        const formatted = keywordJson.rows.map((row) => ({
+          keyword: row.keys[0].replace(/^\[|\]$/g, ""),
+          page: row.keys[1],
+          clicks: row.clicks,
+          impressions: row.impressions,
+          position: Math.round(row.position),
+          ctr: `${(row.ctr * 100).toFixed(1)}%`,
+        }));
+
+        console.log("✅ Focus Keywords fetched:", {
+          totalKeywords: formatted.length,
+          uniquePages: new Set(formatted.map(f => f.page)).size,
+          uniqueKeywords: new Set(formatted.map(f => f.keyword)).size,
+        });
+
+        // Merge with existing gscKeywords, preferring focus keywords data
+        setGscKeywords((prevKeywords) => {
+          // Create a map of existing keywords by key (keyword+page)
+          const existingMap = new Map();
+          prevKeywords.forEach((kw) => {
+            const key = `${kw.keyword?.toLowerCase()}_${kw.page}`;
+            existingMap.set(key, kw);
+          });
+
+          // Add/update with focus keywords (90-day data takes precedence)
+          formatted.forEach((kw) => {
+            const key = `${kw.keyword?.toLowerCase()}_${kw.page}`;
+            existingMap.set(key, kw);
+          });
+
+          return Array.from(existingMap.values());
+        });
+      }
+    } catch (error) {
+      console.error("❌ Failed to fetch focus keywords:", error);
+      // Don't throw - let dashboard metrics still load
+    }
+  }, []);
+
+  // Define fetchAndMatchGSC before the useEffect that uses it
+  const fetchAndMatchGSC = useCallback(async (token) => {
+    if (!user?.id) return;
+    
+    // Use the GSC property selected during onboarding
+    const selectedProperty = data?.gscProperty;
+    
+    if (selectedProperty) {
+      console.log("🎯 Using selected GSC property:", selectedProperty);
+      
+      // Store site URL in Firestore
+      const tokenManager = createGSCTokenManager(user.id);
+      await tokenManager.storeTokens(null, token, selectedProperty);
+      
+      // Fetch dashboard metrics with user's selected date range
+      fetchSearchAnalyticsData(selectedProperty, token, dateRange);
+      
+      // Fetch focus keywords with fixed 90-day period (separate from dashboard metrics)
+      fetchFocusKeywords(selectedProperty, token);
+    } else {
+      console.log("❌ No GSC property selected during onboarding");
+      
+      if (!hasShownGscError) {
+        toast.error("No GSC Property Selected", {
+          description: "Please complete the onboarding process and select a Google Search Console property.",
+          duration: 30000,
+          style: {
+            backgroundColor: '#fef2f2',
+            border: '1px solid #fecaca'
+          }
+        });
+        setHasShownGscError(true);
+        setGscAlert({
+          type: "no-property-selected",
+          title: "No GSC Property Selected",
+          description: "Please complete the onboarding process and select a Google Search Console property.",
+          action: "Complete Onboarding"
+        });
+      }
+    }
+  }, [user?.id, data?.gscProperty, dateRange, hasShownGscError, fetchSearchAnalyticsData, fetchFocusKeywords]);
 
   useEffect(() => {
     if (isLoading || !user?.id) return;
@@ -930,43 +1335,6 @@ export default function Dashboard() {
     filterKeywordsWithAI();
   }, [gscKeywords, data?.businessName, data?.businessType, user?.id, initialFocusKeywordsLoaded]);
 
-  const fetchAndMatchGSC = async (token) => {
-    if (!user?.id) return;
-    
-    // Use the GSC property selected during onboarding
-    const selectedProperty = data?.gscProperty;
-    
-    if (selectedProperty) {
-      console.log("🎯 Using selected GSC property:", selectedProperty);
-      
-      // Store site URL in Firestore
-      const tokenManager = createGSCTokenManager(user.id);
-      await tokenManager.storeTokens(null, token, selectedProperty);
-      
-      fetchSearchAnalyticsData(selectedProperty, token, dateRange);
-    } else {
-      console.log("❌ No GSC property selected during onboarding");
-      
-      if (!hasShownGscError) {
-        toast.error("No GSC Property Selected", {
-          description: "Please complete the onboarding process and select a Google Search Console property.",
-          duration: 30000,
-          style: {
-            backgroundColor: '#fef2f2',
-            border: '1px solid #fecaca'
-          }
-        });
-        setHasShownGscError(true);
-        setGscAlert({
-          type: "no-property-selected",
-          title: "No GSC Property Selected",
-          description: "Please complete the onboarding process and select a Google Search Console property.",
-          action: "Complete Onboarding"
-        });
-      }
-    }
-  };
-
   const requestGSCAuthToken = async () => {
     // Debug: Log what we're trying to do
     console.log("🔐 Starting GSC OAuth flow...");
@@ -1066,183 +1434,6 @@ export default function Dashboard() {
     window.addEventListener('message', handleMessage);
   };
 
-  const fetchSearchAnalyticsData = async (siteUrl, token, range) => {
-    setIsLoadingGscData(true);
-    const today = new Date();
-    const startDate = new Date();
-    if (range === "all") {
-      startDate.setFullYear(today.getFullYear() - 1);
-    } else {
-      startDate.setDate(today.getDate() - parseInt(range));
-    }
-
-    const formatDate = (d) => d.toISOString().split("T")[0];
-    const from = formatDate(startDate);
-    const to = formatDate(today);
-
-    try {
-      // 🔹 Fetch keyword + page performance
-      const keywordRes = await fetch(
-        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
-          siteUrl
-        )}/searchAnalytics/query`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            startDate: from,
-            endDate: to,
-            dimensions: ["query", "page"],
-            rowLimit: 100,
-          }),
-        }
-      );
-
-      const keywordJson = await keywordRes.json();
-
-      if (keywordJson.rows) {
-        const formatted = keywordJson.rows.map((row) => ({
-          keyword: row.keys[0].replace(/^\[|\]$/g, ""),
-          page: row.keys[1],
-          clicks: row.clicks,
-          impressions: row.impressions,
-          position: Math.round(row.position),
-          ctr: `${(row.ctr * 100).toFixed(1)}%`,
-        }));
-
-        setGscKeywords(formatted);
-
-        // 🔹 Top pages by clicks
-        const pageClickMap = {};
-        formatted.forEach((row) => {
-          pageClickMap[row.page] = (pageClickMap[row.page] || 0) + row.clicks;
-        });
-
-        const sortedPages = Object.entries(pageClickMap)
-          .map(([page, clicks]) => ({ page, clicks }))
-          .sort((a, b) => b.clicks - a.clicks)
-          .slice(0, 5);
-
-        setTopPages(sortedPages);
-
-        // 🔹 Low CTR pages
-        const lowCtr = formatted.filter(
-          (kw) =>
-            parseFloat(kw.ctr.replace("%", "")) <= 2 && kw.impressions > 20
-        );
-
-        const grouped = Object.values(
-          lowCtr.reduce((acc, item) => {
-            if (!acc[item.page]) {
-              acc[item.page] = { ...item, clicks: 0, impressions: 0, keywords: new Set() };
-            }
-            acc[item.page].clicks += item.clicks;
-            acc[item.page].impressions += item.impressions;
-            if (item.keyword) {
-              acc[item.page].keywords.add(item.keyword);
-            }
-            return acc;
-          }, {})
-        ).map((entry) => ({
-          ...entry,
-          keywords: Array.from(entry.keywords || []),
-        }));
-
-        setLowCtrPages(grouped);
-
-        // 🔹 AI tips
-        const ai = grouped.map((kw) => {
-          return `Your page <a href="${kw.page}" class="underline">${kw.page}</a> is ranking but not getting clicks. Consider improving your title or meta description.`;
-        });
-
-        setAiTips(ai);
-
-        if (
-          initialFocusKeywordsLoaded &&
-          !hasAutoSelectedFocusKeywords &&
-          focusKeywords.length === 0 &&
-          user?.id
-        ) {
-          try {
-            const defaultAssignments = new Map();
-            const sortedCandidates = formatted
-              .filter((kw) => kw.clicks >= 1 && kw.impressions >= 20)
-              .sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
-
-            sortedCandidates.forEach((kw) => {
-              const keyword = kw.keyword;
-              if (!keyword) return;
-              const pageKey = normalizePageKey(kw.page);
-              if (defaultAssignments.has(pageKey)) return;
-              defaultAssignments.set(pageKey, keyword);
-            });
-
-            const defaultEntries = assignmentsToEntries(defaultAssignments);
-
-            if (defaultEntries.length > 0) {
-              await saveFocusKeywords(user.id, defaultEntries);
-              setFocusKeywordByPage(defaultAssignments);
-              setFocusKeywords(defaultEntries.map((entry) => entry.keyword));
-              setHasAutoSelectedFocusKeywords(true);
-            }
-          } catch (error) {
-            console.error("Failed to save initial focus keywords:", error);
-          }
-        }
-      } else {
-        setGscKeywords([]);
-        setTopPages([]);
-      }
-
-      // 🔹 Fetch daily impressions for the chart
-      const trendsRes = await fetch(
-        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
-          siteUrl
-        )}/searchAnalytics/query`,
-        {
-          method: "POST",
-          headers: {
-            Authorization: `Bearer ${token}`,
-            "Content-Type": "application/json",
-          },
-          body: JSON.stringify({
-            startDate: from,
-            endDate: to,
-            dimensions: ["date"],
-            rowLimit: 1000,
-          }),
-        }
-      );
-
-      const trendsJson = await trendsRes.json();
-
-      if (trendsJson.rows) {
-        const trends = trendsJson.rows.map((row) => {
-          const dateObj = new Date(row.keys[0]);
-          const formattedDate = `${
-            dateObj.getMonth() + 1
-          }/${dateObj.getDate()}/${dateObj.getFullYear().toString().slice(-2)}`;
-          return {
-            date: formattedDate,
-            impressions: row.impressions,
-          };
-        });
-
-        setGscImpressionTrends(trends);
-      } else {
-        setGscImpressionTrends([]);
-      }
-    } catch (err) {
-      console.error("❌ Failed to fetch GSC data:", err);
-    } finally {
-      setIsLoadingGscData(false);
-      setIsRefreshingData(false); // Reset refreshing state after data fetch
-    }
-  };
-
   const gscKeywordsWithFocus = useMemo(
     () =>
       gscKeywords.map((kw) => ({
@@ -1271,71 +1462,6 @@ export default function Dashboard() {
     return map;
   }, [gscKeywords]);
 
-  const buildAssignmentsFromKeywords = (
-    keywordsList = [],
-    currentAssignments = new Map(),
-    rows = []
-  ) => {
-    if (!keywordsList.length || !rows.length) {
-      return new Map();
-    }
-
-    const next = new Map();
-    const reservedPages = new Set();
-    const previousByKeyword = new Map();
-
-    currentAssignments?.forEach((keyword, pageKey) => {
-      if (!keyword) return;
-      previousByKeyword.set(keyword.toLowerCase(), pageKey);
-    });
-
-    const rowsByKeyword = new Map();
-    rows.forEach((row) => {
-      const key = row.keyword?.toLowerCase();
-      if (!key) return;
-      if (!rowsByKeyword.has(key)) {
-        rowsByKeyword.set(key, []);
-      }
-      rowsByKeyword.get(key).push(row);
-    });
-
-    rowsByKeyword.forEach((list) => {
-      list.sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
-    });
-
-    keywordsList.forEach((keyword) => {
-      const lower = keyword?.toLowerCase();
-      if (!lower) return;
-
-      const keywordRows = rowsByKeyword.get(lower) || [];
-      if (!keywordRows.length) return;
-
-      let chosenPageKey = previousByKeyword.get(lower);
-
-      if (chosenPageKey) {
-        const stillValid = keywordRows.some(
-          (row) => normalizePageKey(row.page) === chosenPageKey
-        );
-        if (!stillValid || reservedPages.has(chosenPageKey)) {
-          chosenPageKey = null;
-        }
-      }
-
-      if (!chosenPageKey) {
-        const candidate = keywordRows.find(
-          (row) => !reservedPages.has(normalizePageKey(row.page))
-        );
-        chosenPageKey = normalizePageKey((candidate || keywordRows[0]).page);
-      }
-
-      if (chosenPageKey && !reservedPages.has(chosenPageKey)) {
-        next.set(chosenPageKey, keyword);
-        reservedPages.add(chosenPageKey);
-      }
-    });
-
-    return next;
-  };
 
   const easyWins = useMemo(() => {
     const filtered = gscKeywordsWithFocus.filter((kw) => {
@@ -1585,6 +1711,26 @@ export default function Dashboard() {
     }
   };
 
+  const handleRefreshKeywords = async () => {
+    if (!user?.id || !gscAccessToken || !isGscConnected) {
+      toast.error("Please connect Google Search Console first.");
+      return;
+    }
+
+    try {
+      console.log("🔄 Refresh button clicked - starting refresh...");
+      setIsRefreshingData(true);
+      toast.info("Refreshing keywords with updated limit...");
+      await fetchAndMatchGSC(gscAccessToken);
+      console.log("✅ Refresh complete");
+      toast.success("Keywords refreshed! You should see more options now.");
+    } catch (error) {
+      console.error("Failed to refresh keywords:", error);
+      toast.error("Failed to refresh keywords. Please try again.");
+    } finally {
+      setIsRefreshingData(false);
+    }
+  };
 
   const stripHtmlTags = (html) => {
     if (typeof window === "undefined") return html;
@@ -1835,7 +1981,7 @@ export default function Dashboard() {
         )}
         {focusKeywords.length === 0 && (
           <Alert className="mt-4 border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
-            <Loader2 className="h-4 w-4 animate-spin text-blue-600" />
+            <AlertCircle className="h-4 w-4 text-blue-600" />
             <AlertTitle>Let&apos;s pick focus keywords</AlertTitle>
             <AlertDescription>
               Choose the keywords you want to improve first. We&apos;ll personalize the
@@ -1856,14 +2002,26 @@ export default function Dashboard() {
             <CardHeader className="pb-2">
               <CardTitle className="flex items-center justify-between">
                 <span>Choose Your Focus Keywords</span>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={defaultFocusKeywords}
-                  disabled={isFilteringKeywords || isSavingFocusKeywords}
-                >
-                  Smart Suggest
-                </Button>
+                <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleRefreshKeywords}
+                    disabled={isRefreshingData || isLoadingGscData || !isGscConnected}
+                    title="Refresh keywords from Google Search Console"
+                  >
+                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingData || isLoadingGscData ? 'animate-spin' : ''}`} />
+                    Refresh
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={defaultFocusKeywords}
+                    disabled={isFilteringKeywords || isSavingFocusKeywords}
+                  >
+                    Smart Suggest
+                  </Button>
+                </div>
               </CardTitle>
               <CardDescription>
                 Choose the keywords that matter most for each page so the rest of the dashboard can highlight them first.
@@ -1882,29 +2040,6 @@ export default function Dashboard() {
           </Card>
         )}
 
-        {shouldGateDashboard && (
-          <Card className="mb-6 border-dashed border-primary/40 bg-primary/5">
-            <CardHeader>
-              <CardTitle className="flex flex-col gap-2 text-primary">
-                Start by picking your focus keywords
-              </CardTitle>
-              <CardDescription className="text-primary/80">
-                We&apos;ll tailor Low CTR fixes, Easy Wins, and AI tips around the keywords you select. Once you choose them, the rest of your dashboard will unlock.
-              </CardDescription>
-            </CardHeader>
-            <CardContent className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <p className="text-sm text-primary/80">
-                Want to peek at the raw data first?
-              </p>
-              <Button
-                variant="outline"
-                onClick={() => setShowDashboardPreview(true)}
-              >
-                Preview metrics
-              </Button>
-            </CardContent>
-          </Card>
-        )}
 
         {/* GSC Setup Alert */}
         {gscAlert && (

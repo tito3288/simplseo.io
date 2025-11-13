@@ -245,7 +245,7 @@ const OnboardingWizard = () => {
                   <Label htmlFor="name">Your Name <span className="text-red-500">*</span></Label>
                   <Input
                     id="name"
-                    placeholder="e.g. Bryan"
+                    placeholder="e.g. Bryan Arambula"
                     value={data.name || ""}
                     onChange={(e) => updateData({ name: e.target.value })}
                     required
@@ -362,7 +362,7 @@ const OnboardingWizard = () => {
                   <Label htmlFor="businessLocation">Business Location <span className="text-red-500">*</span></Label>
                   <Input
                     id="businessLocation"
-                    placeholder="City, State or ZIP Code"
+                    placeholder="e.g. Seattle, WA"
                     value={data.businessLocation}
                     onChange={(e) =>
                       updateData({ businessLocation: e.target.value })
