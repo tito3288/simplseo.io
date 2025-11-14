@@ -1792,7 +1792,7 @@ export default function Dashboard() {
                 <p className="text-sm font-medium text-foreground">
                   {needsCrawlReview
                     ? "Finish this step to personalize your SEO Mentor."
-                    : "Keep or remove pages anytime—your SEO Mentor uses this list for guidance."}
+                    : "Your SEO Mentor uses the pages you select for guidance."}
                 </p>
 
                 {crawlPages.length > 0 ? (
@@ -2242,10 +2242,10 @@ export default function Dashboard() {
                     <CheckCircle2 className="w-6 h-6 text-green-600" />
                   </div>
                   <p className="text-sm font-medium text-green-800 dark:text-green-200 mb-1">
-                    🎉 No issues found!
+                  Great performance so far
                   </p>
                   <p className="text-xs text-green-600 dark:text-green-300">
-                    Your pages are getting great click-through rates
+                  Click "See More" to optimize the focus keywords you selected
                   </p>
                 </div>
               ) : (
@@ -2330,7 +2330,7 @@ export default function Dashboard() {
               <div className="mt-4 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-sm">
                 <p className="font-semibold mb-2">Focus keywords not showing up here yet</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  These keywords are on your focus list, but they haven&apos;t hit the Low CTR threshold. Keep optimizing their pages so they start appearing here.
+                  These keywords are on your focus list, but they haven&apos;t hit the Low CTR threshold. Click "See More" to optimize these pages.
                 </p>
                 <ul className="space-y-2">
                   {focusKeywordsNotShownLowCtr.map(({ keyword, data, page }) => (

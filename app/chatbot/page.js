@@ -508,7 +508,9 @@ export default function Chatbot() {
           <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
             <div className="text-center w-full max-w-2xl">
               <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6 sm:mb-8">
-                <SquashBounceLoader size="lg" className="text-green-500" />
+                <div className="chatbot-bounce-wrapper">
+                  <SquashBounceLoader size="lg" className="text-green-500" />
+                </div>
                 <h1 className="text-2xl sm:text-3xl font-semibold text-foreground px-4">Loading your SEO data...</h1>
               </div>
               <p className="text-muted-foreground mb-4">
@@ -744,15 +746,17 @@ export default function Chatbot() {
           <div className="flex-1 flex flex-col overflow-hidden">
             {messages.length === 0 ? (
               /* Welcome State - Centered when no messages */
-              <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6">
+              <div className="flex-1 flex flex-col items-center justify-center px-4 sm:px-6 -mt-34 sm:-mt-42">
                 <div className="text-center w-full max-w-2xl">
-                  <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-6 sm:mb-8">
-                    <SquashBounceLoader size="lg" className="text-green-500" />
+                  <div className="flex flex-col sm:flex-row items-center justify-center space-y-4 sm:space-y-0 sm:space-x-4 mb-4 sm:mb-5">
+                    <div className="chatbot-bounce-wrapper">
+                      <SquashBounceLoader size="lg" className="text-green-500" />
+                    </div>
                     <h1 className="text-2xl sm:text-3xl font-semibold text-foreground px-4">{currentTitle}</h1>
                   </div>
                   
                   {/* Input Field - Same layout as conversation */}
-                  <div className="mb-6 sm:mb-8 w-full">
+                  <div className="mb-4 sm:mb-5 w-full">
                     <div className="border border-border rounded-lg bg-card">
                       {/* Textarea */}
                       <Textarea
@@ -797,8 +801,8 @@ export default function Chatbot() {
                     </div>
                   </div>
 
-                       {/* Action Buttons with Dropdowns */}
-                       <div className="flex flex-row flex-wrap justify-center gap-2 sm:gap-4 px-4 relative">
+                  {/* Action Buttons with Dropdowns */}
+                  <div className="flex flex-row flex-wrap justify-center gap-2 sm:gap-4 px-4 relative">
                          {/* Mobile Dropdown Container - Centered */}
                          <div className="absolute top-full left-1/2 transform -translate-x-1/2 w-[95vw] sm:hidden z-50">
                            {activeDropdown && (
@@ -1076,6 +1080,46 @@ export default function Chatbot() {
           </div>
         </div>
       </div>
+      <style jsx global>{`
+        .chatbot-bounce-wrapper div div {
+          animation: chatbotBounce 8s infinite ease-in-out !important;
+        }
+        @keyframes chatbotBounce {
+          0% {
+            transform: translateY(0) scaleX(1) scaleY(1);
+          }
+          1.25% {
+            transform: translateY(-20px) scaleX(1.05) scaleY(0.95);
+          }
+          3.125% {
+            transform: translateY(-50px) scaleX(0.95) scaleY(1.05);
+          }
+          6.25% {
+            transform: translateY(0) scaleX(1.2) scaleY(0.8);
+          }
+          9.375% {
+            transform: translateY(-30px) scaleX(0.98) scaleY(1.02);
+          }
+          12.5%, 87.5% {
+            transform: translateY(0) scaleX(1) scaleY(1);
+          }
+          88.75% {
+            transform: translateY(-20px) scaleX(1.05) scaleY(0.95);
+          }
+          90.625% {
+            transform: translateY(-50px) scaleX(0.95) scaleY(1.05);
+          }
+          93.75% {
+            transform: translateY(0) scaleX(1.2) scaleY(0.8);
+          }
+          96.875% {
+            transform: translateY(-30px) scaleX(0.98) scaleY(1.02);
+          }
+          100% {
+            transform: translateY(0) scaleX(1) scaleY(1);
+          }
+        }
+      `}</style>
     </MainLayout>
   );
 }

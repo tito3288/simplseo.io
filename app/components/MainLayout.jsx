@@ -100,6 +100,11 @@ const MainLayout = ({
       label: "Extra Opportunities",
       icon: <TrendingUp className="w-5 h-5" />,
     },
+    {
+      path: "/low-ctr",
+      label: "Low CTR Fixes",
+      icon: <AlertTriangle className="w-5 h-5" />,
+    },
     // {
     //   path: "/website",
     //   label: "My Website",

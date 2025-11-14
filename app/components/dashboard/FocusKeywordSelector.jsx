@@ -4,6 +4,8 @@ import { useMemo } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const normalizePage = (page) => page || "__unknown__";
@@ -142,14 +144,14 @@ const FocusKeywordSelector = ({
           Keywords selected: {selectedCount}
         </span>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Tip: choose a keyword that includes your service and location—for example,
-        <span className="font-medium text-foreground">
-          {" "}
-          web developer seattle, dentist chicago, Realtor Miami
-        </span>
-        .
-      </p>
+      <Alert className="w-full border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
+        <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+        <AlertDescription className="!block text-sm text-blue-900 dark:text-blue-100 leading-relaxed">
+          <span className="font-medium">Tip:</span> choose a keyword that includes your service and location. Avoid keywords with your brand to attract new customers who haven't discovered your business name yet.{" "}
+          <br>
+          </br>For example:<span className="font-semibold"> emergency plumber austin, wedding photographer in los angeles, affordable dentist chicago</span>.
+        </AlertDescription>
+      </Alert>
       {/* <p className="text-xs text-muted-foreground">
         If a keyword shows up on more than one page, pick the page you want to focus on.
         When you switch pages, we&apos;ll move the keyword automatically.
