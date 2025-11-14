@@ -764,7 +764,7 @@ export default function Dashboard() {
     setFocusKeywordByPage((prev) =>
       buildAssignmentsFromKeywords(focusKeywords, prev, gscKeywords)
     );
-  }, [gscKeywords, focusKeywords, buildAssignmentsFromKeywords]);
+  }, [gscKeywords, focusKeywords, buildAssignmentsFromKeywords, focusKeywordByPage.size]);
 
   // Define fetchSearchAnalyticsData before fetchAndMatchGSC (which depends on it)
   const fetchSearchAnalyticsData = useCallback(async (siteUrl, token, range) => {
@@ -2245,7 +2245,7 @@ export default function Dashboard() {
                   Great performance so far
                   </p>
                   <p className="text-xs text-green-600 dark:text-green-300">
-                  Click "See More" to optimize the focus keywords you selected
+                  Click &quot;See More&quot; to optimize the focus keywords you selected
                   </p>
                 </div>
               ) : (
@@ -2330,7 +2330,7 @@ export default function Dashboard() {
               <div className="mt-4 rounded-md border border-dashed border-muted-foreground/30 bg-muted/30 p-4 text-sm">
                 <p className="font-semibold mb-2">Focus keywords not showing up here yet</p>
                 <p className="text-xs text-muted-foreground mb-3">
-                  These keywords are on your focus list, but they haven&apos;t hit the Low CTR threshold. Click "See More" to optimize these pages.
+                  These keywords are on your focus list, but they haven&apos;t hit the Low CTR threshold. Click &quot;See More&quot; to optimize these pages.
                 </p>
                 <ul className="space-y-2">
                   {focusKeywordsNotShownLowCtr.map(({ keyword, data, page }) => (
