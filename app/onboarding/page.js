@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardFooter } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -8,7 +8,6 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "../contexts/AuthContext";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useRouter } from "next/navigation";
-import { useEffect } from "react";
 import {
   Select,
   SelectContent,
@@ -71,7 +70,7 @@ const OnboardingWizard = () => {
     if (!isLoading && user && data.isComplete) {
       router.push("/dashboard");
     }
-  }, [user, isLoading, data.isComplete]);
+  }, [user, isLoading, data.isComplete, router]);
 
   const totalSteps = 5;
 
@@ -156,7 +155,7 @@ const OnboardingWizard = () => {
   };
 
   // Fetch GSC properties
-  const fetchGscProperties = async (accessToken) => {
+  const fetchGscProperties = useCallback(async (accessToken) => {
     setIsLoadingProperties(true);
     try {
       const response = await fetch(`/api/gsc/properties?accessToken=${accessToken}`);
@@ -172,7 +171,7 @@ const OnboardingWizard = () => {
     } finally {
       setIsLoadingProperties(false);
     }
-  };
+  }, []);
 
   // Check for Google OAuth callback
   useEffect(() => {
@@ -206,7 +205,7 @@ const OnboardingWizard = () => {
       const newUrl = window.location.pathname;
       window.history.replaceState({}, document.title, newUrl);
     }
-  }, []);
+  }, [updateData, fetchGscProperties]);
 
   return (
     <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
@@ -383,7 +382,7 @@ const OnboardingWizard = () => {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="hasGSC">
-                      Do you have Google Search Console set up? <br></br> If "YES" please toggle. If "NO" follow steps below.
+                      Do you have Google Search Console set up? <br></br> If &quot;YES&quot; please toggle. If &quot;NO&quot; follow steps below.
                     </Label>
                     <p className="text-sm text-muted-foreground">
                       <strong>Important:</strong> Google Search Console is required to track your search performance and provide SEO insights
