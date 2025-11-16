@@ -6,6 +6,7 @@ import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useAuth } from "../contexts/AuthContext";
 import ReactMarkdown from "react-markdown";
+import TypingText from "./TypingText";
 
 const ChatAssistant = ({
   onClose,
@@ -92,6 +93,8 @@ const ChatAssistant = ({
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [isInitialized, setIsInitialized] = useState(false);
   const [isLoadingConversation, setIsLoadingConversation] = useState(true);
+  const [completedTypingMessages, setCompletedTypingMessages] = useState(new Set());
+  const isSavingRef = useRef(false); // Prevent duplicate saves
 
   // Conversation management functions
   const loadConversations = async () => {
@@ -127,6 +130,10 @@ const ChatAssistant = ({
       if (result.success) {
         setCurrentConversationId(result.conversationId);
         await loadConversations();
+        // If it was a duplicate, log it for debugging (optional)
+        if (result.isDuplicate) {
+          console.log("Duplicate conversation detected and prevented");
+        }
         return result.conversationId;
       }
     } catch (error) {
@@ -198,7 +205,10 @@ const ChatAssistant = ({
           const conversationResult = await conversationResponse.json();
           
           if (conversationResult.success) {
-            setMessages(conversationResult.conversation.messages);
+            const loadedMessages = conversationResult.conversation.messages;
+            setMessages(loadedMessages);
+            // Mark all loaded messages as completed (skip typing animation)
+            setCompletedTypingMessages(new Set(loadedMessages.map(msg => msg.id)));
             setCurrentConversationId(cornerConversation.id);
             return true; // Successfully loaded a corner conversation
           }
@@ -276,11 +286,21 @@ const ChatAssistant = ({
     setIsThinking(true);
     
     try {
+      // Prepare conversation history (exclude welcome message and system messages)
+      const conversationHistory = messages
+        .filter(msg => msg.role !== "assistant" || !msg.id?.includes("welcome"))
+        .slice(-10) // Keep last 10 messages for context
+        .map(msg => ({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.content
+        }));
+
       const res = await fetch("/api/seo-assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: messageContent,
+          conversationHistory: conversationHistory,
           userId: user?.id,
           context: {
             aiTips,
@@ -318,20 +338,25 @@ const ChatAssistant = ({
         source: "corner-bubble",
       };
 
-      setMessages(prev => [...prev, assistantMessage]);
-
-      // Save to Firebase
-      const updatedMessages = [...messages, contextMessage, assistantMessage];
-      if (currentConversationId) {
-        // Update existing conversation
-        await updateConversation(currentConversationId, updatedMessages);
-      } else {
-        // Create new conversation
-        const conversationId = await saveConversation(updatedMessages);
-        if (conversationId) {
-          setCurrentConversationId(conversationId);
+      setMessages(prev => {
+        const updated = [...prev, assistantMessage];
+        
+        // Save to Firebase (use functional update to get latest messages)
+        const messagesToSave = updated;
+        if (currentConversationId) {
+          // Update existing conversation
+          updateConversation(currentConversationId, messagesToSave);
+        } else {
+          // Create new conversation
+          saveConversation(messagesToSave).then(conversationId => {
+            if (conversationId) {
+              setCurrentConversationId(conversationId);
+            }
+          });
         }
-      }
+        
+        return updated;
+      });
     } catch (error) {
       console.error("OpenAI error:", error);
       setMessages(prev => [
@@ -432,15 +457,26 @@ const ChatAssistant = ({
     };
 
     setMessages((prev) => [...prev, userMessage]);
+    const userInput = input;
     setInput("");
     setIsThinking(true);
 
     try {
+      // Prepare conversation history (exclude welcome message and system messages)
+      const conversationHistory = messages
+        .filter(msg => msg.role !== "assistant" || !msg.id?.includes("welcome"))
+        .slice(-10) // Keep last 10 messages for context
+        .map(msg => ({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.content
+        }));
+
       const res = await fetch("/api/seo-assistant/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          message: input,
+          message: userInput,
+          conversationHistory: conversationHistory,
           userId: user?.id,
           context: {
             aiTips,
@@ -468,20 +504,35 @@ const ChatAssistant = ({
         source: "corner-bubble",
       };
 
-      setMessages((prev) => [...prev, assistantMessage]);
-
-      // Save to Firebase
-      const updatedMessages = [...messages, userMessage, assistantMessage];
-      if (currentConversationId) {
-        // Update existing conversation
-        await updateConversation(currentConversationId, updatedMessages);
-      } else {
-        // Create new conversation
-        const conversationId = await saveConversation(updatedMessages);
-        if (conversationId) {
-          setCurrentConversationId(conversationId);
+      setMessages((prev) => {
+        const updated = [...prev, assistantMessage];
+        
+        // Save to Firebase (use functional update to ensure we have latest messages)
+        // Prevent duplicate saves with ref guard
+        if (!isSavingRef.current) {
+          isSavingRef.current = true;
+          const messagesToSave = updated;
+          
+          if (currentConversationId) {
+            // Update existing conversation
+            updateConversation(currentConversationId, messagesToSave).finally(() => {
+              isSavingRef.current = false;
+            });
+          } else {
+            // Create new conversation (only if not already saving)
+            saveConversation(messagesToSave).then(conversationId => {
+              if (conversationId) {
+                setCurrentConversationId(conversationId);
+              }
+              isSavingRef.current = false;
+            }).catch(() => {
+              isSavingRef.current = false;
+            });
+          }
         }
-      }
+        
+        return updated;
+      });
     } catch (error) {
       console.error("OpenAI error:", error);
       setMessages((prev) => [
@@ -515,6 +566,7 @@ const ChatAssistant = ({
     
     localStorage.removeItem("seoChatMessages");
     setCurrentConversationId(null);
+    isSavingRef.current = false; // Reset saving guard
     const pageContext = getPageContext();
     setMessages([
       {
@@ -596,6 +648,16 @@ const ChatAssistant = ({
                           src={message.content}
                           alt="User uploaded"
                           className="rounded-md max-w-full h-auto"
+                        />
+                      ) : message.role === "assistant" && !completedTypingMessages.has(message.id) ? (
+                        <TypingText
+                          text={message.content}
+                          speed={5}
+                          isMarkdown={true}
+                          onComplete={() => {
+                            setCompletedTypingMessages(prev => new Set([...prev, message.id]));
+                          }}
+                          className="prose prose-sm max-w-none dark:prose-invert prose-p:mb-2 prose-headings:mb-2 prose-headings:mt-4 prose-ul:mb-2 prose-ol:mb-2 prose-li:mb-1 prose-strong:font-semibold prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground prose-blockquote:pl-4 prose-blockquote:italic"
                         />
                       ) : (
                         <ReactMarkdown>{message.content}</ReactMarkdown>

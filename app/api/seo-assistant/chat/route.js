@@ -311,7 +311,7 @@ const buildPageSummary = (page) => {
 };
 
 export async function POST(req) {
-  const { message, context, userId } = await req.json();
+  const { message, conversationHistory = [], context, userId } = await req.json();
 
   // Get all cached pages (increase limit to get more pages for better indexing)
   const cachedPages = await getCachedSitePages(userId, 25);
@@ -409,12 +409,19 @@ ${renderedPageSummaries}
   4. Always be helpful and suggest alternative pages that might be relevant to their question
   5. Example response: "I couldn&apos;t find a specific [requested page type] page, but I found these related pages: [list with URLs]. Would any of these help, or could you share the URL of the page you&apos;re thinking of?"`;
 
+  // Build messages array with conversation history
+  const messagesArray = [
+    { role: "system", content: systemPrompt },
+    ...conversationHistory.map(msg => ({
+      role: msg.role,
+      content: msg.content
+    })),
+    { role: "user", content: message }
+  ];
+
   const completion = await openai.chat.completions.create({
     model: "gpt-4",
-    messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: message },
-    ],
+    messages: messagesArray,
   });
 
   const reply = completion.choices[0].message.content;

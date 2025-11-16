@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { Info } from "lucide-react";
 import { cn } from "@/lib/utils";
@@ -17,6 +16,7 @@ const FocusKeywordSelector = ({
   isSaving = false,
   suggestions = [],
   groupedByPage = new Map(),
+  businessName = "",
 }) => {
   const aggregatedKeywords = useMemo(() => {
     if (!keywords?.length) {
@@ -86,14 +86,6 @@ const FocusKeywordSelector = ({
     return groups;
   }, [groupedByPage, keywordMap]);
 
-  const suggestionSet = useMemo(() => {
-    return new Set(
-      suggestions
-        ?.map((item) => (typeof item === "string" ? item : item?.keyword))
-        .filter(Boolean)
-    );
-  }, [suggestions]);
-
   const keywordAssignments = useMemo(() => {
     const map = new Map();
     if (!selectedByPage?.size) return map;
@@ -102,16 +94,6 @@ const FocusKeywordSelector = ({
       map.set(keyword.toLowerCase(), pageKey);
     });
     return map;
-  }, [selectedByPage]);
-
-  const selectedPageSet = useMemo(() => {
-    return new Set(selectedByPage ? Array.from(selectedByPage.keys()) : []);
-  }, [selectedByPage]);
-
-  const selectedKeywordsSet = useMemo(() => {
-    return new Set(
-      selectedByPage ? Array.from(selectedByPage.values()).map((kw) => kw.toLowerCase()) : []
-    );
   }, [selectedByPage]);
 
   const handleToggle = (keyword, page) => {
@@ -147,73 +129,46 @@ const FocusKeywordSelector = ({
       <Alert className="w-full border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
         <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
         <AlertDescription className="!block text-sm text-blue-900 dark:text-blue-100 leading-relaxed">
-          <span className="font-medium">Tip:</span> choose a keyword that includes your service and location. Avoid keywords with your brand to attract new customers who haven't discovered your business name yet.{" "}
+        <span className="font-medium">Tip:</span> choose a keyword that includes your <span className="font-bold">service and location</span>. Avoid keywords with your brand to attract new customers who haven't discovered your business name yet.{" "}
           <br>
           </br>For example:<span className="font-semibold"> emergency plumber austin, wedding photographer in los angeles, affordable dentist chicago</span>.
         </AlertDescription>
       </Alert>
-      {/* <p className="text-xs text-muted-foreground">
-        If a keyword shows up on more than one page, pick the page you want to focus on.
-        When you switch pages, we&apos;ll move the keyword automatically.
-      </p> */}
-
-      {suggestionSet.size > 0 && (
-        <div>
-          <p className="text-xs uppercase tracking-wide text-muted-foreground mb-2">
-            Overall suggestions
-          </p>
-          <div className="flex flex-wrap gap-2">
-            {[...suggestionSet].slice(0, 5).map((keyword) => {
-              const isSelected = selectedKeywordsSet.has(keyword.toLowerCase());
-              return (
-                <Button
-                  key={`suggestion-${keyword}`}
-                  type="button"
-                  variant={isSelected ? "default" : "outline"}
-                  size="sm"
-                  disabled={isSaving}
-                  onClick={() => handleToggle(keyword, null)}
-                >
-                  {keyword}
-                </Button>
-              );
-            })}
-          </div>
-        </div>
-      )}
-
       <div className="rounded-md border divide-y">
         {pageGroups.map((group, groupIdx) => {
           const pageKey = normalizePage(group.page);
           return (
-            <div key={group.page || `group-${groupIdx}`} className="px-4 py-3 space-y-3">
-              <div className="flex items-center justify-between text-xs text-muted-foreground">
-                <div>
-                  Page:
-                  {group.page ? (
-                    <a
-                      href={group.page}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="ml-1 text-[#00BF63] underline"
-                    >
-                      {group.page.replace(/^https?:\/\//, "")}
-                    </a>
-                  ) : (
-                    <span className="ml-1">Unassigned</span>
-                  )}
-                </div>
-                <div className="text-[10px] uppercase tracking-wide text-muted-foreground">
-                  Choose one keyword below
+            <div key={group.page || `group-${groupIdx}`} className="divide-y">
+              {/* Page Header - More Prominent */}
+              <div className="px-4 py-4 bg-muted/30 border-b border-border/50">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-semibold text-foreground">Page:</span>
+                    {group.page ? (
+                      <a
+                        href={group.page}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm font-medium text-[#00BF63] hover:text-[#00BF63]/80 underline break-all"
+                      >
+                        {group.page.replace(/^https?:\/\//, "")}
+                      </a>
+                    ) : (
+                      <span className="text-sm font-medium text-foreground">Unassigned</span>
+                    )}
+                  </div>
+                  <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
+                    Choose one keyword below
+                  </div>
                 </div>
               </div>
-              <div className="space-y-2">
+              {/* Keywords List */}
+              <div className="px-4 py-3 space-y-2">
                 {group.keywords.map((keyword) => {
                   const lowerKeyword = keyword.keyword.toLowerCase();
                   const assignedPageKey = keywordAssignments.get(lowerKeyword);
                   const isSelected =
                     selectedByPage?.get(pageKey)?.toLowerCase() === lowerKeyword;
-                  const isSuggested = suggestionSet.has(keyword.keyword);
                   const isAssignedElsewhere =
                     assignedPageKey && assignedPageKey !== pageKey;
                   return (
@@ -240,9 +195,6 @@ const FocusKeywordSelector = ({
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
                             <span>{keyword.impressions} impressions</span>
                             <span>Pos. {keyword.position}</span>
-                            {isSuggested && (
-                              <Badge variant="secondary">Recommended</Badge>
-                            )}
                             {isAssignedElsewhere && (
                               <Badge variant="outline">Selected on another page</Badge>
                             )}

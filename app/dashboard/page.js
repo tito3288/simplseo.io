@@ -41,6 +41,7 @@ import {
   Plus,
   X,
   RefreshCw,
+  Info,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
@@ -804,11 +805,6 @@ export default function Dashboard() {
 
       const keywordJson = await keywordRes.json();
 
-      console.log("🔍 GSC API Response:", {
-        totalRows: keywordJson.rows?.length || 0,
-        requestedLimit: 500,
-        hasRows: !!keywordJson.rows
-      });
 
       if (keywordJson.rows) {
         const formatted = keywordJson.rows.map((row) => ({
@@ -819,14 +815,6 @@ export default function Dashboard() {
           position: Math.round(row.position),
           ctr: `${(row.ctr * 100).toFixed(1)}%`,
         }));
-
-        console.log("✅ Setting GSC keywords (dashboard metrics):", {
-          totalKeywords: formatted.length,
-          uniquePages: new Set(formatted.map(f => f.page)).size,
-          uniqueKeywords: new Set(formatted.map(f => f.keyword)).size,
-          dateRange: range,
-          sampleKeywords: formatted.slice(0, 5).map(f => f.keyword)
-        });
 
         // Merge dashboard metrics keywords (don't overwrite focus keywords if they exist)
         setGscKeywords((prevKeywords) => {
@@ -897,38 +885,8 @@ export default function Dashboard() {
 
         setAiTips(ai);
 
-        if (
-          initialFocusKeywordsLoaded &&
-          !hasAutoSelectedFocusKeywords &&
-          focusKeywords.length === 0 &&
-          user?.id
-        ) {
-          try {
-            const defaultAssignments = new Map();
-            const sortedCandidates = formatted
-              .filter((kw) => kw.clicks >= 1 && kw.impressions >= 20)
-              .sort((a, b) => (b.impressions || 0) - (a.impressions || 0));
-
-            sortedCandidates.forEach((kw) => {
-              const keyword = kw.keyword;
-              if (!keyword) return;
-              const pageKey = normalizePageKey(kw.page);
-              if (defaultAssignments.has(pageKey)) return;
-              defaultAssignments.set(pageKey, keyword);
-            });
-
-            const defaultEntries = assignmentsToEntries(defaultAssignments);
-
-            if (defaultEntries.length > 0) {
-              await saveFocusKeywords(user.id, defaultEntries);
-              setFocusKeywordByPage(defaultAssignments);
-              setFocusKeywords(defaultEntries.map((entry) => entry.keyword));
-              setHasAutoSelectedFocusKeywords(true);
-            }
-          } catch (error) {
-            console.error("Failed to save initial focus keywords:", error);
-          }
-        }
+        // Removed auto-selection: Users should manually choose their focus keywords
+        // Previously, keywords were auto-selected based on clicks/impressions thresholds
       } else {
         setGscKeywords([]);
         setTopPages([]);
@@ -990,8 +948,6 @@ export default function Dashboard() {
       const formatDate = (d) => d.toISOString().split("T")[0];
       const from = formatDate(startDate);
       const to = formatDate(today);
-
-      console.log("🔑 Fetching focus keywords with 90-day period:", { from, to });
 
       const keywordRes = await fetch(
         `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
@@ -1069,8 +1025,6 @@ export default function Dashboard() {
     const selectedProperty = data?.gscProperty;
     
     if (selectedProperty) {
-      console.log("🎯 Using selected GSC property:", selectedProperty);
-      
       // Store site URL in Firestore
       const tokenManager = createGSCTokenManager(user.id);
       await tokenManager.storeTokens(null, token, selectedProperty);
@@ -1081,8 +1035,6 @@ export default function Dashboard() {
       // Fetch focus keywords with fixed 90-day period (separate from dashboard metrics)
       fetchFocusKeywords(selectedProperty, token);
     } else {
-      console.log("❌ No GSC property selected during onboarding");
-      
       if (!hasShownGscError) {
         toast.error("No GSC Property Selected", {
           description: "Please complete the onboarding process and select a Google Search Console property.",
@@ -1121,7 +1073,6 @@ export default function Dashboard() {
 
         // Check if a GSC property was selected during onboarding
         if (!data?.gscProperty) {
-          console.log("❌ No GSC property selected during onboarding");
           setIsGscConnected(false);
           return;
         }
@@ -1258,8 +1209,6 @@ export default function Dashboard() {
       
       setIsFilteringKeywords(true);
       try {
-        console.log('🤖 Using AI to filter branded keywords for dashboard...');
-        
         const response = await fetch('/api/filter-branded-keywords', {
           method: 'POST',
           headers: {
@@ -1336,9 +1285,6 @@ export default function Dashboard() {
   }, [gscKeywords, data?.businessName, data?.businessType, user?.id, initialFocusKeywordsLoaded]);
 
   const requestGSCAuthToken = async () => {
-    // Debug: Log what we're trying to do
-    console.log("🔐 Starting GSC OAuth flow...");
-    
     // Reset error flag for new attempt
     setHasShownGscError(false);
     
@@ -1346,9 +1292,8 @@ export default function Dashboard() {
     try {
       const tokenManager = createGSCTokenManager(user.id);
       await tokenManager.clearGSCData();
-      console.log("✅ Cleared existing GSC data");
     } catch (error) {
-      console.error("❌ Failed to clear GSC data:", error);
+      console.error("Failed to clear GSC data:", error);
     }
     
     // Use authorization code flow to get refresh tokens
@@ -1779,13 +1724,20 @@ export default function Dashboard() {
                 <AlertTitle>Website scan complete</AlertTitle>
                 <AlertDescription>
                   We crawled these pages so your SEO Mentor understands your business. Now the chatbot and AI tips use your real services and wording, not generic guesses.
-                  <span className="block text-xs text-muted-foreground mt-1">
+                  <span className="block text-xs text-muted-foreground mt-1 mb-4">
                     Last crawl:{" "}
                     {data?.lastSiteCrawlAt
                       ? new Date(data.lastSiteCrawlAt).toLocaleString()
                       : "Just now"}
                   </span>
                 </AlertDescription>
+                
+                <Alert className="w-full border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <AlertDescription className="!block text-sm text-blue-900 dark:text-blue-100 leading-relaxed">
+                    <span className="font-bold">Tip:</span> Select only the pages that are actually on your website. If you see anything you don’t recognize, or pages you no longer use, just uncheck them. <br></br> A good rule: choose the pages that appear in your site’s main menu.
+                  </AlertDescription>
+                </Alert>
               </div>
 
               <div className="space-y-3">
@@ -2035,6 +1987,7 @@ export default function Dashboard() {
                 isSaving={isSavingFocusKeywords}
                 suggestions={nonBrandedKeywords}
                 groupedByPage={groupedByPage}
+                businessName={data?.businessName || ""}
               />
             </CardContent>
           </Card>

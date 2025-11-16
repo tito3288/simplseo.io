@@ -45,6 +45,7 @@ import ReactMarkdown from "react-markdown";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { fetchChatbotData } from "../lib/chatbotDataFetcher";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
+import TypingText from "../components/TypingText";
 
 export default function Chatbot() {
   const { user, isLoading: authLoading } = useAuth();
@@ -59,6 +60,8 @@ export default function Chatbot() {
   const [searchTerm, setSearchTerm] = useState("");
   const messagesEndRef = useRef(null);
   const textareaRef = useRef(null);
+  const [completedTypingMessages, setCompletedTypingMessages] = useState(new Set());
+  const isSavingRef = useRef(false); // Prevent duplicate saves
 
   // ✅ NEW: Chatbot-specific data states
   const [chatbotData, setChatbotData] = useState(null);
@@ -102,6 +105,10 @@ export default function Chatbot() {
       if (data.success) {
         setCurrentConversationId(data.conversationId);
         await loadConversations(); // Refresh the list
+        // If it was a duplicate, log it for debugging (optional)
+        if (data.isDuplicate) {
+          console.log("Duplicate conversation detected and prevented");
+        }
         return data.conversationId;
       }
     } catch (error) {
@@ -115,7 +122,10 @@ export default function Chatbot() {
       const data = await response.json();
       
       if (data.success) {
-        setMessages(data.conversation.messages);
+        const loadedMessages = data.conversation.messages;
+        setMessages(loadedMessages);
+        // Mark all loaded messages as completed (skip typing animation)
+        setCompletedTypingMessages(new Set(loadedMessages.map(msg => msg.id)));
         setCurrentConversationId(conversationId);
         toast.success("Conversation loaded!");
       }
@@ -377,12 +387,21 @@ export default function Chatbot() {
     setIsThinking(true);
 
     try {
+      // Prepare conversation history (last 10 messages from current conversation)
+      const conversationHistory = messages
+        .slice(-10) // Keep last 10 messages for context
+        .map(msg => ({
+          role: msg.role === "user" ? "user" : "assistant",
+          content: msg.content
+        }));
+
       // ✅ NEW: Call dedicated chatbot API with user data
       const res = await fetch("/api/chatbot/chat", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           message: userInput,
+          conversationHistory: conversationHistory,
           userData: {
             userId: user?.id,
             userFirstName: data?.name?.split(' ')[0] || user?.email?.split('@')[0] || 'there',
@@ -413,27 +432,42 @@ export default function Chatbot() {
         source: "main-chatbot"
       };
       
-      setMessages(prev => [...prev, aiMessage]);
-      
-      // Save conversation to localStorage
-      const conversation = {
-        messages: [...messages, userMessage, aiMessage],
-        timestamp: new Date().getTime()
-      };
-      localStorage.setItem("chatbotMessages-v1", JSON.stringify(conversation));
+      setMessages(prev => {
+        const updated = [...prev, aiMessage];
+        
+        // Save conversation to localStorage
+        const conversation = {
+          messages: updated,
+          timestamp: new Date().getTime()
+        };
+        localStorage.setItem("chatbotMessages-v1", JSON.stringify(conversation));
 
-      // Save to Firebase
-      const updatedMessages = [...messages, userMessage, aiMessage];
-      if (currentConversationId) {
-        // Update existing conversation
-        await updateConversation(currentConversationId, updatedMessages);
-      } else {
-        // Create new conversation
-        const conversationId = await saveConversation(updatedMessages);
-        if (conversationId) {
-          setCurrentConversationId(conversationId);
+        // Save to Firebase (use functional update to ensure we have latest messages)
+        // Prevent duplicate saves with ref guard
+        if (!isSavingRef.current) {
+          isSavingRef.current = true;
+          const messagesToSave = updated;
+          
+          if (currentConversationId) {
+            // Update existing conversation
+            updateConversation(currentConversationId, messagesToSave).finally(() => {
+              isSavingRef.current = false;
+            });
+          } else {
+            // Create new conversation (only if not already saving)
+            saveConversation(messagesToSave).then(conversationId => {
+              if (conversationId) {
+                setCurrentConversationId(conversationId);
+              }
+              isSavingRef.current = false;
+            }).catch(() => {
+              isSavingRef.current = false;
+            });
+          }
         }
-      }
+        
+        return updated;
+      });
       
     } catch (error) {
       console.error("❌ Chatbot API error:", error);
@@ -563,6 +597,7 @@ export default function Chatbot() {
               onClick={() => {
                 setMessages([]);
                 setCurrentConversationId(null);
+                isSavingRef.current = false; // Reset saving guard
                 localStorage.removeItem("chatbotMessages-v1");
                 toast.success("New conversation started!");
               }}
@@ -998,6 +1033,17 @@ export default function Chatbot() {
                           }`}>
                             {message.role === "user" ? (
                               <p className="whitespace-pre-wrap text-sm sm:text-base leading-relaxed">{message.content}</p>
+                            ) : !completedTypingMessages.has(message.id) ? (
+                              <div className="text-sm sm:text-base leading-relaxed prose prose-sm sm:prose-base max-w-none dark:prose-invert prose-p:mb-6 prose-headings:mb-4 prose-headings:mt-8 prose-ul:mb-6 prose-ol:mb-6 prose-li:mb-3 prose-strong:font-semibold prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground prose-blockquote:pl-4 prose-blockquote:italic prose-h1:text-xl prose-h1:font-bold prose-h2:text-lg prose-h2:font-semibold prose-h3:text-base prose-h3:font-semibold [&_p]:mb-4 [&_p:last-child]:mb-0 [&_h1]:mb-4 [&_h2]:mb-4 [&_h3]:mb-4 [&_h4]:mb-4 [&_h5]:mb-4 [&_h6]:mb-4 [&_ul]:mb-4 [&_ol]:mb-4 [&_li]:mb-2 [&_blockquote]:mb-4 [&_hr]:my-6 [&_pre]:mb-4 [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_strong]:font-semibold [&_em]:italic" style={{ lineHeight: '1.7' }}>
+                                <TypingText
+                                  text={message.content}
+                                  speed={5}
+                                  isMarkdown={true}
+                                  onComplete={() => {
+                                    setCompletedTypingMessages(prev => new Set([...prev, message.id]));
+                                  }}
+                                />
+                              </div>
                             ) : (
                               <div className="text-sm sm:text-base leading-relaxed prose prose-sm sm:prose-base max-w-none dark:prose-invert prose-p:mb-6 prose-headings:mb-4 prose-headings:mt-8 prose-ul:mb-6 prose-ol:mb-6 prose-li:mb-3 prose-strong:font-semibold prose-code:bg-muted prose-code:px-1 prose-code:py-0.5 prose-code:rounded prose-pre:bg-muted prose-pre:p-4 prose-pre:rounded-lg prose-blockquote:border-l-4 prose-blockquote:border-muted-foreground prose-blockquote:pl-4 prose-blockquote:italic prose-h1:text-xl prose-h1:font-bold prose-h2:text-lg prose-h2:font-semibold prose-h3:text-base prose-h3:font-semibold [&_p]:mb-4 [&_p:last-child]:mb-0 [&_h1]:mb-4 [&_h2]:mb-4 [&_h3]:mb-4 [&_h4]:mb-4 [&_h5]:mb-4 [&_h6]:mb-4 [&_ul]:mb-4 [&_ol]:mb-4 [&_li]:mb-2 [&_blockquote]:mb-4 [&_hr]:my-6 [&_pre]:mb-4 [&_code]:bg-muted [&_code]:px-1 [&_code]:py-0.5 [&_code]:rounded [&_strong]:font-semibold [&_em]:italic" style={{ lineHeight: '1.7' }}>
                                 <ReactMarkdown>{message.content}</ReactMarkdown>

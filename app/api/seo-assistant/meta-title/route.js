@@ -70,12 +70,8 @@ export async function POST(req) {
         const kwData = await kwRes.json();
         focusKeywordList = normalizeFocusKeywordList(kwData.keywords);
       } catch (err) {
-        console.warn("⚠️ Fallback keyword extraction failed", err);
+        // Fallback keyword extraction failed - continue without keywords
       }
-    } else {
-      console.warn(
-        "⚠️ Skipping fallback keyword extraction: no BASE URL configured (set NEXT_PUBLIC_BASE_URL or VERCEL_URL)."
-      );
     }
   }
 

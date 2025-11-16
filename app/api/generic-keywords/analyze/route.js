@@ -20,20 +20,10 @@ export async function POST(req) {
     // Use custom business type if provided, otherwise use the selected business type
     const effectiveBusinessType = (businessType === "Other" && customBusinessType) ? customBusinessType : businessType;
 
-    console.log("🔍 AI-Generated Generic Keywords Analysis starting for:", { 
-      gscKeywordsCount: gscKeywords?.length || 0,
-      businessType,
-      customBusinessType,
-      effectiveBusinessType,
-      businessLocation,
-      userId
-    });
-
     // Check for cached results first
     if (userId) {
       const sanitizedUrl = sanitizeUrlForCache(websiteUrl);
       const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${sanitizedUrl}`;
-      console.log("🔍 Checking cache for key:", cacheKey);
       
       try {
         const cachedDoc = await db.collection("genericKeywordsCache").doc(cacheKey).get();
@@ -44,7 +34,6 @@ export async function POST(req) {
           const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
           
           if (cacheAge < maxAge) {
-            console.log("✅ Using cached generic keywords data (age:", Math.round(cacheAge / (60 * 60 * 1000)), "hours)");
             return NextResponse.json({
               success: true,
               opportunities: cachedData.opportunities,
@@ -72,16 +61,9 @@ export async function POST(req) {
 
     // Extract existing keywords from GSC data for filtering
     const existingKeywords = gscKeywords.length > 0 ? gscKeywords.map(kw => kw.keyword.toLowerCase()) : [];
-    console.log("📋 Existing GSC keywords for filtering:", existingKeywords.length);
 
     // Crawl the user's website to understand current structure
     const siteAnalysis = await analyzeUserWebsite(websiteUrl, effectiveBusinessType);
-    console.log("🔍 Site analysis completed:", {
-      hasNavigation: !!siteAnalysis.navigation,
-      hasFooter: !!siteAnalysis.footer,
-      pageCount: siteAnalysis.pages?.length || 0,
-      contentGaps: siteAnalysis.contentGaps?.length || 0
-    });
 
     // Generate new AI-powered generic keyword opportunities
     const aiGeneratedOpportunities = await generateAIGenericKeywords(
@@ -91,8 +73,6 @@ export async function POST(req) {
       existingKeywords,
       siteAnalysis
     );
-
-    console.log("🤖 AI-generated opportunities:", aiGeneratedOpportunities.length);
 
     // Analyze keyword cannibalization for the new opportunities
     const cannibalizationAnalysis = analyzeKeywordCannibalization(aiGeneratedOpportunities);
@@ -106,15 +86,12 @@ export async function POST(req) {
       .map(kw => kw.page);
     
     const uniqueLowCtrPages = [...new Set(lowCtrPages)];
-    console.log("🚫 Low CTR pages to exclude from Generic Keywords:", uniqueLowCtrPages);
 
     // Filter out opportunities for pages that have Low CTR issues
     const filteredOpportunities = aiGeneratedOpportunities.filter(opportunity => {
       const page = opportunity.currentPerformance?.page;
       return !uniqueLowCtrPages.includes(page);
     });
-
-    console.log(`🔄 Filtered out ${aiGeneratedOpportunities.length - filteredOpportunities.length} opportunities from Low CTR pages`);
 
     // Prepare the response data
     const responseData = {
@@ -144,7 +121,6 @@ export async function POST(req) {
           timestamp: Date.now(),
           createdAt: new Date().toISOString()
         });
-        console.log("✅ Successfully cached generic keywords data");
       } catch (cacheError) {
         console.error("⚠️ Error caching data:", cacheError);
         // Continue even if caching fails
@@ -154,25 +130,21 @@ export async function POST(req) {
     return NextResponse.json(responseData);
 
   } catch (error) {
-    console.error("❌ Error in Generic Keywords API:", error);
+    console.error("Error in Generic Keywords API:", error);
     return NextResponse.json({ error: "Failed to generate generic keyword opportunities" }, { status: 500 });
   }
 }
 
 // Generate AI-powered generic keywords using Google Trends and business context
 async function generateAIGenericKeywords(businessType, businessLocation, websiteUrl, existingKeywords, siteAnalysis) {
-  console.log("🤖 Generating AI-powered generic keywords...");
-  
   const opportunities = [];
   
   try {
     // 1. Get trending keywords from Google Trends
     const trendingKeywords = await getGoogleTrendsData(businessType, businessLocation);
-    console.log("📈 Trending keywords found:", trendingKeywords.length);
     
     // 2. Generate AI-powered keyword suggestions
     const aiSuggestions = await generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl);
-    console.log("🧠 AI suggestions generated:", aiSuggestions.length);
     
     // 3. Combine and filter out existing keywords (less aggressive filtering)
     const allSuggestions = [...trendingKeywords, ...aiSuggestions];
@@ -186,12 +158,6 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
                (suggestionLower.length > 10 && existingLower.includes(suggestionLower));
       });
     });
-    
-    console.log(`🔄 Filtered out ${allSuggestions.length - filteredSuggestions.length} existing keywords`);
-    console.log(`✅ New opportunities: ${filteredSuggestions.length}`);
-    console.log("🔍 Sample AI suggestions before filtering:", aiSuggestions.slice(0, 3).map(s => s.keyword));
-    console.log("🔍 Sample existing GSC keywords:", existingKeywords.slice(0, 5));
-    console.log("🔍 Sample filtered suggestions:", filteredSuggestions.slice(0, 3).map(s => s.keyword));
     
     // If all suggestions were filtered out, use some fallback suggestions
     const finalSuggestions = filteredSuggestions.length > 0 ? filteredSuggestions : [
@@ -227,8 +193,6 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
       }
     ];
     
-    console.log(`🎯 Using ${finalSuggestions.length} final suggestions`);
-    
     // 4. Convert to opportunity format with content creation focus
     const opportunities = await Promise.all(
       finalSuggestions.map(async (suggestion, index) => ({
@@ -263,8 +227,6 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
 // Generate trending-style keywords without external API
 async function getGoogleTrendsData(businessType, businessLocation) {
   try {
-    console.log("📈 Generating trending-style keywords...");
-    
     const location = businessLocation.split(',')[0].trim();
     
     // Generate trending-style keywords based on common patterns
@@ -322,11 +284,10 @@ async function getGoogleTrendsData(businessType, businessLocation) {
       }
     ];
     
-    console.log(`📈 Generated ${trendingKeywords.length} trending-style keywords`);
     return trendingKeywords;
     
   } catch (error) {
-    console.error("❌ Error generating trending keywords:", error);
+    console.error("Error generating trending keywords:", error);
     return [];
   }
 }
@@ -492,7 +453,6 @@ function isGenericOpportunity(keyword) {
 
 // Analyze keyword cannibalization
 function analyzeKeywordCannibalization(opportunities) {
-  console.log("🔍 Analyzing keyword cannibalization...");
   const keywordGroups = {};
   
   opportunities.forEach(opportunity => {
@@ -530,9 +490,6 @@ function analyzeKeywordCannibalization(opportunities) {
       removeFrom: pages.slice(1).map(p => p.page)
     };
   });
-  
-  console.log(`⚠️ Found ${cannibalizedKeywords.length} cannibalized keywords`);
-  console.log("📋 Primary page assignments:", primaryPageAssignments);
   
   return {
     cannibalizedKeywords,
@@ -600,12 +557,6 @@ function createHubAndSpokeStrategy(opportunities, businessType, businessLocation
   });
   
   strategy.recommendations = generateOptimizationRecommendations(strategy, businessType, businessLocation);
-  
-  console.log("✅ Hub-and-spoke strategy created:", {
-    hubKeywords: strategy.hub?.primaryKeywords?.length || 0,
-    spokesCount: strategy.spokes.length,
-    totalRecommendations: strategy.recommendations.length
-  });
   
   return strategy;
 }
@@ -701,11 +652,8 @@ function generateOptimizationRecommendations(strategy, businessType, businessLoc
 // Analyze user's website to understand current structure and content
 async function analyzeUserWebsite(websiteUrl, businessType) {
   try {
-    console.log("🔍 Analyzing user website:", websiteUrl);
-    
     // Ensure the URL has a protocol
     const fullUrl = websiteUrl.startsWith('http') ? websiteUrl : `https://${websiteUrl}`;
-    console.log("🔍 Using full URL for scraping:", fullUrl);
     
     // Use the existing scrape-content API to get homepage data
     const response = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'}/api/scrape-content`, {
@@ -740,19 +688,10 @@ async function analyzeUserWebsite(websiteUrl, businessType) {
       hasLocationInfo: checkForLocationInfo(textContent)
     };
 
-    console.log("✅ Website analysis completed:", {
-      contentLength: analysis.contentLength,
-      headingsCount: analysis.headings.length,
-      hasContactForm: analysis.hasContactForm,
-      hasTestimonials: analysis.hasTestimonials,
-      hasPricing: analysis.hasPricing,
-      contentGaps: analysis.contentGaps.length
-    });
-
     return analysis;
 
   } catch (error) {
-    console.error("❌ Error analyzing website:", error);
+    console.error("Error analyzing website:", error);
     return getFallbackSiteAnalysis(businessType);
   }
 }
@@ -901,18 +840,12 @@ function getFallbackSiteAnalysis(businessType) {
 
 // Get AI-generated personalized action items based on site analysis
 async function getPersonalizedActionItems(suggestion, businessType, businessLocation, siteAnalysis) {
-  console.log("🎯 Generating AI-powered personalized actions for:", suggestion.keyword);
-  console.log("🔍 Site analysis available:", !!siteAnalysis);
-  console.log("🔍 Content gaps:", siteAnalysis?.contentGaps);
-  console.log("🔍 Navigation:", siteAnalysis?.navigation);
-  
   try {
     // Generate AI-powered recommendations
     const aiActions = await generateAIActionItems(suggestion, businessType, businessLocation, siteAnalysis);
-    console.log("✅ AI-generated actions for", suggestion.keyword, ":", aiActions);
     return aiActions;
   } catch (error) {
-    console.error("❌ AI action generation failed, using fallback:", error);
+    console.error("AI action generation failed, using fallback:", error);
     // Fallback to basic actions if AI fails
     return [
       `Create a dedicated page or blog post specifically about "${suggestion.keyword}" to help you rank for this keyword`,

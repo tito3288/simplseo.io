@@ -68,15 +68,47 @@ export async function POST(req) {
 
     // Auto-generate title from first user message if not provided
     let conversationTitle = title;
-    if (!conversationTitle) {
-      const firstUserMessage = messages.find(msg => msg.role === 'user');
-      if (firstUserMessage) {
-        conversationTitle = firstUserMessage.content.slice(0, 50);
-        if (firstUserMessage.content.length > 50) {
-          conversationTitle += '...';
+    const firstUserMessage = messages.find(msg => msg.role === 'user');
+    if (!conversationTitle && firstUserMessage) {
+      conversationTitle = firstUserMessage.content.slice(0, 50);
+      if (firstUserMessage.content.length > 50) {
+        conversationTitle += '...';
+      }
+    } else if (!conversationTitle) {
+      conversationTitle = 'New Conversation';
+    }
+
+    // Deduplication: Check if a conversation with the same first message was created recently (within 5 minutes)
+    // This prevents duplicate conversations from race conditions
+    if (firstUserMessage) {
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existingSnapshot = await db.collection('conversations')
+        .where('userId', '==', userId)
+        .where('source', '==', source || 'main-chatbot')
+        .where('createdAt', '>=', fiveMinutesAgo)
+        .get();
+
+      // Check if any existing conversation has the same first user message
+      for (const doc of existingSnapshot.docs) {
+        const existingData = doc.data();
+        const existingFirstUserMsg = existingData.messages?.find(msg => msg.role === 'user');
+        
+        if (existingFirstUserMsg && 
+            existingFirstUserMsg.content === firstUserMessage.content &&
+            existingData.messageCount === messages.length) {
+          // Found duplicate - return existing conversation ID instead of creating new one
+          return NextResponse.json({ 
+            success: true, 
+            conversationId: doc.id,
+            conversation: {
+              id: doc.id,
+              ...existingData,
+              createdAt: existingData.createdAt?.toDate?.() || new Date(existingData.createdAt),
+              updatedAt: existingData.updatedAt?.toDate?.() || new Date(existingData.updatedAt)
+            },
+            isDuplicate: true
+          });
         }
-      } else {
-        conversationTitle = 'New Conversation';
       }
     }
 

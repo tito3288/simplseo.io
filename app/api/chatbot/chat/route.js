@@ -160,7 +160,7 @@ const getCachedSitePages = async (userId, desiredCount = 25) => {
 
 export async function POST(req) {
   try {
-    const { message, userData } = await req.json();
+    const { message, conversationHistory = [], userData } = await req.json();
 
     if (!message) {
       return NextResponse.json({ error: "Message is required" }, { status: 400 });
@@ -275,13 +275,20 @@ If you cannot find the specific page the user is asking about:
 
 Remember: You have access to their real Google Search Console data from the last 28 days${pageIndex ? ' and their complete website content' : ''}, so use it to give personalized, data-driven advice!`;
 
+    // Build messages array with conversation history
+    const messagesArray = [
+      { role: "system", content: systemPrompt },
+      ...conversationHistory.map(msg => ({
+        role: msg.role,
+        content: msg.content
+      })),
+      { role: "user", content: message }
+    ];
+
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
-      messages: [
-        { role: "system", content: systemPrompt },
-        { role: "user", content: message }
-      ],
+      messages: messagesArray,
       max_tokens: 1000,
       temperature: 0.7,
     });

@@ -52,13 +52,8 @@ const businessTypes = [
 
 const cmsPlatforms = [
   "WordPress",
-  "Shopify",
   "Wix",
   "Squarespace",
-  "Webflow",
-  "Custom",
-  "Other",
-          "I don&apos;t know",
 ];
 
 const OnboardingWizard = () => {
@@ -99,8 +94,8 @@ const OnboardingWizard = () => {
       case 3:
         return data.businessLocation;
       case 4:
-        // If GSC is enabled, property selection is required
-        return !data.hasGSC || (data.hasGSC && data.gscProperty);
+        // GSC is mandatory - user must toggle "Yes" AND connect/select a property
+        return data.hasGSC && data.gscProperty;
       case 5:
         return true; // Final step
       default:
@@ -388,7 +383,7 @@ const OnboardingWizard = () => {
                 <div className="flex items-center justify-between">
                   <div className="space-y-0.5">
                     <Label htmlFor="hasGSC">
-                      Do you have Google Search Console set up?
+                      Do you have Google Search Console set up? <br></br> If "YES" please toggle. If "NO" follow steps below.
                     </Label>
                     <p className="text-sm text-muted-foreground">
                       <strong>Important:</strong> Google Search Console is required to track your search performance and provide SEO insights
@@ -416,7 +411,7 @@ const OnboardingWizard = () => {
                         <li>4. Come back and connect your account</li>
                       </ol>
                       <p className="text-xs text-muted-foreground mt-2">
-                        <strong>Note:</strong> Only toggle &quot;Yes&quot; if you&apos;re certain you have GSC set up. You can always set it up later!
+                        <strong>Note:</strong> Google Search Console is required to continue. Please complete the setup steps above, then return to toggle &quot;Yes&quot; and connect your account.
                       </p>
                     </div>
                   </div>
@@ -567,7 +562,9 @@ const OnboardingWizard = () => {
                 </Button>
                 {!isStepValid() && (
                   <p className="text-xs text-muted-foreground mt-1">
-                    Please fill in all required fields
+                    {currentStep === 4 
+                      ? "Please connect your Google Search Console account to continue"
+                      : "Please fill in all required fields"}
                   </p>
                 )}
               </div>

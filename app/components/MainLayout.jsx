@@ -365,7 +365,7 @@ const MainLayout = ({
                     }}
                   >
                     <div className="flex items-center gap-2">
-                      <span>Need SEO help or a bad joke? 🤔</span>
+                      <span>Confused? I can help! 🙌</span>
                     </div>
                     <div className="absolute top-full right-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-[#00bf63]/8"></div>
                   </div>

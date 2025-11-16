@@ -14,9 +14,6 @@ export async function POST(req) {
 
     // Limit keywords to prevent API overload
     const keywordsToProcess = keywords.slice(0, 500);
-    console.log(`🔍 AI Brand Filtering: ${keywordsToProcess.length} keywords for business "${businessName}" (limited from ${keywords.length})`);
-    console.log(`🔍 Business Type: ${businessType}`);
-    console.log(`🔍 Sample keywords:`, keywordsToProcess.slice(0, 5).map(kw => kw.keyword));
 
     // Check if OpenAI API key is available
     if (!process.env.OPENAI_API_KEY) {
@@ -87,29 +84,23 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
 
     if (!response.ok) {
       const errorText = await response.text();
-      console.error(`❌ OpenAI API error: ${response.status} - ${errorText}`);
-      throw new Error(`OpenAI API error: ${response.status} - ${errorText}`);
+      console.error(`OpenAI API error: ${response.status}`);
+      throw new Error(`OpenAI API error: ${response.status}`);
     }
 
     const data = await response.json();
     const aiResponse = data.choices[0]?.message?.content?.trim();
     
     if (!aiResponse) {
-      console.error('❌ No response from OpenAI');
+      console.error('No response from OpenAI');
       throw new Error('No response from OpenAI');
     }
-    
-    console.log(`🔍 OpenAI response length: ${aiResponse.length} characters`);
-    console.log(`🔍 OpenAI response preview: ${aiResponse.substring(0, 200)}...`);
 
     // Clean and parse JSON response
     let cleanedResponse = aiResponse
       .replace(/```json\s*/g, '')
       .replace(/```\s*/g, '')
       .trim();
-    
-    console.log('🔍 Raw AI Response length:', aiResponse.length);
-    console.log('🔍 Cleaned AI Response length:', cleanedResponse.length);
     
     // Try to fix common JSON issues
     try {
@@ -130,18 +121,11 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
         }
       }
       
-      console.log('🔍 Final cleaned response:', cleanedResponse.substring(0, 200) + '...');
-      
       const classification = JSON.parse(cleanedResponse);
       
       if (!classification.branded || !classification.generic) {
-        console.error('❌ Invalid AI response format:', classification);
-        console.log('🔄 Using fallback parsing due to missing generic array...');
-        console.log('🔍 Available keys:', Object.keys(classification));
-        
         // If we have branded keywords from AI, use them and derive generic from the rest
         if (classification.branded && Array.isArray(classification.branded)) {
-          console.log('🔄 Using AI branded keywords and deriving generic from remaining...');
           const aiBrandedKeywords = classification.branded;
           const brandedKeywords = [];
           const genericKeywords = [];
@@ -153,8 +137,6 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
               genericKeywords.push(kw.keyword);
             }
           });
-          
-          console.log(`🔄 AI + Fallback: ${brandedKeywords.length} branded, ${genericKeywords.length} generic`);
           
           // Filter the processed keywords based on this classification
           const brandedKeywordsFiltered = keywordsToProcess.filter(kw => 
@@ -216,8 +198,6 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
           }
         });
         
-        console.log(`🔄 Fallback due to incomplete AI response: ${brandedKeywords.length} branded, ${genericKeywords.length} generic`);
-        
         // Filter the processed keywords based on fallback classification
         const brandedKeywordsFiltered = keywordsToProcess.filter(kw => 
           brandedKeywords.includes(kw.keyword)
@@ -242,18 +222,13 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
       }
       
       // If we get here, the JSON parsing was successful and complete
-      console.log(`✅ AI Classification: ${classification.branded.length} branded, ${classification.generic.length} generic`);
-      console.log('🔍 Branded keywords:', classification.branded.slice(0, 10));
-      console.log('🔍 Generic keywords:', classification.generic.slice(0, 10));
-      
       // Validate the classification results
       if (classification.branded.length + classification.generic.length !== keywordsToProcess.length) {
-        console.warn(`⚠️ Classification count mismatch: ${classification.branded.length} + ${classification.generic.length} ≠ ${keywordsToProcess.length}`);
+        // Count mismatch - using fallback logic will handle this
       }
       
     } catch (parseError) {
-      console.error('❌ JSON parsing failed:', parseError);
-      console.error('🔍 Problematic response:', cleanedResponse.substring(0, 500));
+      console.error('JSON parsing failed:', parseError.message);
       
       // Enhanced fallback: try to extract keywords manually with better logic
       const businessNameLower = businessName.toLowerCase();
@@ -288,12 +263,8 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
         });
       }
       
-      console.log(`🔄 Fallback parsing: ${brandedKeywords.length} branded, ${genericKeywords.length} generic`);
-      
       // If we have no generic keywords or very few, use the full keyword list
       if (genericKeywords.length === 0 || genericKeywords.length < keywordsToProcess.length * 0.1) {
-        console.log('🔄 No generic keywords found in response, using full keyword list...');
-        
         keywordsToProcess.forEach(kw => {
           const keywordLower = kw.keyword.toLowerCase();
           
@@ -345,10 +316,6 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
 
     // If we get here, the JSON parsing was successful
     const classification = JSON.parse(cleanedResponse);
-    
-    console.log(`✅ AI Classification: ${classification.branded.length} branded, ${classification.generic.length} generic`);
-    console.log('🔍 Branded keywords:', classification.branded.slice(0, 10));
-    console.log('🔍 Generic keywords:', classification.generic.slice(0, 10));
 
     // Filter the processed keywords based on AI classification
     const brandedKeywords = keywordsToProcess.filter(kw => 
@@ -358,10 +325,6 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
     const genericKeywords = keywordsToProcess.filter(kw => 
       classification.generic.includes(kw.keyword)
     );
-
-    console.log(`✅ Final Result: ${brandedKeywords.length} branded, ${genericKeywords.length} generic keywords`);
-    console.log(`✅ Branded examples:`, brandedKeywords.slice(0, 5).map(kw => kw.keyword));
-    console.log(`✅ Generic examples:`, genericKeywords.slice(0, 5).map(kw => kw.keyword));
 
     return NextResponse.json({
       success: true,
@@ -375,7 +338,7 @@ Remember: Be very strict - only mark as branded if it clearly contains the busin
     });
 
   } catch (error) {
-    console.error("❌ Error in brand filtering API:", error);
+    console.error("Error in brand filtering API:", error);
     return NextResponse.json({ 
       error: "Failed to filter branded keywords",
       details: error.message 

@@ -108,12 +108,10 @@ export default function LowCtrPage() {
   useEffect(() => {
     const fetchGSCData = async () => {
       if (!user?.id) {
-        console.log("❌ No user ID");
         return;
       }
 
       try {
-        console.log("🔍 Fetching GSC data for user:", user.id);
         const tokenManager = createGSCTokenManager(user.id);
         
         // Add a small delay to ensure tokens are stored
@@ -121,31 +119,19 @@ export default function LowCtrPage() {
         
         const gscData = await tokenManager.getStoredGSCData();
         
-        console.log("🔍 Stored GSC data:", gscData);
-        console.log("🔍 GSC data details:", {
-          hasAccessToken: !!gscData?.accessToken,
-          hasRefreshToken: !!gscData?.refreshToken,
-          hasSiteUrl: !!gscData?.siteUrl,
-          accessTokenLength: gscData?.accessToken?.length,
-          refreshTokenLength: gscData?.refreshToken?.length
-        });
-        
         if (!gscData?.accessToken || !gscData?.siteUrl) {
-          console.log("❌ Missing GSC access token or site URL");
           return;
         }
 
         // Get valid access token (refresh if needed)
         const validToken = await tokenManager.getValidAccessToken();
         if (!validToken) {
-          console.log("❌ Could not get valid access token");
           return;
         }
 
-        console.log("✅ Got valid token, fetching low CTR pages...");
         fetchLowCtrPages(gscData.siteUrl, validToken);
       } catch (error) {
-        console.error("❌ Error fetching GSC data:", error);
+        console.error("Error fetching GSC data:", error);
         setLoading(false);
       }
     };
@@ -528,24 +514,15 @@ export default function LowCtrPage() {
     );
 
     const json = await res.json();
-    console.log("🔍 GSC Raw Data:", json);
     if (!json.rows) {
-      console.log("❌ No rows returned from GSC");
       return;
     }
-    console.log("✅ GSC returned", json.rows.length, "rows");
-
-    // Debug: Log all rows before filtering
-    console.log("🔍 All GSC rows before filtering:", json.rows.slice(0, 5));
     setGscKeywordRows(json.rows);
     
     const filteredRows = json.rows.filter(
       (r) =>
         parseFloat((r.ctr * 100).toFixed(1)) <= 2 && r.impressions > 20
     );
-    
-    console.log("🔍 Rows after filtering (≤2% CTR, >20 impressions):", filteredRows.length);
-    console.log("🔍 Sample filtered rows:", filteredRows.slice(0, 3));
     
     const grouped = Object.values(
       filteredRows
