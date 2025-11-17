@@ -73,5 +73,44 @@ service cloud.firestore {
         (docId.matches(request.auth.uid + '_.*'))
       );
     }
+    
+    // Training events - server-side only (no client access)
+    match /trainingEvents/{hashedUserId} {
+      allow read: if false; // No client reads
+      allow write: if false; // Server-side only
+      
+      match /events/{eventId} {
+        allow read: if false;
+        allow write: if false;
+      }
+    }
+    
+    // Playbook strategies - server-side only (no client access)
+    match /playbookStrategies/{hashedUserId} {
+      allow read: if false; // No client reads
+      allow write: if false; // Server-side only
+      
+      match /strategies/{strategyId} {
+        allow read: if false;
+        allow write: if false;
+      }
+    }
+    
+    // Conversation summaries - server-side only (no client access)
+    match /conversationSummaries/{hashedUserId} {
+      allow read: if false; // No client reads
+      allow write: if false; // Server-side only
+      
+      match /summaries/{summaryId} {
+        allow read: if false;
+        allow write: if false;
+      }
+    }
+    
+    // App config - server-side only (no client access)
+    match /appConfig/{configId} {
+      allow read: if false; // No client reads
+      allow write: if false; // Server-side only
+    }
   }
 } 

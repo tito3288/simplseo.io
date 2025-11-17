@@ -5,6 +5,7 @@ import {
   logTrainingEvent,
   summarizeSeoContext,
 } from "../../../lib/trainingLogger";
+import { getPlaybookStrategies } from "../../../lib/playbookHelpers";
 // import { doc, getDoc, setDoc } from "firebase/firestore";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
@@ -51,18 +52,55 @@ export async function POST(req) {
     return NextResponse.json({ description: cached.data().description });
   }
 
-  const prompt = `
+  // 🧠 Try to get playbook strategies (returns [] if feature flag disabled)
+  let playbookStrategies = [];
+  if (onboarding?.businessType) {
+    try {
+      playbookStrategies = await getPlaybookStrategies({
+        businessType: onboarding.businessType,
+        businessLocation: onboarding.businessLocation,
+        strategyType: "meta_description_optimization",
+        limit: 5,
+      });
+    } catch (error) {
+      console.error("Error fetching playbook strategies:", error);
+      // Continue without playbook data - fallback to OpenAI only
+    }
+  }
+
+  // Build prompt with or without playbook examples
+  let prompt = `
 You are an SEO expert. Suggest a compelling meta description for the following page.
 
 Page: ${pageUrl}
-Business Location: ${onboarding.businessLocation}
-Business Type: ${onboarding.businessType}
+Business Location: ${onboarding.businessLocation || "N/A"}
+Business Type: ${onboarding.businessType || "N/A"}
 Focus Keywords: ${focusKeywordsString || "N/A"}
-Context: ${JSON.stringify(context)}
+Context: ${JSON.stringify(context)}`;
 
-The meta description should:
+  // Include playbook examples if available
+  if (playbookStrategies.length > 0) {
+    prompt += `\n\n**Successful Examples from Similar ${onboarding.businessType} Businesses:**\n`;
+    playbookStrategies.forEach((strategy, index) => {
+      const improvements = [];
+      if (strategy.improvement?.ctrIncrease > 0) {
+        improvements.push(`CTR +${strategy.improvement.ctrIncrease.toFixed(1)}%`);
+      }
+      if (strategy.improvement?.clicksIncrease > 0) {
+        improvements.push(`Clicks +${strategy.improvement.clicksIncrease.toFixed(1)}%`);
+      }
+      if (strategy.improvement?.positionImprovement > 0) {
+        improvements.push(`Position +${strategy.improvement.positionImprovement.toFixed(1)}`);
+      }
+      const improvementText = improvements.length > 0 ? ` (${improvements.join(", ")})` : "";
+      prompt += `${index + 1}. "${strategy.description}"${improvementText}\n`;
+    });
+    prompt += `\nUse these successful examples as inspiration, but create a unique description tailored to this specific page.\n`;
+  }
+
+  prompt += `\nThe meta description should:
 - Be around 150 characters.
-- Highlight the page’s purpose or benefit.
+- Highlight the page's purpose or benefit.
 - Include a strong call-to-action if possible.
 - Naturally incorporate the provided focus keywords when available.
 Only return the meta description — no quotes or explanations.

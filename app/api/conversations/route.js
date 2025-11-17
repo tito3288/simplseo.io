@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import { db } from "../../lib/firebaseAdmin";
+import { saveConversationSummary } from "../../lib/conversationSummarizer";
 
 // GET - Fetch all conversations for a user
 export async function GET(req) {
@@ -127,6 +128,25 @@ export async function POST(req) {
     };
 
     const docRef = await db.collection('conversations').add(conversationData);
+
+    // Save conversation summary for training (async, don't block response)
+    try {
+      // Get user's onboarding data for business context
+      const onboardingDoc = await db.collection('onboarding').doc(userId).get();
+      const onboarding = onboardingDoc.exists ? onboardingDoc.data() : {};
+      
+      saveConversationSummary(userId, {
+        messages,
+        businessType: onboarding.businessType,
+        businessLocation: onboarding.businessLocation,
+        source: source || 'main-chatbot',
+      }).catch(err => {
+        console.error("Failed to save conversation summary (non-critical):", err);
+      });
+    } catch (err) {
+      // Non-critical - don't fail the request
+      console.error("Error saving conversation summary:", err);
+    }
 
     return NextResponse.json({ 
       success: true, 

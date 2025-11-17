@@ -5,6 +5,7 @@ import {
   logTrainingEvent,
   summarizeSeoContext,
 } from "../../../lib/trainingLogger";
+import { getPlaybookStrategies } from "../../../lib/playbookHelpers";
 
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
@@ -92,7 +93,24 @@ export async function POST(req) {
 
   const focusKeywordsString = focusKeywordList.join(", ");
 
-  const prompt = `
+  // 🧠 Try to get playbook strategies (returns [] if feature flag disabled)
+  let playbookStrategies = [];
+  if (onboarding?.businessType) {
+    try {
+      playbookStrategies = await getPlaybookStrategies({
+        businessType: onboarding.businessType,
+        businessLocation: onboarding.businessLocation,
+        strategyType: "meta_title_optimization",
+        limit: 5,
+      });
+    } catch (error) {
+      console.error("Error fetching playbook strategies:", error);
+      // Continue without playbook data - fallback to OpenAI only
+    }
+  }
+
+  // Build prompt with or without playbook examples
+  let prompt = `
 You are an SEO expert.
 
 Suggest a **short, clear, keyword-optimized meta title** for the following page:
@@ -103,9 +121,29 @@ Business Location: ${onboarding?.businessLocation || "N/A"}
 Business Type: ${onboarding?.businessType || "N/A"}
 Focus Keywords: ${focusKeywordsString || "N/A"}
 Context (Impressions, CTR, etc): ${JSON.stringify(context)}
----
+---`;
 
-**Rules:**
+  // Include playbook examples if available
+  if (playbookStrategies.length > 0) {
+    prompt += `\n\n**Successful Examples from Similar ${onboarding.businessType} Businesses:**\n`;
+    playbookStrategies.forEach((strategy, index) => {
+      const improvements = [];
+      if (strategy.improvement?.ctrIncrease > 0) {
+        improvements.push(`CTR +${strategy.improvement.ctrIncrease.toFixed(1)}%`);
+      }
+      if (strategy.improvement?.clicksIncrease > 0) {
+        improvements.push(`Clicks +${strategy.improvement.clicksIncrease.toFixed(1)}%`);
+      }
+      if (strategy.improvement?.positionImprovement > 0) {
+        improvements.push(`Position +${strategy.improvement.positionImprovement.toFixed(1)}`);
+      }
+      const improvementText = improvements.length > 0 ? ` (${improvements.join(", ")})` : "";
+      prompt += `${index + 1}. "${strategy.title}"${improvementText}\n`;
+    });
+    prompt += `\nUse these successful examples as inspiration, but create a unique title tailored to this specific page.\n`;
+  }
+
+  prompt += `\n**Rules:**
 - Stay under 60 characters whenever possible.
 - Keep the title visually short (target under ~580px width).
 - Prefer short, powerful words (e.g., "SEO", "Marketing", "Web Design" vs. long words like "Optimization", "Solutions").

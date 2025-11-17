@@ -1,24 +1,15 @@
 "use server";
 
 import crypto from "crypto";
-import { getBigQueryClient } from "./bigqueryClient";
+import { db } from "./firebaseAdmin";
 
-const datasetId = process.env.BIGQUERY_DATASET;
-const tableId = process.env.BIGQUERY_TABLE;
-
-const isLoggingEnabled =
-  Boolean(datasetId && tableId) &&
-  Boolean(
-    process.env.BIGQUERY_PROJECT_ID &&
-      process.env.BIGQUERY_CLIENT_EMAIL &&
-      process.env.BIGQUERY_PRIVATE_KEY
-  );
-
+// Hash user ID for privacy (same as BigQuery)
 const hashIdentifier = (value) => {
   if (!value) return null;
   return crypto.createHash("sha256").update(value).digest("hex");
 };
 
+// Unified logger: writes to Firestore now, easy to migrate to BigQuery later
 export const logTrainingEvent = async ({
   userId,
   eventType,
@@ -26,31 +17,59 @@ export const logTrainingEvent = async ({
   businessLocation,
   payload,
 }) => {
-  if (!isLoggingEnabled) {
-    if (process.env.NODE_ENV !== "production") {
-      console.warn(
-        "Skipping BigQuery training log - BigQuery environment variables are not fully configured."
-      );
-    }
+  if (!userId) {
+    console.warn("⚠️ Skipping training log - no userId provided");
     return;
   }
 
+  const eventData = {
+    event_timestamp: new Date().toISOString(),
+    event_type: eventType,
+    hashed_user_id: hashIdentifier(userId), // Privacy: hash user ID
+    business_type: businessType || null,
+    business_location: businessLocation || null,
+    payload_json: JSON.stringify(payload ?? {}),
+    // Firestore-specific fields (for easy querying, can remove before BigQuery migration)
+    userId: userId, // Keep for easy querying
+    createdAt: new Date(), // Firestore timestamp
+  };
+
   try {
-    const client = await getBigQueryClient();
-    const table = client.dataset(datasetId).table(tableId);
+    // Write to Firestore using subcollection structure
+    // trainingEvents/{hashedUserId}/events/{autoId}
+    const hashedUserId = hashIdentifier(userId);
+    await db
+      .collection("trainingEvents")
+      .doc(hashedUserId)
+      .collection("events")
+      .add(eventData);
 
-    const row = {
-      event_timestamp: new Date().toISOString(),
-      event_type: eventType,
-      hashed_user_id: hashIdentifier(userId),
-      business_type: businessType || null,
-      business_location: businessLocation || null,
-      payload_json: JSON.stringify(payload ?? {}),
-    };
-
-    await table.insert([row]);
+    // Optional: Also write to BigQuery if configured (for gradual migration)
+    // This allows dual-write during migration period
+    if (process.env.BIGQUERY_ENABLED === "true") {
+      try {
+        const { getBigQueryClient } = await import("./bigqueryClient");
+        const client = await getBigQueryClient();
+        const table = client
+          .dataset(process.env.BIGQUERY_DATASET)
+          .table(process.env.BIGQUERY_TABLE);
+        await table.insert([
+          {
+            event_timestamp: eventData.event_timestamp,
+            event_type: eventData.event_type,
+            hashed_user_id: eventData.hashed_user_id,
+            business_type: eventData.business_type,
+            business_location: eventData.business_location,
+            payload_json: eventData.payload_json,
+          },
+        ]);
+      } catch (bqError) {
+        console.error("❌ Failed to write to BigQuery (non-critical):", bqError);
+        // Don't throw - Firestore write succeeded, BigQuery is optional
+      }
+    }
   } catch (error) {
-    console.error("❌ Failed to log training event to BigQuery:", error);
+    console.error("❌ Failed to log training event to Firestore:", error);
   }
 };
 
@@ -74,11 +93,22 @@ export const summarizeSeoContext = async (context = {}) => {
 
   return {
     aiTipsCount: Array.isArray(context.aiTips) ? context.aiTips.length : 0,
-    gscKeywordsSample: limitArray(context.gscKeywords, ["keyword", "clicks", "impressions", "position", "ctr"], 5),
-    easyWinsSample: limitArray(context.easyWins, ["keyword", "position", "clicks", "impressions", "ctr"], 5),
-    lowCtrPagesSample: limitArray(context.lowCtrPages, ["page", "clicks", "impressions", "ctr"], 5),
+    gscKeywordsSample: limitArray(
+      context.gscKeywords,
+      ["keyword", "clicks", "impressions", "position", "ctr"],
+      5
+    ),
+    easyWinsSample: limitArray(
+      context.easyWins,
+      ["keyword", "position", "clicks", "impressions", "ctr"],
+      5
+    ),
+    lowCtrPagesSample: limitArray(
+      context.lowCtrPages,
+      ["page", "clicks", "impressions", "ctr"],
+      5
+    ),
     topPagesSample: limitArray(context.topPages, ["page", "clicks"], 5),
     dateRange: context.dateRange,
   };
 };
-

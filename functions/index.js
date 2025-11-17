@@ -364,12 +364,10 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
 });
 
 // ⏰ Daily cron job to check SEO progress after 7 days
-// COMMENTED OUT: Automatic refresh causing data to reset to 0s
-// Users will now manually refresh using the "Refresh Data" button
-/*
+// ✅ FIXED: Added safeguards to prevent overwriting good data with 0s
 exports.checkSeoTipProgress = pubsub
   .schedule("every 24 hours")
-  .timeZone("America/New_York") // optional
+  .timeZone("America/New_York")
   .onRun(async (context) => {
     const snapshot = await db
       .collection("implementedSeoTips")
@@ -378,6 +376,10 @@ exports.checkSeoTipProgress = pubsub
 
     const now = Date.now();
     const updates = [];
+    let processedCount = 0;
+    let skippedCount = 0;
+    let createdCount = 0;
+    let updatedCount = 0;
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
@@ -386,6 +388,7 @@ exports.checkSeoTipProgress = pubsub
       console.log(`🔍 Processing document: ${doc.id}`);
       console.log(`📅 Implemented at: ${implementedAt}`);
       console.log(`📊 Has preStats: ${!!preStats}`);
+      console.log(`📊 Has postStats: ${!!postStats}`);
 
       if (!implementedAt || !userId || !pageUrl || !preStats) {
         console.log(`❌ Skipping ${doc.id} - missing required fields`);
@@ -395,17 +398,16 @@ exports.checkSeoTipProgress = pubsub
       const daysSince =
         (now - new Date(implementedAt).getTime()) / (1000 * 60 * 60 * 24);
 
-      console.log(`📅 Days since implementation: ${daysSince}`);
+      console.log(`📅 Days since implementation: ${daysSince.toFixed(1)}`);
 
-      // ✅ MODIFIED: Process documents that are 7+ days old (not just create once)
+      // Only process documents that are 7+ days old
       if (daysSince < 7) {
         console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
+        skippedCount++;
         continue;
       }
       
-      // ✅ MODIFIED: Always process documents over 7 days old, even if they already have postStats
-      // This allows refreshing stale data and continuous monitoring
-      console.log(`🔄 Processing ${doc.id} (${daysSince.toFixed(1)} days old) - refreshing postStats`);
+      processedCount++;
       
       // Try to get GSC data from the document first
       let token = data.gscToken;
@@ -421,6 +423,12 @@ exports.checkSeoTipProgress = pubsub
             token = userData.gscAccessToken;
             siteUrl = userData.gscSiteUrl;
             console.log(`✅ Found GSC data in user document`);
+            
+            // Update document with GSC data for future use
+            await doc.ref.set({
+              gscToken: token,
+              siteUrl: siteUrl
+            }, { merge: true });
           }
         } catch (error) {
           console.log(`❌ Error getting user GSC data: ${error.message}`);
@@ -429,13 +437,13 @@ exports.checkSeoTipProgress = pubsub
 
       if (!token || !siteUrl) {
         console.log(`❌ Skipping ${doc.id} - no GSC token or site URL available`);
+        skippedCount++;
         continue;
       }
 
       try {
         console.log(`🌐 Fetching postStats for ${pageUrl} from API`);
         
-        // ✅ FIXED: Always fetch fresh data from API (same logic as manual function)
         const res = await fetch(
           "https://simplseo-io.vercel.app/api/gsc/page-metrics",
           {
@@ -449,37 +457,90 @@ exports.checkSeoTipProgress = pubsub
         
         if (res.ok) {
           newPostStats = await res.json();
-          console.log(`✅ Fetched real postStats for ${pageUrl}:`, newPostStats);
+          console.log(`✅ Fetched postStats for ${pageUrl}:`, newPostStats);
         } else {
-          console.log(`⚠️ API failed for ${pageUrl}, using dummy postStats`);
-          newPostStats = {
-            impressions: Math.floor(Math.random() * 100) + 50,
-            clicks: Math.floor(Math.random() * 20) + 5,
-            ctr: (Math.random() * 0.05 + 0.02).toFixed(4),
-            position: (Math.random() * 5 + 8).toFixed(2),
-          };
+          const errorText = await res.text();
+          console.log(`⚠️ API failed for ${pageUrl}: ${res.status} - ${errorText}`);
+          skippedCount++;
+          continue; // Skip if API fails - don't use dummy data
         }
 
-        // ✅ FIXED: Always update with fresh data (same as manual function)
-        console.log(`📊 Updating postStats for ${pageUrl}:`, newPostStats);
+        // ✅ SAFEGUARD: Check if new data is all zeros
+        const isAllZeros = newPostStats.impressions === 0 && 
+                           newPostStats.clicks === 0 && 
+                           newPostStats.ctr === 0 && 
+                           newPostStats.position === 0;
 
-        updates.push(
-          doc.ref.set(
-            {
-              postStats: newPostStats,
-              updatedAt: new Date().toISOString(),
-              lastUpdated: new Date().toISOString(), // Track when it was last updated
-            },
-            { merge: true }
-          )
-        );
+        // ✅ SAFEGUARD: Check if existing postStats has real data
+        const existingHasData = postStats && 
+                               (postStats.impressions > 0 || 
+                                postStats.clicks > 0 || 
+                                (postStats.position > 0 && postStats.position < 100));
+
+        // Decision logic:
+        // 1. If postStats doesn't exist, create it (first time after 7 days)
+        // 2. If postStats exists but is all zeros, update with new data (even if zeros - might be real)
+        // 3. If postStats exists with real data and new data is zeros, skip (don't overwrite good data)
+        // 4. If postStats exists and new data is better, update it
+
+        if (!postStats) {
+          // First time - create postStats (even if zeros, it's the first attempt)
+          console.log(`📝 Creating postStats for ${pageUrl} (first time)`);
+          updates.push(
+            doc.ref.set(
+              {
+                postStats: newPostStats,
+                updatedAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              },
+              { merge: true }
+            )
+          );
+          createdCount++;
+        } else if (!existingHasData && isAllZeros) {
+          // Existing data is also zeros, update anyway (might get real data later)
+          console.log(`🔄 Updating postStats for ${pageUrl} (both zeros, trying again)`);
+          updates.push(
+            doc.ref.set(
+              {
+                postStats: newPostStats,
+                updatedAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              },
+              { merge: true }
+            )
+          );
+          updatedCount++;
+        } else if (existingHasData && isAllZeros) {
+          // Existing data is good, new data is zeros - SKIP to protect good data
+          console.log(`🛡️ Skipping update for ${pageUrl} - existing data is good, new data is zeros`);
+          skippedCount++;
+          continue;
+        } else {
+          // Both have data - update with new data (refreshing)
+          console.log(`🔄 Refreshing postStats for ${pageUrl}`);
+          updates.push(
+            doc.ref.set(
+              {
+                postStats: newPostStats,
+                updatedAt: new Date().toISOString(),
+                lastUpdated: new Date().toISOString(),
+              },
+              { merge: true }
+            )
+          );
+          updatedCount++;
+        }
       } catch (err) {
-        console.error(`❌ Error updating ${pageUrl}`, err);
+        console.error(`❌ Error updating ${pageUrl}:`, err);
+        skippedCount++;
       }
     }
 
     await Promise.all(updates);
-    console.log(`✅ Updated ${updates.length} SEO tip documents with continuous monitoring`);
+    console.log(`✅ Processed ${processedCount} documents:`);
+    console.log(`   - Created: ${createdCount}`);
+    console.log(`   - Updated: ${updatedCount}`);
+    console.log(`   - Skipped: ${skippedCount}`);
     return null;
   });
-*/
