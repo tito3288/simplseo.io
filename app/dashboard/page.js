@@ -42,6 +42,7 @@ import {
   X,
   RefreshCw,
   Info,
+  HelpCircle,
 } from "lucide-react";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, CheckCircle, XCircle } from "lucide-react";
@@ -1587,6 +1588,100 @@ export default function Dashboard() {
     }
   };
 
+  const handleFocusKeywordHelp = () => {
+    // Build pages without keywords list
+    const pagesWithoutKeywords = [];
+    groupedByPage.forEach((keywords, pageUrl) => {
+      const pageKey = normalizePageKey(pageUrl);
+      if (!focusKeywordByPage.has(pageKey)) {
+        // Get keyword data for this page
+        const pageKeywords = gscKeywords
+          .filter(kw => normalizePageKey(kw.page) === pageKey)
+          .map(kw => ({
+            keyword: kw.keyword,
+            impressions: kw.impressions,
+            clicks: kw.clicks,
+            position: kw.position,
+            ctr: kw.ctr,
+          }))
+          .sort((a, b) => b.impressions - a.impressions);
+        
+        pagesWithoutKeywords.push({
+          pageUrl: pageUrl === "__unknown__" ? null : pageUrl,
+          keywords: pageKeywords,
+        });
+      }
+    });
+
+    // Build selected keywords summary
+    const selectedKeywordsSummary = [];
+    focusKeywordByPage.forEach((keyword, pageKey) => {
+      const pageUrl = Array.from(groupedByPage.keys()).find(
+        url => normalizePageKey(url) === pageKey
+      ) || pageKey;
+      
+      const keywordData = gscKeywords.find(
+        kw => kw.keyword?.toLowerCase() === keyword?.toLowerCase()
+      );
+      
+      selectedKeywordsSummary.push({
+        pageUrl: pageUrl === "__unknown__" ? null : pageUrl,
+        keyword: keyword,
+        impressions: keywordData?.impressions || 0,
+        clicks: keywordData?.clicks || 0,
+        position: keywordData?.position || null,
+      });
+    });
+
+    // Create help message - more welcoming/introductory
+    const helpMessage = `I clicked the Help button on the Focus Keywords card. Can you help me understand how to choose focus keywords for my website?`;
+
+    // Store context in localStorage
+    localStorage.setItem("chatContext", JSON.stringify({
+      type: "focus_keywords",
+      focusKeywordContext: {
+        selectedKeywords: Array.from(focusKeywordByPage.entries()).map(([page, keyword]) => ({
+          page: page,
+          keyword: keyword,
+        })),
+        availableKeywordsByPage: Array.from(groupedByPage.entries()).map(([page, keywords]) => ({
+          page: page === "__unknown__" ? null : page,
+          keywords: keywords,
+        })),
+        businessName: data?.businessName || "",
+        businessType: data?.businessType || "",
+        businessLocation: data?.businessLocation || "",
+        pagesWithoutKeywords: pagesWithoutKeywords,
+        totalPages: groupedByPage.size,
+        totalSelected: focusKeywordByPage.size,
+        // Include full keyword data for analysis
+        keywordData: gscKeywords.map(kw => ({
+          keyword: kw.keyword,
+          page: kw.page,
+          impressions: kw.impressions,
+          clicks: kw.clicks,
+          position: kw.position,
+          ctr: kw.ctr,
+        })),
+      },
+      message: helpMessage,
+    }));
+
+    // Dispatch custom event to open chat
+    const chatEvent = new CustomEvent('openChatAssistant', {
+      detail: {
+        context: 'focus_keywords',
+        message: helpMessage,
+      }
+    });
+    window.dispatchEvent(chatEvent);
+
+    // Show toast notification
+    toast.success("Focus keyword help loaded!", {
+      description: "Chat is ready to help you choose the best keywords.",
+    });
+  };
+
   const defaultFocusKeywords = async () => {
     const sourceList = nonBrandedKeywords.length
       ? nonBrandedKeywords
@@ -1955,6 +2050,16 @@ export default function Dashboard() {
               <CardTitle className="flex items-center justify-between">
                 <span>Choose Your Focus Keywords</span>
                 <div className="flex items-center gap-2">
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={handleFocusKeywordHelp}
+                    title="Get help choosing focus keywords"
+                    className="text-primary hover:text-primary"
+                  >
+                    <HelpCircle className="h-4 w-4 mr-2" />
+                    Help
+                  </Button>
                   <Button
                     variant="outline"
                     size="sm"

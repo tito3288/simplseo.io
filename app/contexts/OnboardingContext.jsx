@@ -16,6 +16,7 @@ const initialData = {
   isComplete: false,
   siteCrawlStatus: "idle",
   lastSiteCrawlAt: null,
+  privacyPolicyAccepted: false,
 };
 
 const OnboardingContext = createContext(undefined);

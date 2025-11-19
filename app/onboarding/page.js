@@ -16,6 +16,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { Checkbox } from "@/components/ui/checkbox";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,6 +25,7 @@ import {
   MapPin,
   Computer,
   CheckCircle,
+  FileText,
 } from "lucide-react";
 
 const businessTypes = [
@@ -96,7 +98,8 @@ const OnboardingWizard = () => {
         // GSC is mandatory - user must toggle "Yes" AND connect/select a property
         return data.hasGSC && data.gscProperty;
       case 5:
-        return true; // Final step
+        // Privacy policy must be accepted
+        return data.privacyPolicyAccepted === true;
       default:
         return false;
     }
@@ -519,21 +522,53 @@ const OnboardingWizard = () => {
             {currentStep === 5 && (
               <div className="space-y-4">
                 <div className="flex items-center gap-2 mb-4">
-                  <CheckCircle className="text-primary" />
-                  <h2 className="text-xl font-semibold">All Set!</h2>
+                  <FileText className="text-primary" />
+                  <h2 className="text-xl font-semibold">Privacy Policy & Terms</h2>
                 </div>
-                <div className="py-4 text-center">
-                  <div className="bg-primary/10 text-primary p-3 rounded-lg inline-flex items-center mb-4">
-                    <CheckCircle className="h-6 w-6 mr-2" />
-                    <span className="font-medium">Setup Complete</span>
+                
+                {/* Scrollable Privacy Policy */}
+                <div className="border rounded-lg p-4 max-h-[300px] overflow-y-auto bg-muted/50">
+                  <div className="space-y-3 text-sm">
+                    <h3 className="font-semibold text-base">Data Collection for Training Purposes</h3>
+                    <p>
+                      We collect anonymized data to improve our SEO services and train our AI models. 
+                      This includes:
+                    </p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Meta title and description generation patterns</li>
+                      <li>Successful SEO strategies (anonymized)</li>
+                      <li>Conversation summaries (not full conversations)</li>
+                    </ul>
+                    <p className="font-semibold mt-4">Privacy & Security:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>User IDs are hashed using SHA-256</li>
+                      <li>Full URLs are anonymized (only page paths stored)</li>
+                      <li>Business names are not stored in training data</li>
+                      <li>Full conversations are not stored - only summaries</li>
+                      <li>All data collection is server-side only</li>
+                    </ul>
+                    <p className="mt-4">
+                      By continuing, you agree to our data collection practices for training and 
+                      service improvement purposes.
+                    </p>
                   </div>
-                  <h3 className="text-lg font-medium mb-2">
-                    Ready to boost your SEO
-                  </h3>
-                  <p className="text-muted-foreground">
-                    We&apos;ve gathered everything we need to help optimize your
-                    website&apos;s performance.
-                  </p>
+                </div>
+                
+                {/* Checkbox */}
+                <div className="flex items-start space-x-2 pt-2">
+                  <Checkbox
+                    id="privacyPolicy"
+                    checked={data.privacyPolicyAccepted || false}
+                    onCheckedChange={(checked) => 
+                      updateData({ privacyPolicyAccepted: checked === true })
+                    }
+                  />
+                  <label 
+                    htmlFor="privacyPolicy" 
+                    className="text-sm cursor-pointer leading-5"
+                  >
+                    I have read and agree to the Privacy Policy and data collection terms
+                  </label>
                 </div>
               </div>
             )}
@@ -560,7 +595,7 @@ const OnboardingWizard = () => {
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
             ) : (
-              <Button onClick={submitOnboarding} disabled={isSubmitting}>
+              <Button onClick={submitOnboarding} disabled={isSubmitting || !isStepValid()}>
                 {isSubmitting ? (
                   <span className="flex items-center">
                     <svg
@@ -599,6 +634,8 @@ const OnboardingWizard = () => {
               <p className="text-xs text-muted-foreground text-center w-full">
                 {currentStep === 4 
                   ? "Please connect your Google Search Console account to continue"
+                  : currentStep === 5
+                  ? "Please read and accept the Privacy Policy to continue"
                   : "Please fill in all required fields"}
               </p>
             )}

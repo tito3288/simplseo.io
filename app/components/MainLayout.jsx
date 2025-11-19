@@ -142,13 +142,13 @@ const MainLayout = ({
     setShowTooltip(false); // Hide tooltip when chat is opened
   };
 
-  // Listen for chat open events from other components (like intent mismatch page)
+  // Listen for chat open events from other components (like intent mismatch page or focus keywords)
   useEffect(() => {
     const handleChatOpenEvent = (event) => {
-      if (event.detail?.context === 'intent_mismatch') {
+      if (event.detail?.context === 'intent_mismatch' || event.detail?.context === 'focus_keywords') {
         setIsChatOpen(true);
         // The chat context is already stored in localStorage
-        console.log('Chat opened from intent mismatch page with context:', event.detail);
+        console.log('Chat opened with context:', event.detail);
       }
     };
 

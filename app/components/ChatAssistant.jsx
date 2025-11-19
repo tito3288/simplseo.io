@@ -187,7 +187,8 @@ const ChatAssistant = ({
     if (!user?.id) return false;
     
     try {
-      const response = await fetch(`/api/conversations?userId=${user.id}`);
+      // Include active corner conversations when loading for the corner bubble
+      const response = await fetch(`/api/conversations?userId=${user.id}&includeActiveCorner=true`);
       const result = await response.json();
       
       if (result.success && result.conversations.length > 0) {
@@ -235,11 +236,21 @@ const ChatAssistant = ({
       const initializeChat = async () => {
         setIsLoadingConversation(true);
         await loadConversations();
-        const conversationLoaded = await loadMostRecentConversation();
         
-        // If no conversation was loaded, show welcome message
-        if (!conversationLoaded) {
+        // Check if we should skip loading old conversation (user clicked "End Conversation")
+        const skipLoad = localStorage.getItem("skipLoadConversation");
+        if (skipLoad === "true") {
+          // Clear the flag and start fresh
+          localStorage.removeItem("skipLoadConversation");
           setMessages([defaultWelcome]);
+        } else {
+          // Try to load most recent conversation
+          const conversationLoaded = await loadMostRecentConversation();
+          
+          // If no conversation was loaded, show welcome message
+          if (!conversationLoaded) {
+            setMessages([defaultWelcome]);
+          }
         }
         
         setIsInitialized(true);
@@ -274,6 +285,25 @@ const ChatAssistant = ({
           setTimeout(() => {
             sendMessageToAI(contextMessage.content, context.mismatch);
           }, 1000);
+        } else if (context.type === "focus_keywords") {
+          // Add the context message to the chat
+          const contextMessage = {
+            id: Date.now().toString(),
+            role: "user",
+            content: context.message,
+            timestamp: new Date(),
+            source: "corner-bubble",
+          };
+          
+          setMessages(prev => [...prev, contextMessage]);
+          
+          // Clear the stored context after using it
+          localStorage.removeItem("chatContext");
+          
+          // Automatically send the message to get AI response with focus keyword context
+          setTimeout(() => {
+            sendMessageToAI(contextMessage.content, context.focusKeywordContext);
+          }, 1000);
         }
       } catch (error) {
         console.error("Error parsing chat context:", error);
@@ -294,6 +324,9 @@ const ChatAssistant = ({
           role: msg.role === "user" ? "user" : "assistant",
           content: msg.content
         }));
+
+      // Determine if this is focus keyword context
+      const isFocusKeywordContext = pageContext && pageContext.selectedKeywords !== undefined;
 
       const res = await fetch("/api/seo-assistant/chat", {
         method: "POST",
@@ -323,7 +356,9 @@ const ChatAssistant = ({
               fullPageContent: pageContext.fullPageContent,
               allHeadings: pageContext.allHeadings,
               seoGuidance: pageContext.seoGuidance
-            } : null
+            } : null,
+            // Include focus keyword context if available
+            focusKeywordContext: isFocusKeywordContext ? pageContext : null,
           },
         }),
       });
@@ -564,21 +599,19 @@ const ChatAssistant = ({
       await endConversationInCorner(currentConversationId);
     }
     
+    // Set flag to prevent loading old conversation when chat reopens
+    localStorage.setItem("skipLoadConversation", "true");
+    
+    // Clear all conversation state
     localStorage.removeItem("seoChatMessages");
+    localStorage.removeItem("chatContext"); // Also clear any stored context
     setCurrentConversationId(null);
+    setMessages([]); // Clear messages
+    setCompletedTypingMessages(new Set()); // Clear completed typing messages
     isSavingRef.current = false; // Reset saving guard
-    const pageContext = getPageContext();
-    setMessages([
-      {
-        id: "welcome",
-        role: "assistant",
-        content:
-          `**Hey${firstName ? ` ${firstName}` : ""}! I'm your personal SEO Mentor**  \n\n${pageContext.message}\n\n${pageContext.help}\n\nJust type your question below to get started! 🚀`,
-        timestamp: new Date(),
-      },
-    ]);
     
     // Close the window like clicking the X button
+    // Note: Component will unmount, so isInitialized will reset automatically
     onClose();
   };
 
@@ -607,6 +640,7 @@ const ChatAssistant = ({
             size="icon"
             onClick={onClose}
             className="h-6 w-6"
+            title="Close chat (conversation will resume when reopened)"
           >
             <X className="h-3 w-3" />
           </Button>
@@ -743,6 +777,7 @@ const ChatAssistant = ({
             size="sm"
             className="text-xs text-muted-foreground hover:text-destructive"
             onClick={endConversation}
+            title="End this conversation and start fresh next time"
           >
             End Conversation
           </Button>

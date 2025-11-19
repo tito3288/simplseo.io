@@ -8,6 +8,7 @@ export async function GET(req) {
     const { searchParams } = new URL(req.url);
     const userId = searchParams.get('userId');
     const search = searchParams.get('search') || '';
+    const includeActiveCorner = searchParams.get('includeActiveCorner') === 'true';
 
     if (!userId) {
       return NextResponse.json({ error: "User ID is required" }, { status: 400 });
@@ -32,6 +33,20 @@ export async function GET(req) {
 
     // Sort by updatedAt in JavaScript (to avoid Firestore index requirement)
     conversations.sort((a, b) => new Date(b.updatedAt) - new Date(a.updatedAt));
+
+    // Filter out corner-bubble conversations that haven't been ended
+    // Only show corner-bubble conversations in chat history if they've been explicitly ended
+    // UNLESS includeActiveCorner is true (used when loading current conversation in corner bubble)
+    if (!includeActiveCorner) {
+      conversations = conversations.filter(conv => {
+        // If it's a corner-bubble conversation, only show it if cornerEnded is true
+        if (conv.source === 'corner-bubble') {
+          return conv.cornerEnded === true;
+        }
+        // Show all other conversations (main-chatbot, etc.)
+        return true;
+      });
+    }
 
     // Filter by search term if provided
     if (search) {
@@ -81,35 +96,43 @@ export async function POST(req) {
 
     // Deduplication: Check if a conversation with the same first message was created recently (within 5 minutes)
     // This prevents duplicate conversations from race conditions
+    // Note: This requires a Firestore composite index. If the index doesn't exist, we skip deduplication.
     if (firstUserMessage) {
-      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-      const existingSnapshot = await db.collection('conversations')
-        .where('userId', '==', userId)
-        .where('source', '==', source || 'main-chatbot')
-        .where('createdAt', '>=', fiveMinutesAgo)
-        .get();
+      try {
+        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+        const existingSnapshot = await db.collection('conversations')
+          .where('userId', '==', userId)
+          .where('source', '==', source || 'main-chatbot')
+          .where('createdAt', '>=', fiveMinutesAgo)
+          .get();
 
-      // Check if any existing conversation has the same first user message
-      for (const doc of existingSnapshot.docs) {
-        const existingData = doc.data();
-        const existingFirstUserMsg = existingData.messages?.find(msg => msg.role === 'user');
-        
-        if (existingFirstUserMsg && 
-            existingFirstUserMsg.content === firstUserMessage.content &&
-            existingData.messageCount === messages.length) {
-          // Found duplicate - return existing conversation ID instead of creating new one
-          return NextResponse.json({ 
-            success: true, 
-            conversationId: doc.id,
-            conversation: {
-              id: doc.id,
-              ...existingData,
-              createdAt: existingData.createdAt?.toDate?.() || new Date(existingData.createdAt),
-              updatedAt: existingData.updatedAt?.toDate?.() || new Date(existingData.updatedAt)
-            },
-            isDuplicate: true
-          });
+        // Check if any existing conversation has the same first user message
+        for (const doc of existingSnapshot.docs) {
+          const existingData = doc.data();
+          const existingFirstUserMsg = existingData.messages?.find(msg => msg.role === 'user');
+          
+          if (existingFirstUserMsg && 
+              existingFirstUserMsg.content === firstUserMessage.content &&
+              existingData.messageCount === messages.length) {
+            // Found duplicate - return existing conversation ID instead of creating new one
+            return NextResponse.json({ 
+              success: true, 
+              conversationId: doc.id,
+              conversation: {
+                id: doc.id,
+                ...existingData,
+                createdAt: existingData.createdAt?.toDate?.() || new Date(existingData.createdAt),
+                updatedAt: existingData.updatedAt?.toDate?.() || new Date(existingData.updatedAt)
+              },
+              isDuplicate: true
+            });
+          }
         }
+      } catch (error) {
+        // If index doesn't exist or query fails, log warning and continue without deduplication
+        // This is non-critical - duplicates are rare and can be handled manually if needed
+        console.warn("Deduplication check skipped (index may not exist):", error.message);
+        // Continue to create the conversation normally
       }
     }
 

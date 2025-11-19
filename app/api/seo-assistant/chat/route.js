@@ -340,6 +340,105 @@ ${headingsFormatted || "      • (none)"}`;
         .join("\n\n")
     : "    (No cached pages available yet)";
 
+  // Build focus keyword context section if available
+  const focusKeywordSection = context.focusKeywordContext ? `
+  
+  **🎯 FOCUS KEYWORD SELECTION CONTEXT (Active):**
+  The user is asking for help choosing focus keywords. This is a critical SEO task!
+  
+  **Current Status:**
+  - Total pages with keywords: ${context.focusKeywordContext.totalPages || 0}
+  - Pages with focus keywords selected: ${context.focusKeywordContext.totalSelected || 0}
+  - Pages without focus keywords: ${context.focusKeywordContext.pagesWithoutKeywords?.length || 0}
+  - Business Name: ${context.focusKeywordContext.businessName || 'Not provided'}
+  - Business Type: ${context.focusKeywordContext.businessType || 'Not provided'}
+  - Business Location: ${context.focusKeywordContext.businessLocation || 'Not provided'}
+  
+  **Selected Keywords:**
+  ${context.focusKeywordContext.selectedKeywords?.length > 0 
+    ? context.focusKeywordContext.selectedKeywords.map((s, i) => 
+        `${i + 1}. Page: ${s.page || 'Unassigned'} → Keyword: "${s.keyword}"`
+      ).join('\n  ')
+    : '  (None selected yet)'
+  }
+  
+  **Pages Without Focus Keywords:**
+  ${context.focusKeywordContext.pagesWithoutKeywords?.length > 0
+    ? context.focusKeywordContext.pagesWithoutKeywords.map((p, i) => {
+        const topKeywords = p.keywords?.slice(0, 3).map(kw => 
+          `"${kw.keyword}" (${kw.impressions} impressions, pos ${kw.position})`
+        ).join(', ') || 'No keywords';
+        return `${i + 1}. ${p.pageUrl || 'Unassigned'}: ${topKeywords}`;
+      }).join('\n  ')
+    : '  (All pages have focus keywords selected)'
+  }
+  
+  **Available Keywords Data:**
+  ${context.focusKeywordContext.keywordData?.length > 0
+    ? `Total keywords available: ${context.focusKeywordContext.keywordData.length}`
+    : 'No keyword data available'
+  }
+  
+  **CRITICAL FOCUS KEYWORD RULES (You MUST follow these):**
+  
+  1. **ONE KEYWORD PER PAGE ONLY** ⚠️
+     - Each page should have exactly ONE focus keyword
+     - Multiple keywords on the same page cause "keyword cannibalization"
+     - This means keywords compete against each other, diluting SEO efforts
+     - Explain: "Think of it like trying to be the best at two sports at once - you'll be mediocre at both instead of great at one"
+  
+  2. **EACH KEYWORD CAN ONLY BE USED ONCE ACROSS ALL PAGES** 🚫
+     - CRITICAL: Once a keyword is assigned to one page, it CANNOT be used on any other page
+     - Each keyword must be unique across the entire website
+     - If you recommend a keyword for Page A, you CANNOT recommend the same keyword for Page B
+     - Check the "Selected Keywords" list above - if a keyword is already assigned, suggest a DIFFERENT keyword
+     - When recommending keywords, always verify it's not already assigned to another page
+     - Example: If "mexico city taco tours" is assigned to /our-tours, you CANNOT recommend it for /cdmx-local-taco-tour - suggest a different keyword instead
+  
+  3. **PREFER NON-BRANDED KEYWORDS** 🎯
+     - Non-branded keywords (without business name) attract NEW customers
+     - Branded keywords only help people who already know your business
+     - Example: "emergency plumber austin" is better than "john's plumbing austin"
+     - Exception: If a page ONLY has branded keywords, use the best one BUT suggest creating content for non-branded alternatives
+  
+  4. **DON'T SKIP PAGES WITH ONLY BRANDED KEYWORDS** ✅
+     - If a page only has branded keywords, still select the best one
+     - Explain that branded keywords help with brand awareness
+     - Suggest creating new content targeting non-branded keywords
+     - Example: "This page only has branded keywords. Let's use '[best branded keyword]' for now, but I recommend creating a blog post or service page targeting '[suggested non-branded keyword]'"
+  
+  5. **KEYWORD SELECTION PRIORITIES** 📊
+     - Priority 1: Non-branded + High impressions (100+) + NOT already assigned to another page
+     - Priority 2: Non-branded + Service + Location (e.g., "dentist seattle") + NOT already assigned
+     - Priority 3: Non-branded + Service (e.g., "emergency plumber") + NOT already assigned
+     - Priority 4: Best branded keyword (if no non-branded available) + NOT already assigned
+     - Consider position: Keywords ranking 11-20 are easier to improve
+     - Consider CTR: Low CTR keywords have optimization potential
+     - ALWAYS check if keyword is already assigned before recommending
+  
+  6. **HELPING THE USER** 🤝
+     - Analyze each page's available keywords
+     - Identify the best non-branded option for each page that is NOT already assigned
+     - If the best keyword is already assigned, find the NEXT best option for that page
+     - If multiple good options exist, recommend the one with highest impressions that isn't already used
+     - Explain WHY each recommendation is good
+     - For pages with only branded keywords, provide specific non-branded alternatives to target
+     - When user clicks Help button, start with: "Hello [name]! I see you need help with the Focus Keywords card. Let me explain what this card does and help you choose the best keywords for each page."
+  
+  **When User Clicks Help Button (Initial Response):**
+  - Start with a friendly greeting: "Hello [user's name]! I see you need help with the Focus Keywords card."
+  - Explain what the Focus Keywords card does in simple terms
+  - Then provide guidance on choosing keywords
+  - Be welcoming and instructional, not like you're answering a detailed question
+  
+  **When User Asks About Focus Keywords:**
+  - Be specific: Reference actual pages and keywords from the data above
+  - Be actionable: Give clear recommendations they can implement immediately
+  - Be educational: Explain the "why" behind each recommendation
+  - Be encouraging: Acknowledge their progress and guide next steps
+  - ALWAYS verify no keyword is recommended twice across different pages
+  ` : '';
+
   const systemPrompt = `
   You&apos;re an expert SEO coach for ${context.userFirstName || 'the user'}.
   
@@ -377,6 +476,7 @@ ${headingsFormatted || "      • (none)"}`;
   ${context.currentPage === '/easy-wins' ? 'Focus on keywords close to page 1 and ranking improvements.' : ''}
   ${context.currentPage === '/top-keywords' ? 'Focus on maintaining and improving top-performing keywords.' : ''}
   ${context.currentPage === '/dashboard' ? 'Focus on overall SEO strategy and next steps.' : ''}
+${focusKeywordSection}
 
   **Complete Website Page Index:**
   When users ask about pages without providing URLs, use this index to find the right pages:
