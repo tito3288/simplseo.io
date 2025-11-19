@@ -89,6 +89,41 @@ export async function POST(req) {
       });
     }
 
+    // If pagesToSave is empty but we have approved URLs, fetch existing pages from cache
+    // This handles the case where user is saving after initial crawl (pendingPages is deleted)
+    if (pagesToSave.length === 0 && approvedSet.size > 0) {
+      const { getCachedSitePages } = await import("../../../lib/firestoreMigrationHelpers");
+      const existingCachedPages = await getCachedSitePages(userId, {
+        source: "site-crawl",
+        limit: 1000,
+        useAdminSDK: true
+      });
+      
+      // Add approved pages that aren't excluded to pagesToSave
+      existingCachedPages.forEach((cachedPage) => {
+        if (cachedPage.pageUrl && approvedSet.has(cachedPage.pageUrl) && !excludedSet.has(cachedPage.pageUrl)) {
+          pagesToSave.push({
+            pageUrl: cachedPage.pageUrl,
+            tags: Array.isArray(cachedPage.crawlTags) ? cachedPage.crawlTags : [],
+            isNavLink: !!cachedPage.isNavLink,
+            crawlOrder: cachedPage.crawlOrder || null,
+          });
+        }
+      });
+      
+      // Also add approved URLs that aren't in cache yet (shouldn't happen, but just in case)
+      approvedSet.forEach((url) => {
+        if (!excludedSet.has(url) && !pagesToSave.some(p => p.pageUrl === url)) {
+          pagesToSave.push({
+            pageUrl: url,
+            tags: [],
+            isNavLink: false,
+            crawlOrder: null,
+          });
+        }
+      });
+    }
+
     // Allow operation even if no pages to save, as long as we're removing pages
     // This handles the case where user just wants to remove unchecked pages
     if (pagesToSave.length === 0 && !hasExcludedUrls) {
@@ -127,22 +162,15 @@ export async function POST(req) {
         const cachedAt = new Date().toISOString();
         const tagList = Array.isArray(tags) ? tags : [];
 
-        // Save to pageContentCache
-        const docId = `${userId}_${encodeURIComponent(pageUrl)}`;
-        await db.collection("pageContentCache").doc(docId).set(
-          {
-            ...scrapeJson.data,
-            userId,
-            pageUrl,
-            source: "site-crawl",
-            isNavLink: !!isNavLink,
-            crawlOrder,
-            cachedAt,
-            expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
-            crawlTags: tagList,
-          },
-          { merge: true }
-        );
+        // Save to pageContentCache using backward-compatible helper (writes to both structures)
+        const { cachePageContent } = await import("../../../lib/firestoreMigrationHelpers");
+        await cachePageContent(userId, pageUrl, {
+          ...scrapeJson.data,
+          source: "site-crawl",
+          isNavLink: !!isNavLink,
+          crawlOrder,
+          crawlTags: tagList,
+        });
 
         savedCount += 1;
       } catch (error) {
@@ -152,19 +180,43 @@ export async function POST(req) {
     }
     }
 
-    // Remove any pages from pageContentCache that are excluded
+    // Remove any pages from pageContentCache that are excluded (check both structures)
     if (excludedSet.size > 0) {
-      const existingSnapshot = await db
-        .collection("pageContentCache")
-        .where("userId", "==", userId)
-        .where("source", "==", "site-crawl")
-        .get();
+      // Delete from NEW structure: pageContentCache/{userId}/pages
+      try {
+        const newSnapshot = await db
+          .collection("pageContentCache")
+          .doc(userId)
+          .collection("pages")
+          .where("source", "==", "site-crawl")
+          .get();
 
-      for (const docSnap of existingSnapshot.docs) {
-        const data = docSnap.data();
-        if (data?.pageUrl && excludedSet.has(data.pageUrl)) {
-          await docSnap.ref.delete();
+        for (const docSnap of newSnapshot.docs) {
+          const data = docSnap.data();
+          if (data?.pageUrl && excludedSet.has(data.pageUrl)) {
+            await docSnap.ref.delete();
+          }
         }
+      } catch (error) {
+        console.log("New structure deletion failed, trying old structure...");
+      }
+
+      // Also delete from OLD structure: pageContentCache (flat)
+      try {
+        const oldSnapshot = await db
+          .collection("pageContentCache")
+          .where("userId", "==", userId)
+          .where("source", "==", "site-crawl")
+          .get();
+
+        for (const docSnap of oldSnapshot.docs) {
+          const data = docSnap.data();
+          if (data?.pageUrl && excludedSet.has(data.pageUrl)) {
+            await docSnap.ref.delete();
+          }
+        }
+      } catch (error) {
+        console.error("Error deleting from old structure:", error);
       }
     }
 

@@ -65,15 +65,25 @@ export async function GET(req) {
           return a.crawlOrder - b.crawlOrder;
         });
     } else {
-      const pagesSnapshot = await db
-        .collection("pageContentCache")
-        .where("userId", "==", userId)
-        .where("source", "==", "site-crawl")
-        .get();
+      // Use backward-compatible helper to get pages from both structures
+      const { getCachedSitePages } = await import("../../../lib/firestoreMigrationHelpers");
+      const cachedPages = await getCachedSitePages(userId, {
+        source: "site-crawl",
+        limit: 1000,
+        useAdminSDK: true
+      });
 
-      pages = pagesSnapshot.docs
-        .map((docRef) => {
-          const data = docRef.data();
+      // Create a map of cached pages by URL for quick lookup
+      const cachedPagesMap = new Map();
+      cachedPages.forEach((page) => {
+        if (page.pageUrl) {
+          cachedPagesMap.set(page.pageUrl, page);
+        }
+      });
+
+      // Start with cached pages
+      pages = cachedPages
+        .map((data) => {
           const pageUrl = data?.pageUrl;
           if (!pageUrl) return null;
 
@@ -94,13 +104,31 @@ export async function GET(req) {
             tags: Array.isArray(data?.crawlTags) ? data.crawlTags : [],
           };
         })
-        .filter(Boolean)
-        .sort((a, b) => {
-          if (a.crawlOrder === null && b.crawlOrder === null) return 0;
-          if (a.crawlOrder === null) return 1;
-          if (b.crawlOrder === null) return -1;
-          return a.crawlOrder - b.crawlOrder;
-        });
+        .filter(Boolean);
+
+      // Add approved URLs that aren't in cached pages (fallback)
+      // This ensures approved pages show up even if they're not in pageContentCache yet
+      approvedUrls.forEach((url) => {
+        if (!excludedSet.has(url) && !cachedPagesMap.has(url)) {
+          pages.push({
+            pageUrl: url,
+            title: url.replace(/^https?:\/\//, ""),
+            isNavLink: false,
+            crawlOrder: null,
+            kept: true,
+            lastUpdated: null,
+            tags: [],
+          });
+        }
+      });
+
+      // Sort pages
+      pages.sort((a, b) => {
+        if (a.crawlOrder === null && b.crawlOrder === null) return 0;
+        if (a.crawlOrder === null) return 1;
+        if (b.crawlOrder === null) return -1;
+        return a.crawlOrder - b.crawlOrder;
+      });
     }
 
     return NextResponse.json({

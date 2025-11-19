@@ -539,7 +539,8 @@ const OnboardingWizard = () => {
             )}
           </CardContent>
 
-          <CardFooter className="flex justify-between pt-2">
+          <CardFooter className="flex flex-col gap-3 pt-2">
+            <div className="flex justify-between w-full">
             {currentStep > 1 ? (
               <Button
                 variant="outline"
@@ -554,19 +555,10 @@ const OnboardingWizard = () => {
             )}
 
             {currentStep < totalSteps ? (
-              <div className="flex flex-col items-end">
                 <Button onClick={nextStep} disabled={!isStepValid()}>
                   Next
                   <ArrowRight className="ml-2 h-4 w-4" />
                 </Button>
-                {!isStepValid() && (
-                  <p className="text-xs text-muted-foreground mt-1">
-                    {currentStep === 4 
-                      ? "Please connect your Google Search Console account to continue"
-                      : "Please fill in all required fields"}
-                  </p>
-                )}
-              </div>
             ) : (
               <Button onClick={submitOnboarding} disabled={isSubmitting}>
                 {isSubmitting ? (
@@ -600,6 +592,15 @@ const OnboardingWizard = () => {
                   </>
                 )}
               </Button>
+              )}
+            </div>
+            
+            {!isStepValid() && (
+              <p className="text-xs text-muted-foreground text-center w-full">
+                {currentStep === 4 
+                  ? "Please connect your Google Search Console account to continue"
+                  : "Please fill in all required fields"}
+              </p>
             )}
           </CardFooter>
         </Card>

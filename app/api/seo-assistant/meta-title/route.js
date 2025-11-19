@@ -82,13 +82,12 @@ export async function POST(req) {
         .join("||")}`
     : pageUrl;
 
-  const docRef = db
-    .collection("seoMetaTitles")
-    .doc(encodeURIComponent(focusKeywordCacheKey));
-  const cached = await docRef.get();
+  // Check cache using backward-compatible helper
+  const { getCachedMetaTitle } = await import("../../../lib/firestoreMigrationHelpers");
+  const cached = await getCachedMetaTitle(userId, focusKeywordCacheKey);
 
-  if (cached.exists) {
-    return NextResponse.json({ title: cached.data().title });
+  if (cached.success && cached.data?.title) {
+    return NextResponse.json({ title: cached.data.title });
   }
 
   const focusKeywordsString = focusKeywordList.join(", ");
@@ -163,11 +162,16 @@ Context (Impressions, CTR, etc): ${JSON.stringify(context)}
 
   const createdAt = new Date().toISOString();
 
-  await docRef.set({
-    title: aiTitle,
-    createdAt,
-    focusKeywords: focusKeywordList,
-  });
+  // Save using backward-compatible helper (writes to both structures)
+  if (userId) {
+    const { saveMetaTitle } = await import("../../../lib/firestoreMigrationHelpers");
+    await saveMetaTitle(userId, focusKeywordCacheKey, {
+      title: aiTitle,
+      createdAt,
+      focusKeywords: focusKeywordList,
+      pageUrl,
+    });
+  }
 
   await logTrainingEvent({
     userId,

@@ -478,21 +478,15 @@ export async function POST(req) {
         if (isInitialReview) {
           pendingPages.push(basePageRecord);
         } else {
-          const docId = `${userId}_${encodeURIComponent(url)}`;
-          await db.collection("pageContentCache").doc(docId).set(
-            {
+          // Use backward-compatible helper (writes to both structures)
+          const { cachePageContent } = await import("../../../lib/firestoreMigrationHelpers");
+          await cachePageContent(userId, url, {
               ...scrapeJson.data,
-              userId,
-              pageUrl: url,
               source: "site-crawl",
               isNavLink: basePageRecord.isNavLink,
               crawlOrder,
-              cachedAt,
-              expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString(),
               crawlTags: tagList,
-            },
-            { merge: true }
-          );
+          });
         }
 
         processed += 1;

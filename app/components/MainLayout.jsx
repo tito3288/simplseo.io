@@ -18,6 +18,7 @@ import {
   Moon,
   Sun,
   TrendingUp,
+  Mail,
 } from "lucide-react";
 import ChatAssistant from "../components/ChatAssistant";
 import {
@@ -65,11 +66,6 @@ const MainLayout = ({
       router.push("/onboarding");
     }
   }, [isLoading, user, isOnboardingLoaded, data?.isComplete, pathname, router]);
-
-  // Don't render anything while loading to prevent hook ordering issues
-  if (isLoading) {
-    return null;
-  }
 
   useEffect(() => {
     setIsMobileMenuOpen(false);
@@ -119,6 +115,11 @@ const MainLayout = ({
       path: "/settings",
       label: "Settings",
       icon: <Settings className="w-5 h-5" />,
+    },
+    {
+      path: "/contact",
+      label: "Contact",
+      icon: <Mail className="w-5 h-5" />,
     },
   ];
 
@@ -173,6 +174,11 @@ const MainLayout = ({
 
     return () => clearInterval(interval);
   }, [isChatOpen]);
+
+  // Don't render anything while loading to prevent hook ordering issues
+  if (isLoading) {
+    return null;
+  }
 
   return (
     <div className="min-h-screen bg-background flex flex-col">

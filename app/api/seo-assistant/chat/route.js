@@ -16,14 +16,14 @@ const openai = new OpenAI({
 const getCachedSitePages = async (userId, desiredCount = 10) => {
   if (!userId) return [];
   try {
-    const snapshot = await db
-      .collection("pageContentCache")
-      .where("userId", "==", userId)
-      .limit(Math.max(desiredCount * 3, 30))
-      .get();
+    // Use backward-compatible helper (checks both old and new structures)
+    const { getCachedSitePages: getCachedPages } = await import("../../../lib/firestoreMigrationHelpers");
+    const pages = await getCachedPages(userId, {
+      limit: Math.max(desiredCount * 3, 30),
+      useAdminSDK: true // Use admin SDK for server-side
+    });
 
-    const pages = snapshot.docs.map((docRef) => docRef.data());
-
+    // Sort pages
     pages.sort((a, b) => {
       const navScore =
         (b.isNavLink ? 1 : 0) - (a.isNavLink ? 1 : 0);
@@ -46,7 +46,7 @@ const getCachedSitePages = async (userId, desiredCount = 10) => {
 
     return pages;
   } catch (error) {
-    console.error("Failed to fetch cached site pages with admin SDK:", error);
+    console.error("Failed to fetch cached site pages:", error);
     return [];
   }
 };
@@ -230,34 +230,34 @@ const selectRelevantPages = (sortedPages, message, limit = 15) => {
   // Second pass: Keyword matches in URL, title, or content
   for (const page of sortedPages) {
     if (result.length >= limit) break;
-    
+
     const normalizedPageUrl = normalizeUrl(page.pageUrl || "");
     if (seen.has(normalizedPageUrl)) continue;
 
     let keywordMatch = false;
     
     // Check URL path segments
-    try {
-      const { pathname } = new URL(page.pageUrl);
-      const segments = pathname
-        .split("/")
-        .filter(Boolean)
-        .map((seg) => seg.toLowerCase());
-      keywordMatch = segments.some(
-        (seg) => seg.length >= 3 && normalizedMessage.includes(seg)
-      );
-    } catch {
-      keywordMatch = false;
-    }
+      try {
+        const { pathname } = new URL(page.pageUrl);
+        const segments = pathname
+          .split("/")
+          .filter(Boolean)
+          .map((seg) => seg.toLowerCase());
+        keywordMatch = segments.some(
+          (seg) => seg.length >= 3 && normalizedMessage.includes(seg)
+        );
+      } catch {
+        keywordMatch = false;
+      }
     
     // Check title
-    if (!keywordMatch && page.title) {
-      const titleWords = page.title
-        .toLowerCase()
-        .split(/\W+/)
-        .filter((word) => word.length >= 3);
-      keywordMatch = titleWords.some((word) => keywords.has(word));
-    }
+      if (!keywordMatch && page.title) {
+        const titleWords = page.title
+          .toLowerCase()
+          .split(/\W+/)
+          .filter((word) => word.length >= 3);
+        keywordMatch = titleWords.some((word) => keywords.has(word));
+      }
     
     // Check content (for longer keywords)
     if (!keywordMatch && page.textContent) {
@@ -315,7 +315,7 @@ export async function POST(req) {
 
   // Get all cached pages (increase limit to get more pages for better indexing)
   const cachedPages = await getCachedSitePages(userId, 25);
-  
+
   // Select relevant pages based on the message
   const selectedPages = selectRelevantPages(cachedPages, message, 15);
   const pageSummaries = selectedPages.map(buildPageSummary);

@@ -42,14 +42,12 @@ export async function POST(req) {
         .join("||")}`
     : pageUrl;
 
-  // 🔁 Use admin.firestore() syntax
-  const docRef = db
-    .collection("seoMetaDescriptions")
-    .doc(encodeURIComponent(focusKeywordCacheKey));
-  const cached = await docRef.get();
+  // Check cache using backward-compatible helper
+  const { getCachedMetaDescription } = await import("../../../lib/firestoreMigrationHelpers");
+  const cached = await getCachedMetaDescription(userId, focusKeywordCacheKey);
 
-  if (cached.exists) {
-    return NextResponse.json({ description: cached.data().description });
+  if (cached.success && cached.data?.description) {
+    return NextResponse.json({ description: cached.data.description });
   }
 
   // 🧠 Try to get playbook strategies (returns [] if feature flag disabled)
@@ -116,11 +114,16 @@ Only return the meta description — no quotes or explanations.
 
   const createdAt = new Date().toISOString();
 
-  await docRef.set({
-    description,
-    createdAt,
-    focusKeywords: focusKeywordList,
-  });
+  // Save using backward-compatible helper (writes to both structures)
+  if (userId) {
+    const { saveMetaDescription } = await import("../../../lib/firestoreMigrationHelpers");
+    await saveMetaDescription(userId, focusKeywordCacheKey, {
+      description,
+      createdAt,
+      focusKeywords: focusKeywordList,
+      pageUrl,
+    });
+  }
 
   await logTrainingEvent({
     userId,

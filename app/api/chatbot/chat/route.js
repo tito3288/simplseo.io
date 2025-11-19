@@ -129,15 +129,15 @@ ${headingsFormatted || "      • (none)"}`;
 const getCachedSitePages = async (userId, desiredCount = 25) => {
   if (!userId) return [];
   try {
-    const snapshot = await db
-      .collection("pageContentCache")
-      .where("userId", "==", userId)
-      .where("source", "==", "site-crawl")
-      .limit(Math.max(desiredCount * 3, 50))
-      .get();
+    // Use backward-compatible helper (checks both old and new structures)
+    const { getCachedSitePages: getCachedPages } = await import("../../../lib/firestoreMigrationHelpers");
+    const pages = await getCachedPages(userId, {
+      source: "site-crawl",
+      limit: Math.max(desiredCount * 3, 50),
+      useAdminSDK: true // Use admin SDK for server-side
+    });
 
-    const pages = snapshot.docs.map((docRef) => docRef.data());
-
+    // Sort pages
     pages.sort((a, b) => {
       const navScore = (b.isNavLink ? 1 : 0) - (a.isNavLink ? 1 : 0);
       if (navScore !== 0) return navScore;

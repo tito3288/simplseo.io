@@ -1931,7 +1931,7 @@ export default function Dashboard() {
             </AlertDescription>
           </Alert>
         )}
-        {focusKeywords.length === 0 && (
+        {/* {focusKeywords.length === 0 && (
           <Alert className="mt-4 border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
             <AlertCircle className="h-4 w-4 text-blue-600" />
             <AlertTitle>Let&apos;s pick focus keywords</AlertTitle>
@@ -1940,7 +1940,7 @@ export default function Dashboard() {
               dashboard and chatbot around them.
             </AlertDescription>
           </Alert>
-        )}
+        )} */}
       </div>
 
       <section

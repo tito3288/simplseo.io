@@ -229,17 +229,17 @@ export default function IntentMismatch() {
           
           let { title, metaDescription, textContent, headings } = scrapeData.data;
 
-          // Step 2: Check if we have cached results
-          const cacheKey = `${user.id}_${encodeURIComponent(keyword)}_${encodeURIComponent(pageUrl)}`;
+          // Step 2: Check if we have cached results (using backward-compatible helper)
           console.log(`🔍 Checking cache for: ${keyword}`);
           
           try {
-            const cachedDoc = await getDoc(doc(db, "intentMismatches", cacheKey));
+            const { getIntentMismatch, saveIntentMismatch } = await import("../lib/firestoreMigrationHelpers");
+            const cached = await getIntentMismatch(user.id, keyword, pageUrl);
             
             let analysis;
-            if (cachedDoc.exists()) {
+            if (cached.success && cached.data) {
               // Use cached result
-              analysis = cachedDoc.data();
+              analysis = cached.data;
               console.log(`✅ Using cached analysis for ${keyword}`);
               
               // Ensure we have the page data from cache
@@ -281,14 +281,10 @@ export default function IntentMismatch() {
               analysis = await analysisResponse.json();
               console.log(`✅ AI analysis completed for ${keyword}:`, analysis);
               
-              // Cache the result
+              // Cache the result using backward-compatible helper (writes to both structures)
               try {
-                await setDoc(doc(db, "intentMismatches", cacheKey), {
+                await saveIntentMismatch(user.id, keyword, pageUrl, {
                   ...analysis,
-                  userId: user.id,
-                  keyword,
-                  pageUrl,
-                  createdAt: new Date(),
                   title,
                   metaDescription,
                   // Store comprehensive page data for better context

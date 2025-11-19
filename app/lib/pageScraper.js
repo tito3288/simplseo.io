@@ -43,56 +43,21 @@ export const scrapePageContent = async (pageUrl) => {
 };
 
 /**
- * Get cached page content from Firestore
+ * Get cached page content from Firestore (backward-compatible)
+ * Uses new subcollection structure with fallback to old flat structure
  */
 export const getCachedPageContent = async (userId, pageUrl) => {
-  try {
-    const { doc, getDoc } = await import("firebase/firestore");
-    const { db } = await import("./firebaseConfig");
-    
-    const cacheKey = `${userId}_${encodeURIComponent(pageUrl)}`;
-    const cachedDoc = await getDoc(doc(db, "pageContentCache", cacheKey));
-    
-    if (cachedDoc.exists()) {
-      console.log(`✅ Using cached page content for: ${pageUrl}`);
-      return {
-        success: true,
-        data: cachedDoc.data(),
-        cached: true
-      };
-    }
-    
-    return { success: false, cached: false };
-  } catch (error) {
-    console.error(`❌ Error getting cached content for ${pageUrl}:`, error);
-    return { success: false, error: error.message };
-  }
+  const { getCachedPageContent: getCached } = await import("./firestoreMigrationHelpers");
+  return await getCached(userId, pageUrl);
 };
 
 /**
- * Cache page content in Firestore
+ * Cache page content in Firestore (backward-compatible)
+ * Writes to both new subcollection and old flat structure
  */
 export const cachePageContent = async (userId, pageUrl, contentData) => {
-  try {
-    const { doc, setDoc } = await import("firebase/firestore");
-    const { db } = await import("./firebaseConfig");
-    
-    const cacheKey = `${userId}_${encodeURIComponent(pageUrl)}`;
-    
-    await setDoc(doc(db, "pageContentCache", cacheKey), {
-      ...contentData,
-      userId,
-      pageUrl,
-      cachedAt: new Date().toISOString(),
-      expiresAt: new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString() // 24 hours
-    });
-    
-    console.log(`✅ Cached page content for: ${pageUrl}`);
-    return { success: true };
-  } catch (error) {
-    console.error(`❌ Error caching content for ${pageUrl}:`, error);
-    return { success: false, error: error.message };
-  }
+  const { cachePageContent: cacheContent } = await import("./firestoreMigrationHelpers");
+  return await cacheContent(userId, pageUrl, contentData);
 };
 
 /**

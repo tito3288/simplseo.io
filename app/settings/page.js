@@ -100,8 +100,9 @@ export default function Settings() {
     dataRetention: "12",
     
     // Integrations
-    gscConnected: true,
-    gscLastSync: "2024-01-15T10:30:00Z",
+    gscConnected: false,
+    gscProperty: "",
+    gscLastSync: null,
     analyticsConnected: false,
     socialConnected: false,
     
@@ -148,14 +149,30 @@ export default function Settings() {
   // Load user data
   useEffect(() => {
     if (data) {
+      // Normalize CMS platform to match dropdown values (onboarding saves capitalized)
+      const normalizeCmsPlatform = (platform) => {
+        if (!platform) return "";
+        // Map onboarding CMS platforms to settings values (lowercase)
+        const platformMap = {
+          "WordPress": "wordpress",
+          "Squarespace": "squarespace",
+          "Wix": "wix"
+        };
+        return platformMap[platform] || platform.toLowerCase() || "";
+      };
+
       setFormData(prev => ({
         ...prev,
         businessName: data.businessName || "",
         websiteUrl: data.websiteUrl || "",
         businessType: data.businessType || "",
         businessLocation: data.businessLocation || "",
-        cmsPlatform: data.cmsPlatform || "",
-        contactEmail: user?.email || ""
+        cmsPlatform: normalizeCmsPlatform(data.cmsPlatform),
+        contactEmail: user?.email || "",
+        // Update GSC connection status from actual onboarding data
+        gscConnected: !!(data.hasGSC && data.gscProperty),
+        gscProperty: data.gscProperty || "",
+        gscLastSync: data.gscLastSync || new Date().toISOString()
       }));
     }
   }, [data, user]);
@@ -327,21 +344,43 @@ export default function Settings() {
         console.log("⚠️ Error deleting implementedSeoTips:", error.message);
       }
 
-      // 4. Delete intentMismatches
+      // 4. Delete intentMismatches (from both old and new structures)
       try {
-        const intentMismatchesQuery = query(
-          collection(db, "intentMismatches"),
-          where("userId", "==", userId)
-        );
-        const intentMismatchesSnapshot = await getDocs(intentMismatchesQuery);
-        const batch2 = writeBatch(db);
-        intentMismatchesSnapshot.docs.forEach((doc) => {
-          batch2.delete(doc.ref);
-          deleteCount++;
-        });
-        if (intentMismatchesSnapshot.docs.length > 0) {
-          await batch2.commit();
-          console.log(`✅ Deleted ${intentMismatchesSnapshot.docs.length} intentMismatches documents`);
+        // Delete from NEW structure: intentMismatches/{userId}/analyses
+        try {
+          const newAnalysesRef = collection(db, "intentMismatches", userId, "analyses");
+          const newAnalysesSnapshot = await getDocs(newAnalysesRef);
+          const batch2a = writeBatch(db);
+          newAnalysesSnapshot.docs.forEach((doc) => {
+            batch2a.delete(doc.ref);
+            deleteCount++;
+          });
+          if (newAnalysesSnapshot.docs.length > 0) {
+            await batch2a.commit();
+            console.log(`✅ Deleted ${newAnalysesSnapshot.docs.length} intentMismatches from new structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from new intentMismatches structure:", error.message);
+        }
+
+        // Delete from OLD structure: intentMismatches (flat)
+        try {
+          const intentMismatchesQuery = query(
+            collection(db, "intentMismatches"),
+            where("userId", "==", userId)
+          );
+          const intentMismatchesSnapshot = await getDocs(intentMismatchesQuery);
+          const batch2b = writeBatch(db);
+          intentMismatchesSnapshot.docs.forEach((doc) => {
+            batch2b.delete(doc.ref);
+            deleteCount++;
+          });
+          if (intentMismatchesSnapshot.docs.length > 0) {
+            await batch2b.commit();
+            console.log(`✅ Deleted ${intentMismatchesSnapshot.docs.length} intentMismatches from old structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from old intentMismatches structure:", error.message);
         }
       } catch (error) {
         console.log("⚠️ Error deleting intentMismatches:", error.message);
@@ -407,21 +446,43 @@ export default function Settings() {
         console.log("⚠️ Error deleting aiSuggestions:", error.message);
       }
 
-      // 8. Delete pageContentCache
+      // 8. Delete pageContentCache (from both old and new structures)
       try {
-        const pageCacheQuery = query(
-          collection(db, "pageContentCache"),
-          where("userId", "==", userId)
-        );
-        const pageCacheSnapshot = await getDocs(pageCacheQuery);
-        const batch6 = writeBatch(db);
-        pageCacheSnapshot.docs.forEach((doc) => {
-          batch6.delete(doc.ref);
-          deleteCount++;
-        });
-        if (pageCacheSnapshot.docs.length > 0) {
-          await batch6.commit();
-          console.log(`✅ Deleted ${pageCacheSnapshot.docs.length} pageContentCache documents`);
+        // Delete from NEW structure: pageContentCache/{userId}/pages
+        try {
+          const newPagesRef = collection(db, "pageContentCache", userId, "pages");
+          const newPagesSnapshot = await getDocs(newPagesRef);
+          const batch6a = writeBatch(db);
+          newPagesSnapshot.docs.forEach((doc) => {
+            batch6a.delete(doc.ref);
+            deleteCount++;
+          });
+          if (newPagesSnapshot.docs.length > 0) {
+            await batch6a.commit();
+            console.log(`✅ Deleted ${newPagesSnapshot.docs.length} pageContentCache from new structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from new pageContentCache structure:", error.message);
+        }
+
+        // Delete from OLD structure: pageContentCache (flat)
+        try {
+          const pageCacheQuery = query(
+            collection(db, "pageContentCache"),
+            where("userId", "==", userId)
+          );
+          const pageCacheSnapshot = await getDocs(pageCacheQuery);
+          const batch6b = writeBatch(db);
+          pageCacheSnapshot.docs.forEach((doc) => {
+            batch6b.delete(doc.ref);
+            deleteCount++;
+          });
+          if (pageCacheSnapshot.docs.length > 0) {
+            await batch6b.commit();
+            console.log(`✅ Deleted ${pageCacheSnapshot.docs.length} pageContentCache from old structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from old pageContentCache structure:", error.message);
         }
       } catch (error) {
         console.log("⚠️ Error deleting pageContentCache:", error.message);
@@ -436,8 +497,10 @@ export default function Settings() {
 
   const tabs = [
     { id: "profile", label: "Profile", icon: User },
-    { id: "notifications", label: "Notifications", icon: Bell },
-    { id: "seo", label: "SEO Preferences", icon: Search },
+    // TODO: Uncomment when implementing notification preferences
+    // { id: "notifications", label: "Notifications", icon: Bell },
+    // TODO: Uncomment when implementing SEO preferences
+    // { id: "seo", label: "SEO Preferences", icon: Search },
     { id: "integrations", label: "Integrations", icon: Globe },
     { id: "account", label: "Account", icon: Shield }
   ];
@@ -550,12 +613,26 @@ export default function Settings() {
                           <SelectValue placeholder="Select business type" />
                         </SelectTrigger>
                         <SelectContent>
-                          <SelectItem value="ecommerce">E-commerce</SelectItem>
-                          <SelectItem value="service">Service Business</SelectItem>
-                          <SelectItem value="blog">Blog/Content</SelectItem>
-                          <SelectItem value="saas">SaaS</SelectItem>
-                          <SelectItem value="local">Local Business</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
+                          <SelectItem value="Dentist">Dentist</SelectItem>
+                          <SelectItem value="Restaurant">Restaurant</SelectItem>
+                          <SelectItem value="Roofer">Roofer</SelectItem>
+                          <SelectItem value="Plumber">Plumber</SelectItem>
+                          <SelectItem value="Hair Salon">Hair Salon</SelectItem>
+                          <SelectItem value="Retail Store">Retail Store</SelectItem>
+                          <SelectItem value="Law Firm">Law Firm</SelectItem>
+                          <SelectItem value="Real Estate">Real Estate</SelectItem>
+                          <SelectItem value="Fitness">Fitness</SelectItem>
+                          <SelectItem value="Car Wash">Car Wash</SelectItem>
+                          <SelectItem value="Automotive Services">Automotive Services</SelectItem>
+                          <SelectItem value="Oil Change">Oil Change</SelectItem>
+                          <SelectItem value="Auto Repair">Auto Repair</SelectItem>
+                          <SelectItem value="Pet Grooming">Pet Grooming</SelectItem>
+                          <SelectItem value="Cleaning Services">Cleaning Services</SelectItem>
+                          <SelectItem value="Landscaping">Landscaping</SelectItem>
+                          <SelectItem value="HVAC">HVAC</SelectItem>
+                          <SelectItem value="Electrician">Electrician</SelectItem>
+                          <SelectItem value="Contractor">Contractor</SelectItem>
+                          <SelectItem value="Other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -581,11 +658,8 @@ export default function Settings() {
                         </SelectTrigger>
                         <SelectContent>
                           <SelectItem value="wordpress">WordPress</SelectItem>
-                          <SelectItem value="shopify">Shopify</SelectItem>
                           <SelectItem value="squarespace">Squarespace</SelectItem>
                           <SelectItem value="wix">Wix</SelectItem>
-                          <SelectItem value="custom">Custom</SelectItem>
-                          <SelectItem value="other">Other</SelectItem>
                         </SelectContent>
                       </Select>
                     </div>
@@ -627,7 +701,7 @@ export default function Settings() {
               </Card>
             )}
 
-            {/* Notifications Tab */}
+            {/* Notifications Tab - TODO: Uncomment when implementing notification preferences
             {activeTab === "notifications" && (
               <Card className="border-green-200 dark:border-green-800">
                 <CardHeader>
@@ -640,7 +714,6 @@ export default function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                  {/* Email Notifications */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Email Notifications</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -666,7 +739,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Real-time Alerts */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Real-time Alerts</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -687,7 +759,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Save Button */}
                   <div className="flex justify-end pt-4">
                     <Button 
                       onClick={handleSave} 
@@ -710,8 +781,9 @@ export default function Settings() {
                 </CardContent>
               </Card>
             )}
+            */}
 
-            {/* SEO Preferences Tab */}
+            {/* SEO Preferences Tab - TODO: Uncomment when implementing SEO preferences
             {activeTab === "seo" && (
               <Card className="border-green-200 dark:border-green-800">
                 <CardHeader>
@@ -724,7 +796,6 @@ export default function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                  {/* Dashboard Settings */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Dashboard Configuration</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -765,7 +836,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Feature Toggles */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Feature Preferences</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -802,7 +872,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Reporting Settings */}
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Reporting Preferences</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -841,7 +910,6 @@ export default function Settings() {
                     </div>
                   </div>
 
-                  {/* Save Button */}
                   <div className="flex justify-end pt-4">
                     <Button 
                       onClick={handleSave} 
@@ -864,6 +932,7 @@ export default function Settings() {
                 </CardContent>
               </Card>
             )}
+            */}
 
             {/* Integrations Tab */}
             {activeTab === "integrations" && (
@@ -878,7 +947,7 @@ export default function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                  <div className="grid grid-cols-1 gap-6">
                     {/* Google Search Console */}
                     <div className="flex items-center justify-between p-6 border rounded-lg">
                       <div className="flex items-center gap-4">
@@ -888,11 +957,17 @@ export default function Settings() {
                         <div>
                           <div className="font-semibold text-lg">Google Search Console</div>
                           <div className="text-sm text-muted-foreground">
-                            {formData.gscConnected ? "Connected" : "Not connected"}
-                            {formData.gscConnected && (
-                              <span className="ml-2 text-green-600">
-                                • Last sync: {new Date(formData.gscLastSync).toLocaleDateString()}
-                              </span>
+                            {formData.gscConnected ? (
+                              <>
+                                Connected
+                                {formData.gscProperty && (
+                                  <span className="ml-2 text-green-600">
+                                    • Property: {formData.gscProperty}
+                                  </span>
+                                )}
+                              </>
+                            ) : (
+                              "Not connected"
                             )}
                           </div>
                         </div>
@@ -901,20 +976,29 @@ export default function Settings() {
                         {formData.gscConnected ? (
                           <>
                             <CheckCircle className="w-5 h-5 text-green-600" />
-                            <Button variant="outline" size="sm">
+                            <Button 
+                              variant="outline" 
+                              size="sm"
+                              onClick={() => router.push("/onboarding?step=4")}
+                            >
                               Reconnect
                             </Button>
                           </>
                         ) : (
-                          <Button size="sm" className="bg-green-600 hover:bg-green-700">
+                          <Button 
+                            size="sm" 
+                            className="bg-green-600 hover:bg-green-700"
+                            onClick={() => router.push("/onboarding?step=4")}
+                          >
                             Connect
                           </Button>
                         )}
                       </div>
                     </div>
 
+                    {/* TODO: Uncomment when implementing additional integrations */}
                     {/* Google Analytics */}
-                    <div className="flex items-center justify-between p-6 border rounded-lg">
+                    {/* <div className="flex items-center justify-between p-6 border rounded-lg">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-orange-100 dark:bg-orange-900/20 rounded-lg flex items-center justify-center">
                           <BarChart3 className="w-6 h-6 text-orange-600" />
@@ -940,10 +1024,10 @@ export default function Settings() {
                           </Button>
                         )}
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Social Media */}
-                    <div className="flex items-center justify-between p-6 border rounded-lg">
+                    {/* <div className="flex items-center justify-between p-6 border rounded-lg">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-purple-100 dark:bg-purple-900/20 rounded-lg flex items-center justify-center">
                           <Globe className="w-6 h-6 text-purple-600" />
@@ -969,10 +1053,10 @@ export default function Settings() {
                           </Button>
                         )}
                       </div>
-                    </div>
+                    </div> */}
 
                     {/* Additional Integration Placeholder */}
-                    <div className="flex items-center justify-between p-6 border rounded-lg border-dashed">
+                    {/* <div className="flex items-center justify-between p-6 border rounded-lg border-dashed">
                       <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-gray-100 dark:bg-gray-800 rounded-lg flex items-center justify-center">
                           <Plus className="w-6 h-6 text-gray-400" />
@@ -987,28 +1071,7 @@ export default function Settings() {
                       <Button variant="outline" size="sm" disabled>
                         Coming Soon
                       </Button>
-                    </div>
-                  </div>
-
-                  {/* Save Button */}
-                  <div className="flex justify-end pt-4">
-                    <Button 
-                      onClick={handleSave} 
-                      disabled={isSaving}
-                      className="gap-2 bg-green-600 hover:bg-green-700"
-                    >
-                      {isSaving ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
+                    </div> */}
                   </div>
                 </CardContent>
               </Card>
@@ -1027,7 +1090,7 @@ export default function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-8">
-                  {/* Security Settings */}
+                  {/* Security Settings - TODO: Uncomment when implementing security features
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Security Settings</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1060,8 +1123,9 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
+                  */}
 
-                  {/* Data Management */}
+                  {/* Data Management - TODO: Uncomment when implementing data export/import
                   <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Data Management</h3>
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -1087,6 +1151,7 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
+                  */}
 
                   {/* Danger Zone */}
                   <div className="space-y-6">
