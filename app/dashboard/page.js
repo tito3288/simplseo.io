@@ -953,7 +953,7 @@ export default function Dashboard() {
       setIsLoadingGscData(false);
       setIsRefreshingData(false); // Reset refreshing state after data fetch
     }
-  }, [initialFocusKeywordsLoaded, hasAutoSelectedFocusKeywords, focusKeywords.length, user?.id]);
+  }, [user?.id]);
 
   // Fetch focus keywords with 90-day period (separate from dashboard metrics)
   const fetchFocusKeywords = useCallback(async (siteUrl, token) => {
@@ -2005,7 +2005,7 @@ export default function Dashboard() {
                   <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
                   <AlertDescription className="text-sm text-blue-900 dark:text-blue-100 flex items-center gap-1.5">
                     <span className="font-bold">Tip:</span>
-                    <span>Manually add any important pages that weren't detected in the crawl.</span>
+                    <span>Manually add any important pages that weren&apos;t detected in the crawl.</span>
                   </AlertDescription>
                 </Alert>
 
