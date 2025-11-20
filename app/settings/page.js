@@ -563,13 +563,34 @@ export default function Settings() {
                   </CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-6">
+                  {/* Coming Soon Message */}
+                  <div className="bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg p-4 mb-6">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="w-5 h-5 text-blue-600 dark:text-blue-400 flex-shrink-0 mt-0.5" />
+                      <div>
+                        <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                          Profile editing coming soon
+                        </p>
+                        <p className="text-sm text-blue-800 dark:text-blue-200">
+                          Profile editing will be available soon. For now, please{" "}
+                          <a href="/contact" className="underline font-medium hover:text-blue-600 dark:hover:text-blue-300">
+                            contact us
+                          </a>{" "}
+                          if you need to make any changes to your profile.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Faded Form Fields */}
+                  <div className="opacity-50 pointer-events-none">
                   {/* Avatar Section */}
                   <div className="flex items-center gap-4">
                     <div className="w-16 h-16 bg-gradient-to-br from-green-500 to-blue-600 rounded-full flex items-center justify-center text-white text-xl font-bold">
                       {data?.businessName?.charAt(0) || user?.email?.charAt(0) || 'U'}
                     </div>
                     <div>
-                      <Button variant="outline" size="sm" className="gap-2">
+                      <Button variant="outline" size="sm" className="gap-2" disabled>
                         <Camera className="w-4 h-4" />
                         Change Avatar
                       </Button>
@@ -590,6 +611,7 @@ export default function Settings() {
                         value={formData.businessName}
                         onChange={(e) => handleInputChange("businessName", e.target.value)}
                         placeholder="Enter your business name"
+                        disabled
                       />
                     </div>
                     <div className="space-y-2">
@@ -601,6 +623,7 @@ export default function Settings() {
                         value={formData.websiteUrl}
                         onChange={(e) => handleInputChange("websiteUrl", e.target.value)}
                         placeholder="https://yourwebsite.com"
+                        disabled
                       />
                     </div>
                     <div className="space-y-2">
@@ -608,7 +631,7 @@ export default function Settings() {
                         <BarChart3 className="w-4 h-4" />
                         Business Type
                       </label>
-                      <Select value={formData.businessType} onValueChange={(value) => handleInputChange("businessType", value)}>
+                      <Select value={formData.businessType} onValueChange={(value) => handleInputChange("businessType", value)} disabled>
                         <SelectTrigger>
                           <SelectValue placeholder="Select business type" />
                         </SelectTrigger>
@@ -645,6 +668,7 @@ export default function Settings() {
                         value={formData.businessLocation}
                         onChange={(e) => handleInputChange("businessLocation", e.target.value)}
                         placeholder="City, State or ZIP Code"
+                        disabled
                       />
                     </div>
                     <div className="space-y-2">
@@ -652,7 +676,7 @@ export default function Settings() {
                         <SettingsIcon className="w-4 h-4" />
                         CMS Platform
                       </label>
-                      <Select value={formData.cmsPlatform} onValueChange={(value) => handleInputChange("cmsPlatform", value)}>
+                      <Select value={formData.cmsPlatform} onValueChange={(value) => handleInputChange("cmsPlatform", value)} disabled>
                         <SelectTrigger>
                           <SelectValue placeholder="Select platform" />
                         </SelectTrigger>
@@ -673,29 +697,10 @@ export default function Settings() {
                         onChange={(e) => handleInputChange("contactEmail", e.target.value)}
                         type="email"
                         placeholder="contact@yourbusiness.com"
+                        disabled
                       />
                     </div>
                   </div>
-
-                  {/* Save Button */}
-                  <div className="flex justify-end pt-4">
-                    <Button 
-                      onClick={handleSave} 
-                      disabled={isSaving}
-                      className="gap-2 bg-green-600 hover:bg-green-700"
-                    >
-                      {isSaving ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
                   </div>
                 </CardContent>
               </Card>

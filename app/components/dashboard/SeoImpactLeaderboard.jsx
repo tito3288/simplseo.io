@@ -171,6 +171,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
     );
   }
 
+  // Hide the card until user has clicked "I've updated this on my site" for the first time
+  if (implementedCount === 0) {
+    return null;
+  }
+
   if (leaderboardData.length === 0) {
     return (
       <Card>

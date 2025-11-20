@@ -17,6 +17,8 @@ const initialData = {
   siteCrawlStatus: "idle",
   lastSiteCrawlAt: null,
   privacyPolicyAccepted: false,
+  postOnboardingStep: null, // 'pages' | 'keywords' | 'complete' | null
+  pagesStepCompleted: false, // Track if pages step is completed
 };
 
 const OnboardingContext = createContext(undefined);

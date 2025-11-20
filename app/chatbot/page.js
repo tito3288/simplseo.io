@@ -805,25 +805,9 @@ export default function Chatbot() {
                       />
                       
                       {/* Bottom Controls Row */}
-                      <div className="flex items-center justify-between p-2 bg-card">
-                        {/* Left side buttons */}
-                        <div className="flex items-center gap-1">
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                            <Plus className="h-3 w-3" />
-                          </Button>
-                          <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                            <Search className="h-3 w-3" />
-                          </Button>
-                        </div>
-                        
+                      <div className="flex items-center justify-end p-2 bg-card">
                         {/* Right side controls */}
                         <div className="flex items-center gap-2">
-                          <Select>
-                            <SelectTrigger className="w-32 sm:w-40 h-7 text-sm">
-                              <SelectValue placeholder="SEO Assistant" />
-                            </SelectTrigger>
-                          </Select>
-                          
                           <Button 
                             onClick={handleSendMessage}
                             disabled={!input.trim() || isThinking}
@@ -1091,25 +1075,9 @@ export default function Chatbot() {
                     />
                     
                     {/* Bottom Controls Row */}
-                    <div className="flex items-center justify-between p-2 bg-card">
-                      {/* Left side buttons */}
-                      <div className="flex items-center gap-1">
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                          <Plus className="h-3 w-3" />
-                        </Button>
-                        <Button variant="ghost" size="sm" className="h-7 w-7 p-0">
-                          <Search className="h-3 w-3" />
-                        </Button>
-                      </div>
-                      
+                    <div className="flex items-center justify-end p-2 bg-card">
                       {/* Right side controls */}
                       <div className="flex items-center gap-2">
-                        <Select>
-                          <SelectTrigger className="w-32 h-7 text-sm border-0 shadow-none">
-                            <SelectValue placeholder="SEO Assistant" />
-                          </SelectTrigger>
-                        </Select>
-                        
                         <Button 
                           onClick={handleSendMessage}
                           disabled={!input.trim() || isThinking}

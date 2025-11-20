@@ -116,7 +116,11 @@ const OnboardingWizard = () => {
 
     // Simulate API call
     setTimeout(() => {
-      updateData({ isComplete: true });
+      updateData({ 
+        isComplete: true,
+        postOnboardingStep: 'pages', // Start post-onboarding flow with pages step
+        pagesStepCompleted: false
+      });
       router.push("/dashboard");
       setIsSubmitting(false);
     }, 1000);
@@ -211,8 +215,18 @@ const OnboardingWizard = () => {
   }, [updateData, fetchGscProperties]);
 
   return (
-    <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Animated Background Orbs - Full Width, Fixed to Viewport */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-20 left-10 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute top-40 right-20 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-2000"></div>
+        <div className="absolute bottom-40 right-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl animate-pulse delay-3000"></div>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <h1 className="text-2xl font-bold">Set Up Your SEO Coach</h1>
           <p className="text-muted-foreground mt-2">
@@ -641,6 +655,7 @@ const OnboardingWizard = () => {
             )}
           </CardFooter>
         </Card>
+        </div>
       </div>
     </div>
   );

@@ -403,10 +403,18 @@ export default function Dashboard() {
           ? "completed-with-errors"
           : "completed";
 
-      updateData?.({
+      // If in post-onboarding flow, mark pages step as completed and move to keywords
+      const updatePayload = {
         siteCrawlStatus: completedStatus,
         lastSiteCrawlAt: new Date().toISOString(),
-      });
+      };
+      
+      if (data?.postOnboardingStep === 'pages') {
+        updatePayload.pagesStepCompleted = true;
+        updatePayload.postOnboardingStep = 'keywords'; // Automatically move to keywords step
+      }
+
+      updateData?.(updatePayload);
 
       // Reload the review to show updated status, but don't reload pages
       // since we're not recrawling - just update the status
@@ -552,6 +560,14 @@ export default function Dashboard() {
         prev.filter((url) => !newManualUrls.includes(url))
       );
       setNewUrlInput("");
+
+      // If in post-onboarding flow, mark pages step as completed and move to keywords
+      if (data?.postOnboardingStep === 'pages') {
+        updateData?.({
+          pagesStepCompleted: true,
+          postOnboardingStep: 'keywords', // Automatically move to keywords step
+        });
+      }
     } catch (error) {
       console.error("❌ Add & Save failed:", error);
       toast.error("Failed to add URL", {
@@ -1772,12 +1788,36 @@ export default function Dashboard() {
     }
   };
 
+  // Post-onboarding flow handlers
+  const handleNextToKeywords = () => {
+    if (data?.pagesStepCompleted) {
+      updateData({ postOnboardingStep: 'keywords' });
+    }
+  };
+
+  const handleSubmitKeywords = async () => {
+    // If focus keywords are already saved, just complete the flow
+    if (focusKeywords.length > 0) {
+      updateData({ 
+        postOnboardingStep: 'complete',
+        pagesStepCompleted: false // Reset this flag
+      });
+      toast.success("Welcome to your SEO Dashboard!");
+    } else {
+      toast.error("Please select at least one focus keyword before continuing.");
+    }
+  };
+
   const stripHtmlTags = (html) => {
     if (typeof window === "undefined") return html;
     const div = document.createElement("div");
     div.innerHTML = html;
     return div.textContent || div.innerText || "";
   };
+
+  const postOnboardingStep = data?.postOnboardingStep;
+  const isInPostOnboardingFlow = postOnboardingStep && postOnboardingStep !== 'complete';
+  const pagesStepCompleted = data?.pagesStepCompleted || false;
 
   return (
     <MainLayout
@@ -1789,14 +1829,36 @@ export default function Dashboard() {
       impressionTrends={gscImpressionTrends}
       isLoading={isLoadingGscData}
     >
-      <div className="mb-6">
-        <h1 className="text-5xl font-bold mb-2">
-          Welcome {data?.name ? data.name.split(" ")[0] : ""}!<br/> <span className="text-3xl">SEO Dashboard</span>
-        </h1>
-        <p className="text-muted-foreground">
-          Get insights and recommendations for improving your website&apos;s search
-          performance
-        </p>
+      {/* Welcome message - shown when flow is complete or not in post-onboarding flow */}
+      {(!isInPostOnboardingFlow || postOnboardingStep === 'complete') && (
+        <div className="mb-6 animate-in fade-in duration-500">
+          <h1 className="text-5xl font-bold mb-2">
+            Welcome {data?.name ? data.name.split(" ")[0] : ""}!<br/> <span className="text-3xl">SEO Dashboard</span>
+          </h1>
+          <p className="text-muted-foreground">
+            Get insights and recommendations for improving your website&apos;s search
+            performance
+          </p>
+        </div>
+      )}
+
+      {/* Post-onboarding flow title */}
+      {isInPostOnboardingFlow && postOnboardingStep !== 'complete' && (
+        <div className="mb-6 animate-in fade-in duration-500">
+          {postOnboardingStep === 'pages' && (
+            <h1 className="text-5xl font-bold mb-2">
+              Let&apos;s Get Started {data?.name ? data.name.split(" ")[0] : ""}!
+            </h1>
+          )}
+          {postOnboardingStep === 'keywords' && (
+            <h1 className="text-5xl font-bold mb-2">
+              Choose Your Focus Keywords
+            </h1>
+          )}
+        </div>
+      )}
+
+      <div className={cn("mb-6", isInPostOnboardingFlow && postOnboardingStep !== 'pages' && "hidden")}>
 
         {data?.siteCrawlStatus === "in-progress" && (
           <Alert className="mt-4 border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
@@ -1809,7 +1871,9 @@ export default function Dashboard() {
           </Alert>
         )}
 
-        {(data?.siteCrawlStatus === "completed" ||
+        {/* Website scan complete card - show in pages step OR when not in post-onboarding flow (but hide after completion) */}
+        {((postOnboardingStep === 'pages') || (!isInPostOnboardingFlow && postOnboardingStep !== 'complete')) && 
+         (data?.siteCrawlStatus === "completed" ||
           data?.siteCrawlStatus === "completed-with-errors" ||
           data?.siteCrawlStatus === "awaiting-review") && (
           <Alert className="mt-4 border-green-200 bg-green-50 dark:border-green-900/40 dark:bg-green-900/20">
@@ -1936,6 +2000,15 @@ export default function Dashboard() {
                   </div>
                 )}
 
+                {/* Tip for adding URLs */}
+                <Alert className="border-blue-200 bg-blue-50 dark:border-blue-900/40 dark:bg-blue-900/20">
+                  <Info className="h-4 w-4 text-blue-600 dark:text-blue-400 flex-shrink-0" />
+                  <AlertDescription className="text-sm text-blue-900 dark:text-blue-100 flex items-center gap-1.5">
+                    <span className="font-bold">Tip:</span>
+                    <span>Manually add any important pages that weren't detected in the crawl.</span>
+                  </AlertDescription>
+                </Alert>
+
                 <div className="flex flex-col gap-2 sm:flex-row">
                   <Input
                     value={newUrlInput}
@@ -2006,7 +2079,7 @@ export default function Dashboard() {
                     ) : null}
                     {hasNewManualUrls ? "Add & Save" : "Save"}
                   </Button>
-                  {needsCrawlReview && (
+                  {needsCrawlReview && !isInPostOnboardingFlow && (
                     <span className="text-xs text-muted-foreground">
                       We&apos;ll unlock the rest of your dashboard once this crawl finishes.
                     </span>
@@ -2038,65 +2111,93 @@ export default function Dashboard() {
         )} */}
       </div>
 
-      <section
-        className={cn(
-          "space-y-6 transition-all duration-300",
-          needsCrawlReview && "pointer-events-none opacity-40"
-        )}
-      >
-        {isGscConnected && (
-          <Card className="col-span-full mb-6">
-            <CardHeader className="pb-2">
-              <CardTitle className="flex items-center justify-between">
-                <span>Choose Your Focus Keywords</span>
-                <div className="flex items-center gap-2">
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleFocusKeywordHelp}
-                    title="Get help choosing focus keywords"
-                    className="text-primary hover:text-primary"
-                  >
-                    <HelpCircle className="h-4 w-4 mr-2" />
-                    Help
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={handleRefreshKeywords}
-                    disabled={isRefreshingData || isLoadingGscData || !isGscConnected}
-                    title="Refresh keywords from Google Search Console"
-                  >
-                    <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingData || isLoadingGscData ? 'animate-spin' : ''}`} />
-                    Refresh
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={defaultFocusKeywords}
-                    disabled={isFilteringKeywords || isSavingFocusKeywords}
-                  >
-                    Smart Suggest
-                  </Button>
-                </div>
-              </CardTitle>
-              <CardDescription>
-                Choose the keywords that matter most for each page so the rest of the dashboard can highlight them first.
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <FocusKeywordSelector
-                keywords={gscKeywords}
-                selectedByPage={focusKeywordByPage}
-                onToggle={handleFocusKeywordToggle}
-                isSaving={isSavingFocusKeywords}
-                suggestions={nonBrandedKeywords}
-                groupedByPage={groupedByPage}
-                businessName={data?.businessName || ""}
-              />
-            </CardContent>
-          </Card>
-        )}
+      {/* Focus Keywords card - show in keywords step OR when not in post-onboarding flow (but hide after completion) */}
+      {((postOnboardingStep === 'keywords') || (!isInPostOnboardingFlow && postOnboardingStep !== 'complete')) && (
+        <section
+          className={cn(
+            "space-y-6 transition-all duration-300",
+            needsCrawlReview && !isInPostOnboardingFlow && "pointer-events-none opacity-40"
+          )}
+        >
+          {isGscConnected && (
+            <Card className="col-span-full mb-6">
+              <CardHeader className="pb-2">
+                <CardTitle className="flex items-center justify-between">
+                  <span>Choose Your Focus Keywords</span>
+                  {postOnboardingStep !== 'keywords' && (
+                    <div className="flex items-center gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleFocusKeywordHelp}
+                        title="Get help choosing focus keywords"
+                        className="text-primary hover:text-primary"
+                      >
+                        <HelpCircle className="h-4 w-4 mr-2" />
+                        Help
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={handleRefreshKeywords}
+                        disabled={isRefreshingData || isLoadingGscData || !isGscConnected}
+                        title="Refresh keywords from Google Search Console"
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${isRefreshingData || isLoadingGscData ? 'animate-spin' : ''}`} />
+                        Refresh
+                      </Button>
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={defaultFocusKeywords}
+                        disabled={isFilteringKeywords || isSavingFocusKeywords}
+                      >
+                        Smart Suggest
+                      </Button>
+                    </div>
+                  )}
+                </CardTitle>
+                <CardDescription>
+                  Choose the keywords that matter most for each page so the rest of the dashboard can highlight them first.
+                </CardDescription>
+              </CardHeader>
+              <CardContent>
+                <FocusKeywordSelector
+                  keywords={gscKeywords}
+                  selectedByPage={focusKeywordByPage}
+                  onToggle={handleFocusKeywordToggle}
+                  isSaving={isSavingFocusKeywords}
+                  suggestions={nonBrandedKeywords}
+                  groupedByPage={groupedByPage}
+                  businessName={data?.businessName || ""}
+                />
+                {/* Submit button for post-onboarding flow */}
+                {postOnboardingStep === 'keywords' && (
+                  <div className="mt-6 flex justify-end">
+                    <Button
+                      onClick={handleSubmitKeywords}
+                      disabled={focusKeywords.length === 0 || isSavingFocusKeywords}
+                      size="lg"
+                    >
+                      Submit
+                      <ArrowRight className="ml-2 h-4 w-4" />
+                    </Button>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          )}
+        </section>
+      )}
+
+      {/* Rest of dashboard content - only show when flow is complete or not in post-onboarding flow */}
+      {((postOnboardingStep === 'complete') || (!isInPostOnboardingFlow)) && (
+        <section
+          className={cn(
+            "space-y-6 transition-all duration-300",
+            needsCrawlReview && "pointer-events-none opacity-40"
+          )}
+        >
 
 
         {/* GSC Setup Alert */}
@@ -2155,7 +2256,13 @@ export default function Dashboard() {
               <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
                 <Unlink className="h-8 w-8 text-muted-foreground" />
               </div>
-              <p className="text-sm text-muted-foreground">Connect GSC to see chart data</p>
+              <h3 className="text-lg font-medium mb-2">
+                Connect Google Search Console
+              </h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Track impressions over time and see how your website performs in search results
+              </p>
+              <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
             </div>
           ) : (
             <div className="h-[250px] w-full">
@@ -2192,7 +2299,7 @@ export default function Dashboard() {
         </AlertDescription>
       </Alert> 
       {/* Getting Started Card */}
-       <Card>
+       {/* <Card>
         <CardHeader>
           <CardTitle>Your Next Steps</CardTitle>
           <CardDescription>
@@ -2254,7 +2361,7 @@ export default function Dashboard() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
 
       {/* Top Row - Action Items */}
@@ -2575,10 +2682,8 @@ export default function Dashboard() {
           </CardContent>
         </Card>
       </div>
-
-    
-
-  </section>
+        </section>
+      )}
     </MainLayout>
   );
 }

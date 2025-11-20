@@ -27,6 +27,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import Link from "next/link";
+import { cn } from "@/lib/utils";
 
 const MainLayout = ({
   children,
@@ -180,10 +181,17 @@ const MainLayout = ({
     return null;
   }
 
+  // Check if user is in post-onboarding flow
+  const postOnboardingStep = data?.postOnboardingStep;
+  const isInPostOnboardingFlow = postOnboardingStep && postOnboardingStep !== 'complete';
+
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top Nav - Sticky Header */}
-      <header className="sticky top-0 z-50 bg-background border-b border-border shadow-sm">
+      <header className={cn(
+        "sticky top-0 z-50 bg-background border-b border-border shadow-sm transition-opacity duration-500",
+        isInPostOnboardingFlow && "opacity-30 pointer-events-none"
+      )}>
         <div className="container mx-auto px-4 py-3 flex items-center justify-between">
           <div className="flex items-center gap-2">
             <Button
@@ -200,7 +208,7 @@ const MainLayout = ({
             </Button>
             <Link href="/dashboard" className="flex items-center gap-2">
               <img
-                src="./1.png"
+                src={isDarkMode ? "./dark.png" : "./light.png"}
                 alt="SimplSEO.io Logo"
                 className="rounded-md my-logo w-[160px] md:w-[250px]"
               />
@@ -342,8 +350,8 @@ const MainLayout = ({
             `}</style>
           )}
           
-          {/* Only show floating chat button if not on chatbot page */}
-          {pathname !== "/chatbot" && (
+          {/* Only show floating chat button if not on chatbot or contact page */}
+          {pathname !== "/chatbot" && pathname !== "/contact" && (
             <Popover open={isChatOpen} onOpenChange={handleChatOpen}>
               <PopoverTrigger asChild>
                 <div className="fixed bottom-6 right-6" onClick={handleManualChatOpen}>

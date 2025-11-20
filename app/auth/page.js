@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 import {
@@ -14,7 +14,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, Loader2 } from "lucide-react";
+import { ArrowRight, Loader2, Sun, Moon } from "lucide-react";
 import { auth, db } from "../lib/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
@@ -23,8 +23,49 @@ const Auth = () => {
   const [isLogin, setIsLogin] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const { login, signup, signInWithGoogle, isLoading } = useAuth();
   const router = useRouter();
+
+  // Detect dark mode from document class and localStorage
+  useEffect(() => {
+    // Load theme from localStorage on mount
+    const savedTheme = localStorage.getItem("theme");
+    if (savedTheme === "dark") {
+      document.documentElement.classList.add("dark");
+      setIsDarkMode(true);
+    } else {
+      document.documentElement.classList.remove("dark");
+      setIsDarkMode(false);
+    }
+
+    const checkDarkMode = () => {
+      setIsDarkMode(document.documentElement.classList.contains("dark"));
+    };
+    
+    // Watch for changes
+    const observer = new MutationObserver(checkDarkMode);
+    observer.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ["class"],
+    });
+    
+    return () => observer.disconnect();
+  }, []);
+
+  // Toggle theme function
+  const toggleTheme = () => {
+    const newDarkMode = !isDarkMode;
+    setIsDarkMode(newDarkMode);
+    
+    if (newDarkMode) {
+      document.documentElement.classList.add("dark");
+      localStorage.setItem("theme", "dark");
+    } else {
+      document.documentElement.classList.remove("dark");
+      localStorage.setItem("theme", "light");
+    }
+  };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -110,18 +151,31 @@ const Auth = () => {
   };
 
   return (
-    <div className="min-h-screen flex flex-col items-center justify-center bg-background p-4">
-      <div className="w-full max-w-md">
+    <div className="min-h-screen bg-background relative overflow-hidden">
+      {/* Animated Background Orbs - Full Width, Fixed to Viewport */}
+      <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
+        <div className="absolute top-20 left-10 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl animate-pulse"></div>
+        <div className="absolute top-40 right-20 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
+        <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-2000"></div>
+        <div className="absolute bottom-40 right-1/4 w-96 h-96 bg-pink-500/20 rounded-full blur-3xl animate-pulse delay-3000"></div>
+      </div>
+
+      {/* Main Content */}
+      <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
+        <div className="w-full max-w-md">
         <div className="text-center mb-8">
           <div>
             <img
-              src="./1.png"
+              src={isDarkMode ? "./dark.png" : "./light.png"}
               alt="SimplSEO.io Logo"
               className="w-full h-auto rounded-md"
             />
           </div>
           <p className="text-muted-foreground mt-2">
-            Your personal SEO assistant for small businesses
+            Your personal SEO assistant for all businesses
+          </p>
+          <p className="text-sm  mt-3">
+            For the best experience, we recommend using a desktop or laptop
           </p>
         </div>
 
@@ -204,6 +258,36 @@ const Auth = () => {
             </div>
           </CardContent>
         </Card>
+
+        {/* Theme Toggle Button - Below Card */}
+        <div className="mt-6 flex justify-center">
+          <button
+            onClick={toggleTheme}
+            className="relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+            style={{
+              backgroundColor: isDarkMode ? '#9ca3af' : '#000000'
+            }}
+            title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {/* Sun Icon (Light Mode) - Always visible */}
+            <div className="absolute left-1.5 flex items-center justify-center z-10">
+              <Sun className="w-3.5 h-3.5 text-white" />
+            </div>
+            
+            {/* Moon Icon (Dark Mode) - Always visible */}
+            <div className="absolute right-1.5 flex items-center justify-center z-10">
+              <Moon className="w-3.5 h-3.5 text-white" />
+            </div>
+            
+            {/* Toggle Knob */}
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ease-in-out z-20 ${
+                isDarkMode ? 'translate-x-7' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+        </div>
       </div>
     </div>
   );

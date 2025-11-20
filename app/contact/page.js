@@ -121,8 +121,8 @@ export default function ContactPage() {
   return (
     <MainLayout>
       <div className="min-h-screen bg-background relative overflow-hidden">
-        {/* Animated Background Orbs */}
-        <div className="absolute inset-0 overflow-hidden pointer-events-none">
+        {/* Animated Background Orbs - Full Width, Fixed to Viewport */}
+        <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
           <div className="absolute top-20 left-10 w-96 h-96 bg-teal-500/20 rounded-full blur-3xl animate-pulse"></div>
           <div className="absolute top-40 right-20 w-80 h-80 bg-blue-500/20 rounded-full blur-3xl animate-pulse delay-1000"></div>
           <div className="absolute bottom-20 left-1/3 w-72 h-72 bg-purple-500/20 rounded-full blur-3xl animate-pulse delay-2000"></div>
@@ -135,7 +135,7 @@ export default function ContactPage() {
             Contact Us
           </h1>
           <p className="text-lg text-muted-foreground">
-            Any question or remarks? Just write us a message!
+            Any questions? Just write us a message!
           </p>
         </div>
 
@@ -143,54 +143,27 @@ export default function ContactPage() {
         <div className="relative z-10 px-6 pb-12 max-w-6xl mx-auto">
           <div className="backdrop-blur-xl bg-background/40 border border-white/10 rounded-2xl shadow-2xl overflow-hidden">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-0">
-              {/* Left Section - Contact Information */}
-              <div className="bg-gradient-to-br from-green-500/10 to-blue-500/10 p-8 lg:p-12 border-r border-white/10">
-                <h2 className="text-2xl font-bold text-foreground mb-8">Contact Information</h2>
+              {/* Left Section - Help Us Improve */}
+              <div className="bg-gradient-to-br from-green-500/10 to-blue-500/10 p-8 lg:p-12 border-r border-white/10 flex flex-col justify-center">
+                <h2 className="text-2xl font-bold text-foreground mb-6">Help Us Improve</h2>
                 
-                <div className="space-y-6">
-                  {/* Email */}
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                      <Mail className="w-5 h-5 text-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Email</p>
-                      <a 
-                        href="mailto:contact@simpleseo.io" 
-                        className="text-foreground hover:text-green-500 transition-colors"
-                      >
-                        contact@simpleseo.io
-                      </a>
-                    </div>
-                  </div>
-
-                  {/* Address */}
-                  <div className="flex items-start gap-4">
-                    <div className="w-10 h-10 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center flex-shrink-0">
-                      <MapPin className="w-5 h-5 text-foreground" />
-                    </div>
-                    <div>
-                      <p className="text-sm text-muted-foreground mb-1">Address</p>
-                      <p className="text-foreground leading-relaxed">
-                        We&apos;re a digital-first company.<br />
-                        Reach out via email or through this form.
-                      </p>
-                    </div>
-                  </div>
+                <div className="space-y-4 text-foreground">
+                  <p className="text-lg leading-relaxed">
+                    Your feedback means the world to us.
+                  </p>
+                  
+                  <p className="leading-relaxed">
+                    SimplSEO is growing fast, and every message helps us make the platform smarter, clearer, and more useful for you and your business.
+                  </p>
+                  
+                  <p className="leading-relaxed">
+                    If you have a question, run into an issue, or want to recommend a feature, feel free to reach out.
+                  </p>
+                  
+                  <p className="text-lg font-medium mt-6">
+                    Tell us what&apos;s on your mind
+                  </p>
                 </div>
-
-                {/* Social Links - Optional, can be added later */}
-                {/* <div className="mt-8 pt-8 border-t border-white/10">
-                  <p className="text-sm text-muted-foreground mb-4">Follow Us</p>
-                  <div className="flex gap-4">
-                    <a href="#" className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors">
-                      <span className="text-sm">📱</span>
-                    </a>
-                    <a href="#" className="w-8 h-8 rounded-lg bg-white/10 backdrop-blur-sm flex items-center justify-center hover:bg-white/20 transition-colors">
-                      <span className="text-sm">💼</span>
-                    </a>
-                  </div>
-                </div> */}
               </div>
 
               {/* Right Section - Contact Form */}
@@ -291,9 +264,9 @@ export default function ContactPage() {
                       value={formData.message}
                       onChange={(e) => handleInputChange("message", e.target.value)}
                       placeholder="Write your message..."
-                      rows={6}
+                      rows={10}
                       required
-                      className="resize-none bg-white/5 border-white/10 backdrop-blur-sm focus:bg-white/10"
+                      className="resize-none bg-white/5 border-white/10 backdrop-blur-sm focus:bg-white/10 min-h-[130px]"
                     />
 
                   </div>

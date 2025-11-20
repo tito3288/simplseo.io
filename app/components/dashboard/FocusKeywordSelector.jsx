@@ -157,8 +157,8 @@ const FocusKeywordSelector = ({
                       <span className="text-sm font-medium text-foreground">Unassigned</span>
                     )}
                   </div>
-                  <div className="text-xs uppercase tracking-wide text-muted-foreground font-medium">
-                    Choose one keyword below
+                  <div className="text-sm font-bold text-foreground uppercase tracking-wide bg-primary/10 px-3 py-1.5 rounded-md border border-primary/20">
+                    Choose "one" keyword per page
                   </div>
                 </div>
               </div>
