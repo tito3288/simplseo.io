@@ -242,7 +242,7 @@ const OnboardingWizard = () => {
           ></div>
         </div>
 
-        <Card className="shadow-md">
+        <Card className="backdrop-blur-xl bg-background/40 border border-white/10 rounded-2xl shadow-2xl">
           <CardContent className="pt-6">
             {currentStep === 1 && (
               <div className="space-y-4">

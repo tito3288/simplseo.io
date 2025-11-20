@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import MainLayout from "../components/MainLayout";
@@ -22,11 +22,21 @@ export default function ContactPage() {
   const { data: onboardingData } = useOnboarding();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [formData, setFormData] = useState({
-    name: user?.displayName || onboardingData?.businessName || "",
+    name: user?.displayName || onboardingData?.name || "",
     email: user?.email || "",
     subject: "",
     message: "",
   });
+
+  // Update name field when onboarding data loads (only if field is empty)
+  useEffect(() => {
+    if (onboardingData?.name && !formData.name) {
+      setFormData((prev) => ({
+        ...prev,
+        name: onboardingData.name,
+      }));
+    }
+  }, [onboardingData?.name, formData.name]);
 
   const handleInputChange = (field, value) => {
     setFormData((prev) => ({
@@ -88,7 +98,7 @@ export default function ContactPage() {
 
       // Reset form
       setFormData({
-        name: user?.displayName || onboardingData?.businessName || "",
+        name: user?.displayName || onboardingData?.name || "",
         email: user?.email || "",
         subject: "",
         message: "",

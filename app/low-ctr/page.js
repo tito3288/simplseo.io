@@ -3,7 +3,7 @@
 import { useEffect, useState, useMemo } from "react";
 import { useAuth } from "../contexts/AuthContext";
 import { db } from "../lib/firebaseConfig";
-import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
+import { doc, getDoc, setDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { createGSCTokenManager } from "../lib/gscTokenManager";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
 import MainLayout from "../components/MainLayout";
@@ -18,7 +18,7 @@ import {
   CardTitle,
   CardDescription,
 } from "@/components/ui/card";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Unlink } from "lucide-react";
 import { Alert, AlertTitle, AlertDescription } from "@/components/ui/alert";
 import { AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
@@ -34,6 +34,8 @@ import {
 import ContentAuditPanel from "../components/dashboard/ContentAuditPanel";
 import { Badge } from "@/components/ui/badge";
 import { getFocusKeywords } from "../lib/firestoreHelpers";
+
+const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
 // Helper function to create safe document IDs
 const createSafeDocId = (userId, pageUrl) => {
@@ -100,6 +102,7 @@ export default function LowCtrPage() {
   const [focusKeywordAssignments, setFocusKeywordAssignments] = useState(
     new Map()
   );
+  const [isGscConnected, setIsGscConnected] = useState(false);
   const [focusKeywordsLoaded, setFocusKeywordsLoaded] = useState(false);
   const [gscKeywordRows, setGscKeywordRows] = useState([]);
   const [viewMode, setViewMode] = useState("raw");
@@ -119,13 +122,19 @@ export default function LowCtrPage() {
         
         const gscData = await tokenManager.getStoredGSCData();
         
-        if (!gscData?.accessToken || !gscData?.siteUrl) {
+        if (!gscData?.refreshToken || !gscData?.siteUrl) {
+          setIsGscConnected(false);
+          setLoading(false);
           return;
         }
+
+        setIsGscConnected(true);
 
         // Get valid access token (refresh if needed)
         const validToken = await tokenManager.getValidAccessToken();
         if (!validToken) {
+          setIsGscConnected(false);
+          setLoading(false);
           return;
         }
 
@@ -138,6 +147,80 @@ export default function LowCtrPage() {
 
     fetchGSCData();
   }, [user, timePeriod]); // Add timePeriod dependency
+
+  const requestGSCAuthToken = async () => {
+    if (!user?.id) return;
+    
+    // Clear existing GSC data first
+    try {
+      const tokenManager = createGSCTokenManager(user.id);
+      await tokenManager.clearGSCData();
+    } catch (error) {
+      console.error("Failed to clear GSC data:", error);
+    }
+    
+    // Use authorization code flow to get refresh tokens
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?` +
+      `client_id=956212275866-7dtgdq7b38b156riehghuvh8b8469ktg.apps.googleusercontent.com&` +
+      `redirect_uri=${encodeURIComponent(window.location.origin + '/gsc-callback')}&` +
+      `response_type=code&` +
+      `scope=${encodeURIComponent(GSC_SCOPE)}&` +
+      `access_type=offline&` +
+      `prompt=consent&` +
+      `include_granted_scopes=true`;
+    
+    // Open popup for authorization
+    const popup = window.open(authUrl, 'gsc-auth', 'width=500,height=600');
+    
+    // Listen for the authorization code
+    const handleMessage = async (event) => {
+      if (event.origin !== window.location.origin) return;
+      
+      if (event.data.type === 'GSC_AUTH_SUCCESS' && event.data.code) {
+        console.log("🔐 Authorization code received:", event.data.code);
+        
+        try {
+          // Exchange code for tokens
+          const response = await fetch('/api/gsc/exchange-code', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ code: event.data.code })
+          });
+          
+          const tokenData = await response.json();
+          
+          if (tokenData.access_token) {
+            const tokenManager = createGSCTokenManager(user.id);
+            
+            // Store tokens in Firestore
+            await tokenManager.storeTokens(
+              tokenData.refresh_token || null,
+              tokenData.access_token,
+              null // siteUrl will be set after matching
+            );
+
+            setIsGscConnected(true);
+
+            await setDoc(
+              doc(db, "onboarding", user.id),
+              { hasGSC: true },
+              { merge: true }
+            );
+
+            // Reload the page to fetch GSC data
+            window.location.reload();
+          }
+        } catch (error) {
+          console.error("❌ Failed to exchange code for tokens:", error);
+        }
+        
+        popup.close();
+        window.removeEventListener('message', handleMessage);
+      }
+    };
+    
+    window.addEventListener('message', handleMessage);
+  };
 
   useEffect(() => {
     const loadWpPages = async () => {
@@ -671,6 +754,27 @@ export default function LowCtrPage() {
         to make people want to click. Try making them more attractive and keyword-focused!
       </p>
 
+      {!isGscConnected && !loading && (
+        <Card className="mb-6">
+          <CardContent className="pt-6">
+            <div className="text-center py-6">
+              <div className="bg-muted inline-flex items-center justify-center w-16 h-16 rounded-full mb-4">
+                <Unlink className="h-8 w-8 text-muted-foreground" />
+              </div>
+              <h3 className="text-lg font-medium mb-2">
+                Connect Google Search Console
+              </h3>
+              <p className="text-muted-foreground text-sm mb-4">
+                Connect your Google Search Console account to see low CTR pages and get optimization suggestions.
+              </p>
+              <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {isGscConnected && (
+        <>
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -1035,6 +1139,8 @@ export default function LowCtrPage() {
             </CardContent>
           </Card>
         </>
+      )}
+      </>
       )}
 
     </MainLayout>

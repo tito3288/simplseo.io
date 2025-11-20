@@ -74,6 +74,29 @@ const FocusKeywordSelector = ({
         .map((keyword) => keywordMap.get(keyword.toLowerCase()) || null)
         .filter(Boolean);
       if (!enriched.length) return;
+      
+      // Sort keywords by: clicks (desc), impressions (desc), position (asc)
+      enriched.sort((a, b) => {
+        // Ensure clicks and impressions are numbers
+        const clicksA = Number(a.clicks) || 0;
+        const clicksB = Number(b.clicks) || 0;
+        const impressionsA = Number(a.impressions) || 0;
+        const impressionsB = Number(b.impressions) || 0;
+        const positionA = Number(a.position) || Number.MAX_SAFE_INTEGER;
+        const positionB = Number(b.position) || Number.MAX_SAFE_INTEGER;
+        
+        // First priority: clicks (descending - most clicks first)
+        if (clicksB !== clicksA) {
+          return clicksB - clicksA;
+        }
+        // Second priority: impressions (descending - most impressions first)
+        if (impressionsB !== impressionsA) {
+          return impressionsB - impressionsA;
+        }
+        // Third priority: position (ascending - lower position/better rank first)
+        return positionA - positionB;
+      });
+      
       groups.push({ page: pageUrl === "__unknown__" ? null : pageUrl, keywords: enriched });
     });
 

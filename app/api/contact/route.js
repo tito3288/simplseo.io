@@ -14,9 +14,19 @@ const createTransporter = () => {
     host: process.env.SMTP_HOST || "smtp.gmail.com",
     port: parseInt(process.env.SMTP_PORT || "587"),
     secure: false, // true for 465, false for other ports
+    // Force IPv4 to avoid IPv6 connectivity issues
+    family: 4,
+    // Connection timeout and retry options
+    connectionTimeout: 10000, // 10 seconds
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
     auth: {
       user: process.env.SMTP_USER,
       pass: process.env.SMTP_PASS,
+    },
+    // TLS options for better compatibility
+    tls: {
+      rejectUnauthorized: false, // Allow self-signed certificates (if needed)
     },
   });
 };
@@ -74,7 +84,7 @@ export async function POST(req) {
 
     console.log(`✅ Contact message saved: ${docRef.id}`);
 
-    // Send email to simpleseoai@gmail.com
+    // Send email to simplseoai@gmail.com
     const transporter = createTransporter();
     if (transporter) {
       try {
@@ -89,9 +99,9 @@ export async function POST(req) {
 
         await transporter.sendMail({
           from: process.env.SMTP_FROM || process.env.SMTP_USER,
-          to: "simpleseoai@gmail.com",
+          to: "simplseoai@gmail.com",
           replyTo: email.trim(),
-          subject: `[SimpleSEO Contact] ${subjectLabel} from ${name.trim()}`,
+          subject: `[SimplSEO Contact Form] "${subjectLabel}" from ${name.trim()}`,
           html: `
             <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
               <h2 style="color: #00BF63;">New Contact Form Submission</h2>
@@ -107,7 +117,7 @@ export async function POST(req) {
                 <p style="white-space: pre-wrap; line-height: 1.6;">${message.trim().replace(/\n/g, "<br>")}</p>
               </div>
               <p style="color: #666; font-size: 12px; margin-top: 20px;">
-                This email was sent from the SimpleSEO contact form.
+                This email was sent from the SimplSEO contact form.
               </p>
             </div>
           `,
@@ -128,7 +138,7 @@ This email was sent from the SimpleSEO contact form.
           `,
         });
 
-        console.log(`✅ Email sent to simpleseoai@gmail.com for message ${docRef.id}`);
+        console.log(`✅ Email sent to simplseoai@gmail.com for message ${docRef.id}`);
       } catch (emailError) {
         // Log email error but don't fail the request
         console.error("❌ Error sending email (message still saved to Firestore):", emailError);

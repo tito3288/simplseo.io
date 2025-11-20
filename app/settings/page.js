@@ -487,6 +487,150 @@ export default function Settings() {
       } catch (error) {
         console.log("⚠️ Error deleting pageContentCache:", error.message);
       }
+
+      // 9. Delete siteCrawls
+      try {
+        const siteCrawlsRef = doc(db, "siteCrawls", userId);
+        await deleteDoc(siteCrawlsRef);
+        deleteCount++;
+        console.log("✅ Deleted siteCrawls data");
+      } catch (error) {
+        console.log("⚠️ siteCrawls data not found or already deleted");
+      }
+
+      // 10. Delete focusKeywords
+      try {
+        const focusKeywordsRef = doc(db, "focusKeywords", userId);
+        await deleteDoc(focusKeywordsRef);
+        deleteCount++;
+        console.log("✅ Deleted focusKeywords data");
+      } catch (error) {
+        console.log("⚠️ focusKeywords data not found or already deleted");
+      }
+
+      // 11. Delete conversations (full conversation messages)
+      try {
+        const conversationsQuery = query(
+          collection(db, "conversations"),
+          where("userId", "==", userId)
+        );
+        const conversationsSnapshot = await getDocs(conversationsQuery);
+        const batch7 = writeBatch(db);
+        conversationsSnapshot.docs.forEach((doc) => {
+          batch7.delete(doc.ref);
+          deleteCount++;
+        });
+        if (conversationsSnapshot.docs.length > 0) {
+          await batch7.commit();
+          console.log(`✅ Deleted ${conversationsSnapshot.docs.length} conversations`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting conversations:", error.message);
+      }
+
+      // 12. Delete seoMetaTitles (from both old and new structures)
+      try {
+        // Delete from NEW structure: seoMetaTitles/{userId}/titles
+        try {
+          const newTitlesRef = collection(db, "seoMetaTitles", userId, "titles");
+          const newTitlesSnapshot = await getDocs(newTitlesRef);
+          const batch8a = writeBatch(db);
+          newTitlesSnapshot.docs.forEach((doc) => {
+            batch8a.delete(doc.ref);
+            deleteCount++;
+          });
+          if (newTitlesSnapshot.docs.length > 0) {
+            await batch8a.commit();
+            console.log(`✅ Deleted ${newTitlesSnapshot.docs.length} seoMetaTitles from new structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from new seoMetaTitles structure:", error.message);
+        }
+
+        // Delete from OLD structure: seoMetaTitles (flat)
+        try {
+          const seoTitlesQuery = query(
+            collection(db, "seoMetaTitles"),
+            where("userId", "==", userId)
+          );
+          const seoTitlesSnapshot = await getDocs(seoTitlesQuery);
+          const batch8b = writeBatch(db);
+          seoTitlesSnapshot.docs.forEach((doc) => {
+            batch8b.delete(doc.ref);
+            deleteCount++;
+          });
+          if (seoTitlesSnapshot.docs.length > 0) {
+            await batch8b.commit();
+            console.log(`✅ Deleted ${seoTitlesSnapshot.docs.length} seoMetaTitles from old structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from old seoMetaTitles structure:", error.message);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting seoMetaTitles:", error.message);
+      }
+
+      // 13. Delete seoMetaDescriptions (from both old and new structures)
+      try {
+        // Delete from NEW structure: seoMetaDescriptions/{userId}/descriptions
+        try {
+          const newDescriptionsRef = collection(db, "seoMetaDescriptions", userId, "descriptions");
+          const newDescriptionsSnapshot = await getDocs(newDescriptionsRef);
+          const batch9a = writeBatch(db);
+          newDescriptionsSnapshot.docs.forEach((doc) => {
+            batch9a.delete(doc.ref);
+            deleteCount++;
+          });
+          if (newDescriptionsSnapshot.docs.length > 0) {
+            await batch9a.commit();
+            console.log(`✅ Deleted ${newDescriptionsSnapshot.docs.length} seoMetaDescriptions from new structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from new seoMetaDescriptions structure:", error.message);
+        }
+
+        // Delete from OLD structure: seoMetaDescriptions (flat)
+        try {
+          const seoDescriptionsQuery = query(
+            collection(db, "seoMetaDescriptions"),
+            where("userId", "==", userId)
+          );
+          const seoDescriptionsSnapshot = await getDocs(seoDescriptionsQuery);
+          const batch9b = writeBatch(db);
+          seoDescriptionsSnapshot.docs.forEach((doc) => {
+            batch9b.delete(doc.ref);
+            deleteCount++;
+          });
+          if (seoDescriptionsSnapshot.docs.length > 0) {
+            await batch9b.commit();
+            console.log(`✅ Deleted ${seoDescriptionsSnapshot.docs.length} seoMetaDescriptions from old structure`);
+          }
+        } catch (error) {
+          console.log("⚠️ Error deleting from old seoMetaDescriptions structure:", error.message);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting seoMetaDescriptions:", error.message);
+      }
+
+      // 14. Delete genericKeywordsCache
+      try {
+        const genericKeywordsQuery = query(
+          collection(db, "genericKeywordsCache"),
+          where("userId", "==", userId)
+        );
+        const genericKeywordsSnapshot = await getDocs(genericKeywordsQuery);
+        const batch10 = writeBatch(db);
+        genericKeywordsSnapshot.docs.forEach((doc) => {
+          batch10.delete(doc.ref);
+          deleteCount++;
+        });
+        if (genericKeywordsSnapshot.docs.length > 0) {
+          await batch10.commit();
+          console.log(`✅ Deleted ${genericKeywordsSnapshot.docs.length} genericKeywordsCache documents`);
+        }
+      } catch (error) {
+        console.log("⚠️ Error deleting genericKeywordsCache:", error.message);
+      }
       
       console.log(`✅ Successfully deleted ${deleteCount} documents for user ${userId}`);
     } catch (error) {
