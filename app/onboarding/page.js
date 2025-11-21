@@ -8,6 +8,8 @@ import { Button } from "@/components/ui/button";
 import { useAuth } from "../contexts/AuthContext";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useRouter } from "next/navigation";
+import { signOut } from "firebase/auth";
+import { auth } from "../lib/firebaseConfig";
 import {
   Select,
   SelectContent,
@@ -600,7 +602,18 @@ const OnboardingWizard = () => {
                 Back
               </Button>
             ) : (
-              <div></div>
+              <Button
+                variant="ghost"
+                onClick={async () => {
+                  await signOut(auth);
+                  router.push("/auth");
+                }}
+                disabled={isSubmitting}
+                className="text-muted-foreground hover:text-foreground"
+              >
+                <ArrowLeft className="mr-2 h-4 w-4" />
+                Back to Login
+              </Button>
             )}
 
             {currentStep < totalSteps ? (

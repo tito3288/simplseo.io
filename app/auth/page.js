@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
+import { isAccessRequestEnabled } from "../lib/accessRequestConfig";
 import {
   Card,
   CardContent,
@@ -93,6 +94,23 @@ const Auth = () => {
           router.push("/onboarding");
         }
       } else {
+        // Check if email is approved before allowing signup (only if access request is enabled)
+        if (isAccessRequestEnabled()) {
+          const approvalResponse = await fetch(`/api/check-approval?email=${encodeURIComponent(email.trim().toLowerCase())}`);
+          const approvalData = await approvalResponse.json();
+          
+          if (!approvalData.approved) {
+            toast.error("Access Required", {
+              description: "Your email address is not approved. Please request access first or verify your invitation code.",
+            });
+            router.push("/request-access");
+            return;
+          }
+          
+          // Store approved email in localStorage
+          localStorage.setItem("approvedEmail", email.trim().toLowerCase());
+        }
+
         await signup(email, password);
         router.push("/onboarding"); // brand new user, go to onboarding
       }
@@ -105,6 +123,27 @@ const Auth = () => {
     }
   };
 
+  // Check approval status when component mounts
+  useEffect(() => {
+    const checkApproval = async () => {
+      const storedEmail = localStorage.getItem("approvedEmail");
+      if (storedEmail) {
+        try {
+          const response = await fetch(`/api/check-approval?email=${encodeURIComponent(storedEmail)}`);
+          const data = await response.json();
+          if (!data.approved) {
+            // Approval was revoked - redirect to request page
+            localStorage.removeItem("approvedEmail");
+            router.push("/request-access");
+          }
+        } catch (error) {
+          console.error("Error checking approval:", error);
+        }
+      }
+    };
+    checkApproval();
+  }, [router]);
+
   const handleGoogleLogin = async () => {
     try {
       console.log("🔐 Starting Google login...");
@@ -113,6 +152,26 @@ const Auth = () => {
 
       const uid = auth.currentUser?.uid;
       if (!uid) throw new Error("No authenticated user found");
+
+      const userEmail = auth.currentUser?.email;
+      
+      // Check if email is approved (for new signups, only if access request is enabled)
+      if (!isLogin && userEmail && isAccessRequestEnabled()) {
+        const approvalResponse = await fetch(`/api/check-approval?email=${encodeURIComponent(userEmail.trim().toLowerCase())}`);
+        const approvalData = await approvalResponse.json();
+        
+        if (!approvalData.approved) {
+          toast.error("Access Required", {
+            description: "Your email address is not approved. Please request access first or verify your invitation code.",
+          });
+          await signOut(auth);
+          router.push("/request-access");
+          return;
+        }
+        
+        // Store approved email in localStorage
+        localStorage.setItem("approvedEmail", userEmail.trim().toLowerCase());
+      }
 
       const docRef = doc(db, "onboarding", uid);
       const docSnap = await getDoc(docRef);

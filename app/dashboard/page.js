@@ -416,6 +416,13 @@ export default function Dashboard() {
 
       updateData?.(updatePayload);
 
+      // Scroll to top when transitioning to keywords step
+      if (updatePayload.postOnboardingStep === 'keywords') {
+        setTimeout(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 100);
+      }
+
       // Reload the review to show updated status, but don't reload pages
       // since we're not recrawling - just update the status
       setHasLoadedCrawlReview(false);
@@ -567,6 +574,11 @@ export default function Dashboard() {
           pagesStepCompleted: true,
           postOnboardingStep: 'keywords', // Automatically move to keywords step
         });
+        
+        // Scroll to top when transitioning to keywords step
+        setTimeout(() => {
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        }, 100);
       }
     } catch (error) {
       console.error("❌ Add & Save failed:", error);
@@ -1802,6 +1814,12 @@ export default function Dashboard() {
         postOnboardingStep: 'complete',
         pagesStepCompleted: false // Reset this flag
       });
+      
+      // Scroll to top when completing the flow
+      setTimeout(() => {
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+      }, 100);
+      
       toast.success("Welcome to your SEO Dashboard!");
     } else {
       toast.error("Please select at least one focus keyword before continuing.");

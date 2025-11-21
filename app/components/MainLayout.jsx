@@ -51,10 +51,12 @@ const MainLayout = ({
   const [showTooltip, setShowTooltip] = useState(false);
 
   useEffect(() => {
-    if (typeof window !== "undefined" && !isLoading && !user) {
+    // Don't redirect if on public pages (request-access, verify-code)
+    const publicPages = ["/request-access", "/verify-code"];
+    if (typeof window !== "undefined" && !isLoading && !user && !publicPages.includes(pathname)) {
       router.push("/auth");
     }
-  }, [user, isLoading, router]);
+  }, [user, isLoading, router, pathname]);
 
   useEffect(() => {
     if (
@@ -128,6 +130,10 @@ const MainLayout = ({
 
   const handleLogout = async () => {
     await logout();
+    
+    // After logout, always go to auth page
+    // Users can log in if they have an account, or try to create one
+    // If they try to create account with non-approved email, they'll be redirected to request-access
     router.push("/auth");
   };
 
@@ -184,10 +190,15 @@ const MainLayout = ({
   // Check if user is in post-onboarding flow
   const postOnboardingStep = data?.postOnboardingStep;
   const isInPostOnboardingFlow = postOnboardingStep && postOnboardingStep !== 'complete';
+  
+  // Public pages that don't need header/navigation
+  const publicPages = ["/request-access", "/verify-code"];
+  const isPublicPage = publicPages.includes(pathname);
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
       {/* Top Nav - Sticky Header */}
+      {!isPublicPage && (
       <header className={cn(
         "sticky top-0 z-50 bg-background border-b border-border shadow-sm transition-opacity duration-500",
         isInPostOnboardingFlow && "opacity-30 pointer-events-none"
@@ -307,6 +318,7 @@ const MainLayout = ({
           </nav>
         )}
       </header>
+      )}
 
       {/* Main */}
       <main className="flex-1 overflow-auto">
