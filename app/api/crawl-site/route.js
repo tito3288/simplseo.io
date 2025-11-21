@@ -479,7 +479,7 @@ export async function POST(req) {
           pendingPages.push(basePageRecord);
         } else {
           // Use backward-compatible helper (writes to both structures)
-          const { cachePageContent } = await import("../../../lib/firestoreMigrationHelpers");
+          const { cachePageContent } = await import("../../lib/firestoreMigrationHelpers");
           await cachePageContent(userId, url, {
               ...scrapeJson.data,
               source: "site-crawl",

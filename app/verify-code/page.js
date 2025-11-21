@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, Suspense } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import MainLayout from "../components/MainLayout";
 import { isAccessRequestEnabled } from "../lib/accessRequestConfig";
@@ -11,7 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { toast } from "sonner";
 import { Key, CheckCircle, ArrowRight } from "lucide-react";
 
-export default function VerifyCodePage() {
+function VerifyCodeContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const [code, setCode] = useState("");
@@ -193,6 +193,23 @@ export default function VerifyCodePage() {
         </div>
       </div>
     </MainLayout>
+  );
+}
+
+export default function VerifyCodePage() {
+  return (
+    <Suspense fallback={
+      <MainLayout>
+        <div className="min-h-screen flex items-center justify-center">
+          <div className="text-center">
+            <div className="w-8 h-8 border-4 border-[#00BF63] border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-muted-foreground">Loading...</p>
+          </div>
+        </div>
+      </MainLayout>
+    }>
+      <VerifyCodeContent />
+    </Suspense>
   );
 }
 
