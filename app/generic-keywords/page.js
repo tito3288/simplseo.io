@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink } from "lucide-react";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
@@ -23,6 +23,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { toast } from "sonner";
 
 export default function GenericKeywordsPage() {
   const { user, isLoading } = useAuth();
@@ -37,6 +48,12 @@ export default function GenericKeywordsPage() {
   const [cacheAge, setCacheAge] = useState(null);
   const shouldShowLoader = useMinimumLoading(loading, 2000);
   const [openCategories, setOpenCategories] = useState({});
+  const [createdOpportunities, setCreatedOpportunities] = useState([]);
+  const [successStories, setSuccessStories] = useState([]);
+  const [gscKeywords, setGscKeywords] = useState([]);
+  const [markAsCreatedDialog, setMarkAsCreatedDialog] = useState({ open: false, opportunity: null });
+  const [markAsCreatedUrl, setMarkAsCreatedUrl] = useState("");
+  const [isMarkingAsCreated, setIsMarkingAsCreated] = useState(false);
 
   // Helper function to get display name for page types
   const getPageTypeDisplayName = (pageType) => {
@@ -57,8 +74,126 @@ export default function GenericKeywordsPage() {
     if (user?.id && data?.businessType) {
       // Use the same approach as dashboard - get GSC data from the dashboard's context
       fetchGenericOpportunitiesFromDashboard();
+      fetchCreatedOpportunities();
     }
   }, [user?.id, data?.businessType]);
+
+  // Fetch created opportunities
+  const fetchCreatedOpportunities = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch(`/api/content-opportunities/mark-created?userId=${encodeURIComponent(user.id)}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setCreatedOpportunities(result.opportunities || []);
+      }
+    } catch (error) {
+      console.error("Error fetching created opportunities:", error);
+    }
+  };
+
+  // Fetch GSC keywords for success stories matching
+  useEffect(() => {
+    const fetchGSCDataForSuccessStories = async () => {
+      if (!user?.id || !data?.gscProperty) return;
+
+      try {
+        const tokenManager = createGSCTokenManager(user.id);
+        const gscData = await tokenManager.getStoredGSCData();
+        
+        if (!gscData?.refreshToken || !gscData?.siteUrl) {
+          return;
+        }
+
+        const validToken = await tokenManager.getValidAccessToken();
+        if (!validToken) {
+          return;
+        }
+
+        const keywords = await fetchGSCKeywords(gscData.siteUrl, validToken);
+        setGscKeywords(keywords || []);
+      } catch (error) {
+        console.error("Error fetching GSC data for success stories:", error);
+      }
+    };
+
+    fetchGSCDataForSuccessStories();
+  }, [user?.id, data?.gscProperty]);
+
+  // Match created opportunities with GSC data to find success stories
+  useEffect(() => {
+    if (createdOpportunities.length === 0 || gscKeywords.length === 0) {
+      setSuccessStories([]);
+      return;
+    }
+
+    const stories = createdOpportunities
+      .filter(opp => {
+        // Check if the page URL exists in GSC data
+        return gscKeywords.some(kw => {
+          // Normalize URLs for comparison (remove trailing slashes, etc.)
+          const normalizeUrl = (url) => {
+            try {
+              const u = new URL(url);
+              return u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+            } catch {
+              return url.replace(/\/$/, '');
+            }
+          };
+          
+          const oppUrl = normalizeUrl(opp.pageUrl);
+          const kwUrl = normalizeUrl(kw.page);
+          
+          return oppUrl === kwUrl || kwUrl.includes(oppUrl) || oppUrl.includes(kwUrl);
+        });
+      })
+      .map(opp => {
+        // Find matching GSC keyword data
+        const normalizeUrl = (url) => {
+          try {
+            const u = new URL(url);
+            return u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+          } catch {
+            return url.replace(/\/$/, '');
+          }
+        };
+        
+        const matchingKw = gscKeywords.find(kw => {
+          const oppUrl = normalizeUrl(opp.pageUrl);
+          const kwUrl = normalizeUrl(kw.page);
+          return oppUrl === kwUrl || kwUrl.includes(oppUrl) || oppUrl.includes(kwUrl);
+        });
+
+        if (matchingKw) {
+          const createdAt = new Date(opp.createdAt);
+          const now = new Date();
+          const daysSinceCreated = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
+
+          return {
+            ...opp,
+            position: matchingKw.position,
+            impressions: matchingKw.impressions,
+            clicks: matchingKw.clicks,
+            ctr: matchingKw.ctr,
+            daysSinceCreated,
+            gscPage: matchingKw.page,
+          };
+        }
+        return null;
+      })
+      .filter(Boolean)
+      .sort((a, b) => {
+        // Sort by impressions (descending) then clicks (descending)
+        if (b.impressions !== a.impressions) {
+          return b.impressions - a.impressions;
+        }
+        return b.clicks - a.clicks;
+      });
+
+    setSuccessStories(stories);
+  }, [createdOpportunities, gscKeywords]);
 
   const fetchGSCKeywords = async (siteUrl, token) => {
     const today = new Date();
@@ -430,6 +565,34 @@ export default function GenericKeywordsPage() {
               {categoryLabels[opportunity.category] || "Additional"}
             </span>
           </div>
+
+          {/* Mark as Created Button */}
+          {!createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase()) && (
+            <div className="pt-4 border-t border-border">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => {
+                  setMarkAsCreatedDialog({ open: true, opportunity });
+                  setMarkAsCreatedUrl("");
+                }}
+                className="w-full gap-2"
+              >
+                <CheckCircle className="w-4 h-4" />
+                Mark as Created
+              </Button>
+            </div>
+          )}
+
+          {/* Show if already created */}
+          {createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase()) && (
+            <div className="pt-4 border-t border-border">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <CheckCircle className="w-4 h-4 text-green-600" />
+                <span>Marked as created</span>
+              </div>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>
@@ -471,6 +634,128 @@ export default function GenericKeywordsPage() {
           Back to Dashboard
         </Button>
       </div>
+
+      {/* Dummy Success Story Card - For Preview Only */}
+      <Card className="mb-6 border-green-200 bg-green-50 dark:border-green-900/20 dark:bg-green-900/10">
+        <CardHeader>
+          <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
+            <CheckCircle className="w-5 h-5" />
+            🎉 Success Stories - Your Pages Are Ranking!
+          </CardTitle>
+          <CardDescription className="text-green-700 dark:text-green-300">
+            Pages you created are now appearing in Google Search Console
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <div className="space-y-4">
+            {/* Dummy Success Story */}
+            <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-green-200 dark:border-green-800">
+              <div className="flex items-start justify-between">
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-2">
+                    <h4 className="font-semibold text-green-800 dark:text-green-200">
+                      best dentist independence
+                    </h4>
+                    <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                      Ranking
+                    </Badge>
+                  </div>
+                  <a
+                    href="https://example.com/best-dentist-independence"
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-sm text-green-700 dark:text-green-300 hover:underline flex items-center gap-1 mb-2"
+                  >
+                    https://example.com/best-dentist-independence
+                    <ExternalLink className="w-3 h-3" />
+                  </a>
+                  <div className="flex flex-wrap items-center gap-4 text-sm text-green-700 dark:text-green-300">
+                    <span>
+                      <strong>Position:</strong> 12
+                    </span>
+                    <span>
+                      <strong>Impressions:</strong> 1,250
+                    </span>
+                    <span>
+                      <strong>Clicks:</strong> 45
+                    </span>
+                    <span>
+                      <strong>CTR:</strong> 3.6%
+                    </span>
+                    <span className="text-xs text-green-600 dark:text-green-400">
+                      Created 7 days ago
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+
+      {/* Success Stories Section */}
+      {successStories.length > 0 && (
+        <Card className="mb-6 border-green-200 bg-green-50 dark:border-green-900/20 dark:bg-green-900/10">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
+              <CheckCircle className="w-5 h-5" />
+              🎉 Success Stories - Your Pages Are Ranking!
+            </CardTitle>
+            <CardDescription className="text-green-700 dark:text-green-300">
+              Pages you created are now appearing in Google Search Console
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {successStories.map((story, index) => (
+                <div
+                  key={story.id || index}
+                  className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-green-200 dark:border-green-800"
+                >
+                  <div className="flex items-start justify-between">
+                    <div className="flex-1">
+                      <div className="flex items-center gap-2 mb-2">
+                        <h4 className="font-semibold text-green-800 dark:text-green-200">
+                          {story.keyword}
+                        </h4>
+                        <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                          Ranking
+                        </Badge>
+                      </div>
+                      <a
+                        href={story.pageUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="text-sm text-green-700 dark:text-green-300 hover:underline flex items-center gap-1 mb-2"
+                      >
+                        {story.pageUrl}
+                        <ExternalLink className="w-3 h-3" />
+                      </a>
+                      <div className="flex flex-wrap items-center gap-4 text-sm text-green-700 dark:text-green-300">
+                        <span>
+                          <strong>Position:</strong> {story.position}
+                        </span>
+                        <span>
+                          <strong>Impressions:</strong> {story.impressions.toLocaleString()}
+                        </span>
+                        <span>
+                          <strong>Clicks:</strong> {story.clicks.toLocaleString()}
+                        </span>
+                        <span>
+                          <strong>CTR:</strong> {story.ctr}
+                        </span>
+                        <span className="text-xs text-green-600 dark:text-green-400">
+                          Created {story.daysSinceCreated} {story.daysSinceCreated === 1 ? 'day' : 'days'} ago
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Keyword Cannibalization Analysis */}
       {cannibalizationAnalysis && cannibalizationAnalysis.totalCannibalized > 0 && (
@@ -667,6 +952,149 @@ export default function GenericKeywordsPage() {
           </div>
         </>
       )}
+
+      {/* Mark as Created Dialog */}
+      <Dialog open={markAsCreatedDialog.open} onOpenChange={(open) => {
+        if (!open) {
+          setMarkAsCreatedDialog({ open: false, opportunity: null });
+          setMarkAsCreatedUrl("");
+        }
+      }}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Mark as Created</DialogTitle>
+            <DialogDescription>
+              Enter the URL of the page you created for this keyword. We&apos;ll track when it starts ranking in Google Search Console.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <Label htmlFor="keyword">Keyword</Label>
+              <Input
+                id="keyword"
+                value={markAsCreatedDialog.opportunity?.keyword || ""}
+                disabled
+                className="bg-muted"
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="pageUrl">
+                Page URL <span className="text-red-500">*</span>
+              </Label>
+              <Input
+                id="pageUrl"
+                value={markAsCreatedUrl}
+                onChange={(e) => setMarkAsCreatedUrl(e.target.value)}
+                placeholder="https://example.com/your-new-page"
+                className="font-mono text-sm"
+              />
+              {markAsCreatedDialog.opportunity && (
+                <p className="text-xs text-muted-foreground">
+                  💡 Suggested: <code className="bg-muted px-1 rounded">/{markAsCreatedDialog.opportunity.keyword.toLowerCase().replace(/\s+/g, '-')}</code>
+                </p>
+              )}
+            </div>
+          </div>
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => {
+                setMarkAsCreatedDialog({ open: false, opportunity: null });
+                setMarkAsCreatedUrl("");
+              }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={async () => {
+                if (!markAsCreatedUrl.trim()) {
+                  toast.error("Please enter a URL");
+                  return;
+                }
+
+                // Validate URL
+                let normalizedUrl;
+                try {
+                  const url = new URL(markAsCreatedUrl);
+                  normalizedUrl = url.href;
+                  
+                  // Validate URL belongs to user's website domain
+                  if (data?.websiteUrl) {
+                    try {
+                      const userUrl = new URL(data.websiteUrl);
+                      const userDomain = userUrl.hostname.replace(/^www\./, '');
+                      const inputDomain = url.hostname.replace(/^www\./, '');
+                      
+                      if (userDomain !== inputDomain) {
+                        toast.error(`URL must belong to your website domain (${userDomain})`);
+                        return;
+                      }
+                    } catch (domainError) {
+                      console.error("Error validating domain:", domainError);
+                      // Continue if domain validation fails (user's website URL might be invalid)
+                    }
+                  }
+                } catch (error) {
+                  toast.error("Please enter a valid URL (e.g., https://example.com/page)");
+                  return;
+                }
+
+                setIsMarkingAsCreated(true);
+                try {
+                  const response = await fetch("/api/content-opportunities/mark-created", {
+                    method: "POST",
+                    headers: {
+                      "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                      userId: user.id,
+                      keyword: markAsCreatedDialog.opportunity.keyword,
+                      pageUrl: normalizedUrl,
+                      opportunityId: `${user.id}_${markAsCreatedDialog.opportunity.keyword.toLowerCase().replace(/\s+/g, '-')}_${Date.now()}`,
+                    }),
+                  });
+
+                  if (!response.ok) {
+                    const errorData = await response.json();
+                    throw new Error(errorData.error || "Failed to mark as created");
+                  }
+
+                  toast.success("Page marked as created!", {
+                    description: "We'll track when this page starts ranking in Google Search Console.",
+                  });
+
+                  // Refresh created opportunities
+                  await fetchCreatedOpportunities();
+
+                  // Close dialog
+                  setMarkAsCreatedDialog({ open: false, opportunity: null });
+                  setMarkAsCreatedUrl("");
+                } catch (error) {
+                  console.error("Error marking as created:", error);
+                  toast.error("Failed to mark as created", {
+                    description: error.message || "Please try again.",
+                  });
+                } finally {
+                  setIsMarkingAsCreated(false);
+                }
+              }}
+              disabled={!markAsCreatedUrl.trim() || isMarkingAsCreated}
+            >
+              {isMarkingAsCreated ? (
+                <>
+                  <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin mr-2" />
+                  Saving...
+                </>
+              ) : (
+                <>
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Mark as Created
+                </>
+              )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

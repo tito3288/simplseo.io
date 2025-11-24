@@ -99,34 +99,34 @@ export async function POST(req) {
     // Note: This requires a Firestore composite index. If the index doesn't exist, we skip deduplication.
     if (firstUserMessage) {
       try {
-        const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
-        const existingSnapshot = await db.collection('conversations')
-          .where('userId', '==', userId)
-          .where('source', '==', source || 'main-chatbot')
-          .where('createdAt', '>=', fiveMinutesAgo)
-          .get();
+      const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
+      const existingSnapshot = await db.collection('conversations')
+        .where('userId', '==', userId)
+        .where('source', '==', source || 'main-chatbot')
+        .where('createdAt', '>=', fiveMinutesAgo)
+        .get();
 
-        // Check if any existing conversation has the same first user message
-        for (const doc of existingSnapshot.docs) {
-          const existingData = doc.data();
-          const existingFirstUserMsg = existingData.messages?.find(msg => msg.role === 'user');
-          
-          if (existingFirstUserMsg && 
-              existingFirstUserMsg.content === firstUserMessage.content &&
-              existingData.messageCount === messages.length) {
-            // Found duplicate - return existing conversation ID instead of creating new one
-            return NextResponse.json({ 
-              success: true, 
-              conversationId: doc.id,
-              conversation: {
-                id: doc.id,
-                ...existingData,
-                createdAt: existingData.createdAt?.toDate?.() || new Date(existingData.createdAt),
-                updatedAt: existingData.updatedAt?.toDate?.() || new Date(existingData.updatedAt)
-              },
-              isDuplicate: true
-            });
-          }
+      // Check if any existing conversation has the same first user message
+      for (const doc of existingSnapshot.docs) {
+        const existingData = doc.data();
+        const existingFirstUserMsg = existingData.messages?.find(msg => msg.role === 'user');
+        
+        if (existingFirstUserMsg && 
+            existingFirstUserMsg.content === firstUserMessage.content &&
+            existingData.messageCount === messages.length) {
+          // Found duplicate - return existing conversation ID instead of creating new one
+          return NextResponse.json({ 
+            success: true, 
+            conversationId: doc.id,
+            conversation: {
+              id: doc.id,
+              ...existingData,
+              createdAt: existingData.createdAt?.toDate?.() || new Date(existingData.createdAt),
+              updatedAt: existingData.updatedAt?.toDate?.() || new Date(existingData.updatedAt)
+            },
+            isDuplicate: true
+          });
+        }
         }
       } catch (error) {
         // If index doesn't exist or query fails, log warning and continue without deduplication
