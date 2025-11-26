@@ -11,6 +11,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { Checkbox } from "@/components/ui/checkbox";
+import FocusKeywordSelector from "../components/dashboard/FocusKeywordSelector";
 import { 
   Select, 
   SelectContent, 
@@ -38,7 +40,11 @@ import {
   Database,
   Zap,
   BarChart3,
-  Plus
+  Plus,
+  FileText,
+  X,
+  Loader2,
+  Clock
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
@@ -51,6 +57,7 @@ import {
   DialogTrigger,
 } from "@/components/ui/dialog";
 import { db } from "../lib/firebaseConfig";
+import { createGSCTokenManager } from "../lib/gscTokenManager";
 import { 
   doc, 
   deleteDoc, 
@@ -122,6 +129,28 @@ export default function Settings() {
   const [deletePassword, setDeletePassword] = useState("");
   const [isGoogleUser, setIsGoogleUser] = useState(false);
 
+  // Content & Keywords state
+  const [pages, setPages] = useState([]);
+  const [focusKeywords, setFocusKeywords] = useState([]);
+  const [gscKeywords, setGscKeywords] = useState([]);
+  const [gscKeywordsRaw, setGscKeywordsRaw] = useState([]); // Raw GSC data with page info
+  const [focusKeywordByPage, setFocusKeywordByPage] = useState(new Map());
+  const [groupedByPage, setGroupedByPage] = useState(new Map());
+  const [pagesToRemove, setPagesToRemove] = useState([]);
+  const [pagesToAdd, setPagesToAdd] = useState([]);
+  const [keywordsToRemove, setKeywordsToRemove] = useState([]);
+  const [keywordsToAdd, setKeywordsToAdd] = useState([]);
+  const [newPageUrl, setNewPageUrl] = useState("");
+  const [newKeyword, setNewKeyword] = useState("");
+  const [isLoadingContent, setIsLoadingContent] = useState(false);
+  const [isSavingContent, setIsSavingContent] = useState(false);
+  const [rateLimitInfo, setRateLimitInfo] = useState(null);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+  const [pendingChanges, setPendingChanges] = useState(null);
+  const [isGscConnected, setIsGscConnected] = useState(false);
+
+  const normalizePageKey = (page) => page || "__unknown__";
+
   useEffect(() => {
     if (typeof window !== "undefined" && !authLoading && !user) {
       router.push("/auth");
@@ -177,6 +206,454 @@ export default function Settings() {
       }));
     }
   }, [data, user]);
+
+  // Load content & keywords data
+  useEffect(() => {
+    if (activeTab === "content-keywords" && user?.id) {
+      loadContentAndKeywords();
+      checkRateLimit();
+    }
+  }, [activeTab, user?.id]);
+
+
+  const loadContentAndKeywords = async () => {
+    if (!user?.id) return;
+    
+    setIsLoadingContent(true);
+    try {
+      // Load pages
+      const pagesRes = await fetch(`/api/crawl-site/review?userId=${encodeURIComponent(user.id)}`);
+      if (pagesRes.ok) {
+        const pagesData = await pagesRes.json();
+        setPages(pagesData.pages || []);
+      }
+
+      // Load focus keywords
+      const keywordsRes = await fetch(`/api/focus-keywords?userId=${encodeURIComponent(user.id)}`);
+      let loadedKeywords = [];
+      if (keywordsRes.ok) {
+        const keywordsData = await keywordsRes.json();
+        loadedKeywords = keywordsData.keywords || [];
+        setFocusKeywords(loadedKeywords);
+
+        // Build focusKeywordByPage Map
+        const assignments = new Map();
+        loadedKeywords.forEach(({ keyword, pageUrl, source }) => {
+          if (!keyword) return;
+          const pageKey = normalizePageKey(pageUrl);
+          assignments.set(pageKey, keyword);
+        });
+        setFocusKeywordByPage(assignments);
+      }
+
+      // Load GSC keywords (pass loadedKeywords so AI keywords can be added)
+      await loadGSCKeywords(loadedKeywords);
+    } catch (error) {
+      console.error("Failed to load content and keywords:", error);
+      toast.error("Failed to load content and keywords");
+    } finally {
+      setIsLoadingContent(false);
+    }
+  };
+
+  const loadGSCKeywords = async (currentFocusKeywords = []) => {
+    if (!user?.id || !data?.gscProperty) {
+      setIsGscConnected(false);
+      return;
+    }
+
+    try {
+      const tokenManager = createGSCTokenManager(user.id);
+      
+      // Add a small delay to ensure tokens are stored
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      const gscData = await tokenManager.getStoredGSCData();
+      
+      if (!gscData?.refreshToken || !gscData?.siteUrl) {
+        setIsGscConnected(false);
+        return;
+      }
+
+      setIsGscConnected(true);
+
+      // Get valid access token (refresh if needed)
+      const validToken = await tokenManager.getValidAccessToken();
+      if (!validToken) {
+        setIsGscConnected(false);
+        return;
+      }
+
+      // Fetch GSC keywords
+      const today = new Date();
+      const startDate = new Date();
+      startDate.setDate(today.getDate() - 28); // 28 days like dashboard
+
+      const formatDate = (d) => d.toISOString().split("T")[0];
+      const from = formatDate(startDate);
+      const to = formatDate(today);
+
+      const response = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+          gscData.siteUrl
+        )}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${validToken}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: from,
+            endDate: to,
+            dimensions: ["query", "page"],
+            rowLimit: 500,
+          }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`GSC API error: ${response.status}`);
+      }
+
+      const json = await response.json();
+
+      if (json.rows) {
+        const formatted = json.rows.map((row) => ({
+          keyword: row.keys[0].replace(/^\[|\]$/g, ""),
+          page: row.keys[1],
+          clicks: row.clicks,
+          impressions: row.impressions,
+          position: Math.round(row.position),
+          ctr: `${(row.ctr * 100).toFixed(1)}%`,
+        }));
+
+        // Store raw GSC keywords (needed for FocusKeywordSelector)
+        setGscKeywordsRaw(formatted);
+
+        // Group by keyword (get unique keywords with their best metrics) - for display summary
+        const keywordMap = new Map();
+        formatted.forEach((kw) => {
+          const key = kw.keyword.toLowerCase();
+          if (!keywordMap.has(key)) {
+            keywordMap.set(key, {
+              keyword: kw.keyword,
+              clicks: kw.clicks,
+              impressions: kw.impressions,
+              position: kw.position,
+              ctr: kw.ctr,
+              pages: [kw.page],
+            });
+          } else {
+            const existing = keywordMap.get(key);
+            existing.clicks += kw.clicks;
+            existing.impressions += kw.impressions;
+            // Keep best (lowest) position
+            if (kw.position < existing.position) {
+              existing.position = kw.position;
+            }
+            if (!existing.pages.includes(kw.page)) {
+              existing.pages.push(kw.page);
+            }
+          }
+        });
+
+        // Convert to array and sort by impressions
+        const uniqueKeywords = Array.from(keywordMap.values()).sort(
+          (a, b) => b.impressions - a.impressions
+        );
+
+        setGscKeywords(uniqueKeywords);
+
+        // Build groupedByPage Map for FocusKeywordSelector
+        const grouped = new Map();
+        formatted.forEach((kw) => {
+          const pageKey = normalizePageKey(kw.page);
+          if (!grouped.has(pageKey)) {
+            grouped.set(pageKey, []);
+          }
+          const keywordLower = kw.keyword.toLowerCase();
+          if (!grouped.get(pageKey).includes(keywordLower)) {
+            grouped.get(pageKey).push(keywordLower);
+          }
+        });
+        
+        // Add AI-generated keywords from currentFocusKeywords to groupedByPage
+        currentFocusKeywords.forEach(({ keyword, pageUrl, source }) => {
+          if (!keyword || source !== "ai-generated") return;
+          
+          const pageKey = normalizePageKey(pageUrl);
+          if (!grouped.has(pageKey)) {
+            grouped.set(pageKey, []);
+          }
+          const keywordLower = keyword.toLowerCase();
+          if (!grouped.get(pageKey).includes(keywordLower)) {
+            grouped.get(pageKey).push(keywordLower);
+          }
+        });
+        
+        setGroupedByPage(grouped);
+        
+        // Add AI-generated keywords to gscKeywordsRaw so they appear in the list
+        const existingKeywords = new Set(
+          formatted.map(kw => kw.keyword?.toLowerCase())
+        );
+        
+        const aiKeywordsToAdd = currentFocusKeywords
+          .filter(({ keyword, source }) => {
+            if (!keyword || source !== "ai-generated") return false;
+            return !existingKeywords.has(keyword.toLowerCase());
+          })
+          .map(({ keyword, pageUrl }) => ({
+            keyword,
+            page: pageUrl || null,
+            clicks: 0,
+            impressions: 0,
+            position: 999, // High position since no GSC data
+            ctr: "0%",
+            source: "ai-generated", // Mark as AI-generated
+          }));
+        
+        if (aiKeywordsToAdd.length > 0) {
+          setGscKeywordsRaw([...formatted, ...aiKeywordsToAdd]);
+        } else {
+          setGscKeywordsRaw(formatted);
+        }
+      } else {
+        setGscKeywords([]);
+        setGscKeywordsRaw([]);
+        setGroupedByPage(new Map());
+      }
+    } catch (error) {
+      console.error("Failed to load GSC keywords:", error);
+      setIsGscConnected(false);
+      setGscKeywords([]);
+    }
+  };
+
+  const checkRateLimit = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const res = await fetch(`/api/content-keywords/edit?userId=${encodeURIComponent(user.id)}`);
+      if (res.ok) {
+        const data = await res.json();
+        setRateLimitInfo(data);
+      }
+    } catch (error) {
+      console.error("Failed to check rate limit:", error);
+    }
+  };
+
+  const handleRemovePage = (pageUrl) => {
+    if (!pagesToRemove.includes(pageUrl)) {
+      setPagesToRemove([...pagesToRemove, pageUrl]);
+    }
+  };
+
+  const handleUndoRemovePage = (pageUrl) => {
+    setPagesToRemove(pagesToRemove.filter(url => url !== pageUrl));
+  };
+
+  const handleAddPage = () => {
+    if (!newPageUrl.trim()) {
+      toast.error("Please enter a valid URL");
+      return;
+    }
+
+    // Basic URL validation
+    try {
+      new URL(newPageUrl.trim());
+    } catch {
+      toast.error("Please enter a valid URL");
+      return;
+    }
+
+    if (!pagesToAdd.includes(newPageUrl.trim())) {
+      setPagesToAdd([...pagesToAdd, newPageUrl.trim()]);
+      setNewPageUrl("");
+    } else {
+      toast.error("This URL is already being added");
+    }
+  };
+
+  const handleRemoveAddedPage = (pageUrl) => {
+    setPagesToAdd(pagesToAdd.filter(url => url !== pageUrl));
+  };
+
+  const handleFocusKeywordToggle = ({ keyword, page, isSelectedForPage, source }) => {
+    const pageKey = normalizePageKey(page);
+    const lowerKeyword = keyword.toLowerCase();
+
+    if (isSelectedForPage) {
+      // Removing keyword from this page
+      // Check if it's currently selected
+      const currentSelected = focusKeywordByPage.get(pageKey);
+      if (currentSelected?.toLowerCase() === lowerKeyword) {
+        // Mark for removal
+        if (!keywordsToRemove.includes(keyword)) {
+          setKeywordsToRemove([...keywordsToRemove, keyword]);
+        }
+        // Remove from add list if it's there
+        setKeywordsToAdd(keywordsToAdd.filter(k => {
+          const kKeyword = typeof k === "string" ? k : k.keyword;
+          return kKeyword?.toLowerCase() !== lowerKeyword;
+        }));
+        // Update local state
+        const newMap = new Map(focusKeywordByPage);
+        newMap.delete(pageKey);
+        setFocusKeywordByPage(newMap);
+      }
+    } else {
+      // Adding keyword to this page
+      // Remove from remove list if it's there
+      setKeywordsToRemove(keywordsToRemove.filter(k => k.toLowerCase() !== lowerKeyword));
+      
+      // Check if this keyword is already assigned to another page
+      let alreadyAssigned = false;
+      focusKeywordByPage.forEach((assignedKeyword, assignedPageKey) => {
+        if (assignedKeyword?.toLowerCase() === lowerKeyword && assignedPageKey !== pageKey) {
+          alreadyAssigned = true;
+        }
+      });
+
+      if (!alreadyAssigned) {
+        // Add to add list
+        if (!keywordsToAdd.some(k => {
+          const kKeyword = typeof k === "string" ? k : k.keyword;
+          return kKeyword?.toLowerCase() === lowerKeyword;
+        })) {
+          setKeywordsToAdd([...keywordsToAdd, { keyword, pageUrl: page || null, source: source || "gsc-existing" }]);
+        }
+        // Update local state
+        const newMap = new Map(focusKeywordByPage);
+        newMap.set(pageKey, keyword);
+        setFocusKeywordByPage(newMap);
+      } else {
+        toast.error("This keyword is already assigned to another page. Please remove it from that page first.");
+      }
+    }
+  };
+
+  const handleRemoveKeyword = (keyword) => {
+    if (!keywordsToRemove.includes(keyword)) {
+      setKeywordsToRemove([...keywordsToRemove, keyword]);
+    }
+  };
+
+  const handleUndoRemoveKeyword = (keyword) => {
+    setKeywordsToRemove(keywordsToRemove.filter(k => k !== keyword));
+  };
+
+  const handleAddKeyword = () => {
+    if (!newKeyword.trim()) {
+      toast.error("Please enter a keyword");
+      return;
+    }
+
+    const keyword = newKeyword.trim();
+    const exists = focusKeywords.some(
+      kw => (typeof kw === "string" ? kw : kw.keyword)?.toLowerCase() === keyword.toLowerCase()
+    );
+    
+    if (exists) {
+      toast.error("This keyword already exists");
+      return;
+    }
+
+    if (!keywordsToAdd.some(k => (typeof k === "string" ? k : k.keyword)?.toLowerCase() === keyword.toLowerCase())) {
+      setKeywordsToAdd([...keywordsToAdd, { keyword, pageUrl: null, source: "gsc-existing" }]);
+      setNewKeyword("");
+    } else {
+      toast.error("This keyword is already being added");
+    }
+  };
+
+  const handleRemoveAddedKeyword = (keyword) => {
+    setKeywordsToAdd(keywordsToAdd.filter(k => {
+      const kKeyword = typeof k === "string" ? k : k.keyword;
+      return kKeyword?.toLowerCase() !== keyword.toLowerCase();
+    }));
+  };
+
+  const handleSaveContentKeywords = async () => {
+    if (!user?.id) return;
+
+    const hasChanges = pagesToRemove.length > 0 || pagesToAdd.length > 0 || 
+                      keywordsToRemove.length > 0 || keywordsToAdd.length > 0;
+
+    if (!hasChanges) {
+      toast.error("No changes to save");
+      return;
+    }
+
+    // Check rate limit
+    if (rateLimitInfo && !rateLimitInfo.canEdit) {
+      toast.error(rateLimitInfo.message || `You can make edits again in ${rateLimitInfo.hoursUntilNextEdit} hours.`);
+      return;
+    }
+
+    // Show confirmation dialog
+    const changes = {
+      pagesRemoved: pagesToRemove.length,
+      pagesAdded: pagesToAdd.length,
+      keywordsRemoved: keywordsToRemove.length,
+      keywordsAdded: keywordsToAdd.length,
+    };
+    setPendingChanges(changes);
+    setShowConfirmDialog(true);
+  };
+
+  const confirmSave = async () => {
+    if (!user?.id || !pendingChanges) return;
+
+    setIsSavingContent(true);
+    setShowConfirmDialog(false);
+
+    try {
+      const res = await fetch("/api/content-keywords/edit", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          pagesToRemove,
+          pagesToAdd,
+          keywordsToRemove,
+          keywordsToAdd,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          toast.error(data.message || "Rate limit exceeded");
+          await checkRateLimit();
+        } else {
+          throw new Error(data.error || "Failed to save changes");
+        }
+        return;
+      }
+
+      toast.success("Changes saved successfully!");
+      
+      // Reset state
+      setPagesToRemove([]);
+      setPagesToAdd([]);
+      setKeywordsToRemove([]);
+      setKeywordsToAdd([]);
+      setPendingChanges(null);
+
+      // Reload data
+      await loadContentAndKeywords();
+      await checkRateLimit();
+    } catch (error) {
+      console.error("Failed to save changes:", error);
+      toast.error("Failed to save changes. Please try again.");
+    } finally {
+      setIsSavingContent(false);
+    }
+  };
 
   const handleInputChange = (field, value) => {
     setFormData(prev => ({
@@ -261,8 +738,20 @@ export default function Settings() {
         await reauthenticateWithCredential(currentUser, credential);
       }
       
-      // Delete all user data from Firestore
-      await deleteAllUserData(user.id);
+      // Delete all user data from Firestore via API (uses Admin SDK)
+      const deleteRes = await fetch("/api/account/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+
+      if (!deleteRes.ok) {
+        const errorData = await deleteRes.json();
+        throw new Error(errorData.error || "Failed to delete user data");
+      }
+
+      const deleteData = await deleteRes.json();
+      console.log(`✅ Deleted ${deleteData.deletedCount} documents`);
       
       // Delete the Firebase Auth user
       await deleteUser(currentUser);
@@ -301,403 +790,13 @@ export default function Settings() {
     }
   };
 
-  const deleteAllUserData = async (userId) => {
-    let deleteCount = 0;
-
-    try {
-      // 1. Delete onboarding data
-      try {
-        const onboardingRef = doc(db, "onboarding", userId);
-        await deleteDoc(onboardingRef);
-        deleteCount++;
-        console.log("✅ Deleted onboarding data");
-      } catch (error) {
-        console.log("⚠️ Onboarding data not found or already deleted");
-      }
-
-      // 2. Delete user profile data
-      try {
-        const userRef = doc(db, "users", userId);
-        await deleteDoc(userRef);
-        deleteCount++;
-        console.log("✅ Deleted user profile data");
-      } catch (error) {
-        console.log("⚠️ User profile data not found or already deleted");
-      }
-
-      // 3. Delete implementedSeoTips (query by userId field)
-      try {
-        const implementedSeoTipsQuery = query(
-          collection(db, "implementedSeoTips"),
-          where("userId", "==", userId)
-        );
-        const implementedSeoTipsSnapshot = await getDocs(implementedSeoTipsQuery);
-        const batch1 = writeBatch(db);
-        implementedSeoTipsSnapshot.docs.forEach((doc) => {
-          batch1.delete(doc.ref);
-          deleteCount++;
-        });
-        if (implementedSeoTipsSnapshot.docs.length > 0) {
-          await batch1.commit();
-          console.log(`✅ Deleted ${implementedSeoTipsSnapshot.docs.length} implementedSeoTips documents`);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting implementedSeoTips:", error.message);
-      }
-
-      // 4. Delete intentMismatches (from both old and new structures)
-      try {
-        // Delete from NEW structure: intentMismatches/{userId}/analyses
-        try {
-          const newAnalysesRef = collection(db, "intentMismatches", userId, "analyses");
-          const newAnalysesSnapshot = await getDocs(newAnalysesRef);
-          const batch2a = writeBatch(db);
-          newAnalysesSnapshot.docs.forEach((doc) => {
-            batch2a.delete(doc.ref);
-            deleteCount++;
-          });
-          if (newAnalysesSnapshot.docs.length > 0) {
-            await batch2a.commit();
-            console.log(`✅ Deleted ${newAnalysesSnapshot.docs.length} intentMismatches from new structure`);
-          }
-        } catch (error) {
-          console.log("⚠️ Error deleting from new intentMismatches structure:", error.message);
-        }
-
-        // Delete from OLD structure: intentMismatches (flat)
-        try {
-          const intentMismatchesQuery = query(
-            collection(db, "intentMismatches"),
-            where("userId", "==", userId)
-          );
-          const intentMismatchesSnapshot = await getDocs(intentMismatchesQuery);
-          const batch2b = writeBatch(db);
-          intentMismatchesSnapshot.docs.forEach((doc) => {
-            batch2b.delete(doc.ref);
-            deleteCount++;
-          });
-          if (intentMismatchesSnapshot.docs.length > 0) {
-            await batch2b.commit();
-            console.log(`✅ Deleted ${intentMismatchesSnapshot.docs.length} intentMismatches from old structure`);
-          }
-        } catch (error) {
-          console.log("⚠️ Error deleting from old intentMismatches structure:", error.message);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting intentMismatches:", error.message);
-      }
-
-      // 5. Delete internalLinkSuggestions
-      try {
-        const internalLinkQuery = query(
-          collection(db, "internalLinkSuggestions"),
-          where("userId", "==", userId)
-        );
-        const internalLinkSnapshot = await getDocs(internalLinkQuery);
-        const batch3 = writeBatch(db);
-        internalLinkSnapshot.docs.forEach((doc) => {
-          batch3.delete(doc.ref);
-          deleteCount++;
-        });
-        if (internalLinkSnapshot.docs.length > 0) {
-          await batch3.commit();
-          console.log(`✅ Deleted ${internalLinkSnapshot.docs.length} internalLinkSuggestions documents`);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting internalLinkSuggestions:", error.message);
-      }
-
-      // 6. Delete contentAuditResults
-      try {
-        const contentAuditQuery = query(
-          collection(db, "contentAuditResults"),
-          where("userId", "==", userId)
-        );
-        const contentAuditSnapshot = await getDocs(contentAuditQuery);
-        const batch4 = writeBatch(db);
-        contentAuditSnapshot.docs.forEach((doc) => {
-          batch4.delete(doc.ref);
-          deleteCount++;
-        });
-        if (contentAuditSnapshot.docs.length > 0) {
-          await batch4.commit();
-          console.log(`✅ Deleted ${contentAuditSnapshot.docs.length} contentAuditResults documents`);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting contentAuditResults:", error.message);
-      }
-
-      // 7. Delete aiSuggestions
-      try {
-        const aiSuggestionsQuery = query(
-          collection(db, "aiSuggestions"),
-          where("userId", "==", userId)
-        );
-        const aiSuggestionsSnapshot = await getDocs(aiSuggestionsQuery);
-        const batch5 = writeBatch(db);
-        aiSuggestionsSnapshot.docs.forEach((doc) => {
-          batch5.delete(doc.ref);
-          deleteCount++;
-        });
-        if (aiSuggestionsSnapshot.docs.length > 0) {
-          await batch5.commit();
-          console.log(`✅ Deleted ${aiSuggestionsSnapshot.docs.length} aiSuggestions documents`);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting aiSuggestions:", error.message);
-      }
-
-      // 8. Delete pageContentCache (from both old and new structures)
-      try {
-        // Delete from NEW structure: pageContentCache/{userId}/pages
-        try {
-          const newPagesRef = collection(db, "pageContentCache", userId, "pages");
-          const newPagesSnapshot = await getDocs(newPagesRef);
-          
-          if (newPagesSnapshot.docs.length > 0) {
-            const batch6a = writeBatch(db);
-            let batchCount = 0;
-            newPagesSnapshot.docs.forEach((doc) => {
-              batch6a.delete(doc.ref);
-              deleteCount++;
-              batchCount++;
-            });
-            await batch6a.commit();
-            console.log(`✅ Deleted ${batchCount} pageContentCache from new structure`);
-          } else {
-            console.log("⚠️ No pageContentCache found in new structure");
-          }
-        } catch (error) {
-          console.error("❌ Error deleting from new pageContentCache structure:", error.message);
-        }
-
-        // Delete from OLD structure: pageContentCache (flat)
-        try {
-          const pageCacheQuery = query(
-            collection(db, "pageContentCache"),
-            where("userId", "==", userId)
-          );
-          const pageCacheSnapshot = await getDocs(pageCacheQuery);
-          
-          if (pageCacheSnapshot.docs.length > 0) {
-            const batch6b = writeBatch(db);
-            let batchCount = 0;
-            pageCacheSnapshot.docs.forEach((doc) => {
-              batch6b.delete(doc.ref);
-              deleteCount++;
-              batchCount++;
-            });
-            await batch6b.commit();
-            console.log(`✅ Deleted ${batchCount} pageContentCache from old structure`);
-          } else {
-            console.log("⚠️ No pageContentCache found in old structure");
-          }
-        } catch (error) {
-          console.error("❌ Error deleting from old pageContentCache structure:", error.message);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting pageContentCache:", error.message);
-      }
-
-      // 9. Delete siteCrawls
-      try {
-        const siteCrawlsRef = doc(db, "siteCrawls", userId);
-        const siteCrawlsSnap = await getDoc(siteCrawlsRef);
-        if (siteCrawlsSnap.exists()) {
-          await deleteDoc(siteCrawlsRef);
-          deleteCount++;
-          console.log("✅ Deleted siteCrawls data");
-        } else {
-          console.log("⚠️ siteCrawls document does not exist");
-        }
-      } catch (error) {
-        console.error("❌ Error deleting siteCrawls:", error.message);
-        // Continue - don't throw
-      }
-
-      // 10. Delete focusKeywords
-      try {
-        const focusKeywordsRef = doc(db, "focusKeywords", userId);
-        const focusKeywordsSnap = await getDoc(focusKeywordsRef);
-        if (focusKeywordsSnap.exists()) {
-          await deleteDoc(focusKeywordsRef);
-          deleteCount++;
-          console.log("✅ Deleted focusKeywords data");
-        } else {
-          console.log("⚠️ focusKeywords document does not exist");
-        }
-      } catch (error) {
-        console.error("❌ Error deleting focusKeywords:", error.message);
-        // Continue - don't throw
-      }
-
-      // 11. Delete conversations (full conversation messages)
-      try {
-        const conversationsQuery = query(
-          collection(db, "conversations"),
-          where("userId", "==", userId)
-        );
-        const conversationsSnapshot = await getDocs(conversationsQuery);
-        const batch7 = writeBatch(db);
-        conversationsSnapshot.docs.forEach((doc) => {
-          batch7.delete(doc.ref);
-          deleteCount++;
-        });
-        if (conversationsSnapshot.docs.length > 0) {
-          await batch7.commit();
-          console.log(`✅ Deleted ${conversationsSnapshot.docs.length} conversations`);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting conversations:", error.message);
-      }
-
-      // 12. Delete seoMetaTitles (from both old and new structures)
-      try {
-        // Delete from NEW structure: seoMetaTitles/{userId}/titles
-        try {
-          const newTitlesRef = collection(db, "seoMetaTitles", userId, "titles");
-          const newTitlesSnapshot = await getDocs(newTitlesRef);
-          
-          if (newTitlesSnapshot.docs.length > 0) {
-            const batch8a = writeBatch(db);
-            let batchCount = 0;
-            newTitlesSnapshot.docs.forEach((doc) => {
-              batch8a.delete(doc.ref);
-              deleteCount++;
-              batchCount++;
-            });
-            await batch8a.commit();
-            console.log(`✅ Deleted ${batchCount} seoMetaTitles from new structure`);
-          } else {
-            console.log("⚠️ No seoMetaTitles found in new structure");
-          }
-        } catch (error) {
-          console.error("❌ Error deleting from new seoMetaTitles structure:", error.message);
-        }
-
-        // Delete from OLD structure: seoMetaTitles (flat)
-        try {
-          const seoTitlesQuery = query(
-            collection(db, "seoMetaTitles"),
-            where("userId", "==", userId)
-          );
-          const seoTitlesSnapshot = await getDocs(seoTitlesQuery);
-          
-          if (seoTitlesSnapshot.docs.length > 0) {
-            const batch8b = writeBatch(db);
-            let batchCount = 0;
-            seoTitlesSnapshot.docs.forEach((doc) => {
-              batch8b.delete(doc.ref);
-              deleteCount++;
-              batchCount++;
-            });
-            await batch8b.commit();
-            console.log(`✅ Deleted ${batchCount} seoMetaTitles from old structure`);
-          } else {
-            console.log("⚠️ No seoMetaTitles found in old structure");
-          }
-        } catch (error) {
-          console.error("❌ Error deleting from old seoMetaTitles structure:", error.message);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting seoMetaTitles:", error.message);
-      }
-
-      // 13. Delete seoMetaDescriptions (from both old and new structures)
-      try {
-        // Delete from NEW structure: seoMetaDescriptions/{userId}/descriptions
-        try {
-          const newDescriptionsRef = collection(db, "seoMetaDescriptions", userId, "descriptions");
-          const newDescriptionsSnapshot = await getDocs(newDescriptionsRef);
-          
-          if (newDescriptionsSnapshot.docs.length > 0) {
-            const batch9a = writeBatch(db);
-            let batchCount = 0;
-            newDescriptionsSnapshot.docs.forEach((doc) => {
-              batch9a.delete(doc.ref);
-              deleteCount++;
-              batchCount++;
-            });
-            await batch9a.commit();
-            console.log(`✅ Deleted ${batchCount} seoMetaDescriptions from new structure`);
-          } else {
-            console.log("⚠️ No seoMetaDescriptions found in new structure");
-          }
-        } catch (error) {
-          console.error("❌ Error deleting from new seoMetaDescriptions structure:", error.message);
-        }
-
-        // Delete from OLD structure: seoMetaDescriptions (flat)
-        try {
-          const seoDescriptionsQuery = query(
-            collection(db, "seoMetaDescriptions"),
-            where("userId", "==", userId)
-          );
-          const seoDescriptionsSnapshot = await getDocs(seoDescriptionsQuery);
-          
-          if (seoDescriptionsSnapshot.docs.length > 0) {
-            const batch9b = writeBatch(db);
-            let batchCount = 0;
-            seoDescriptionsSnapshot.docs.forEach((doc) => {
-              batch9b.delete(doc.ref);
-              deleteCount++;
-              batchCount++;
-            });
-            await batch9b.commit();
-            console.log(`✅ Deleted ${batchCount} seoMetaDescriptions from old structure`);
-          } else {
-            console.log("⚠️ No seoMetaDescriptions found in old structure");
-          }
-        } catch (error) {
-          console.error("❌ Error deleting from old seoMetaDescriptions structure:", error.message);
-        }
-      } catch (error) {
-        console.log("⚠️ Error deleting seoMetaDescriptions:", error.message);
-      }
-
-      // 14. Delete genericKeywordsCache
-      try {
-        const genericKeywordsQuery = query(
-          collection(db, "genericKeywordsCache"),
-          where("userId", "==", userId)
-        );
-        const genericKeywordsSnapshot = await getDocs(genericKeywordsQuery);
-        
-        if (genericKeywordsSnapshot.docs.length > 0) {
-          const batch10 = writeBatch(db);
-          let batchCount = 0;
-          
-          genericKeywordsSnapshot.docs.forEach((doc) => {
-            batch10.delete(doc.ref);
-            deleteCount++;
-            batchCount++;
-          });
-          
-          if (batchCount > 0) {
-            await batch10.commit();
-            console.log(`✅ Deleted ${batchCount} genericKeywordsCache documents`);
-          }
-        } else {
-          console.log("⚠️ No genericKeywordsCache documents found for user");
-        }
-      } catch (error) {
-        console.error("❌ Error deleting genericKeywordsCache:", error.message);
-        // Continue - don't throw
-      }
-      
-      console.log(`✅ Successfully deleted ${deleteCount} documents for user ${userId}`);
-    } catch (error) {
-      console.error("Error deleting user data:", error);
-      throw error;
-    }
-  };
-
   const tabs = [
     { id: "profile", label: "Profile", icon: User },
     // TODO: Uncomment when implementing notification preferences
     // { id: "notifications", label: "Notifications", icon: Bell },
     // TODO: Uncomment when implementing SEO preferences
     // { id: "seo", label: "SEO Preferences", icon: Search },
+    { id: "content-keywords", label: "Content & Keywords", icon: FileText },
     { id: "integrations", label: "Integrations", icon: Globe },
     { id: "account", label: "Account", icon: Shield }
   ];
@@ -1135,6 +1234,333 @@ export default function Settings() {
               </Card>
             )}
             */}
+
+            {/* Content & Keywords Tab */}
+            {activeTab === "content-keywords" && (
+              <div className="space-y-6">
+                {/* Warning Banner */}
+                <Card className="border-yellow-200 dark:border-yellow-800 bg-yellow-50 dark:bg-yellow-950/20">
+                  <CardContent className="pt-6">
+                    <div className="flex items-start gap-3">
+                      <AlertTriangle className="h-5 w-5 text-yellow-600 dark:text-yellow-400 flex-shrink-0 mt-0.5" />
+                      <div className="flex-1">
+                        <h3 className="font-semibold text-yellow-900 dark:text-yellow-100 mb-1">
+                          Important: Changing these settings will affect your chatbot training and focus keyword tracking.
+                        </h3>
+                        <p className="text-sm text-yellow-800 dark:text-yellow-200">
+                          This will affect {pages.length} page{pages.length !== 1 ? "s" : ""} and {focusKeywords.length} focus keyword{focusKeywords.length !== 1 ? "s" : ""} currently in use.
+                        </p>
+                        {rateLimitInfo && !rateLimitInfo.canEdit && (
+                          <div className="mt-3 flex items-center gap-2 text-sm font-medium text-yellow-900 dark:text-yellow-100">
+                            <Clock className="h-4 w-4" />
+                            <span>
+                              You can make edits again in {rateLimitInfo.hoursUntilNextEdit} hour{rateLimitInfo.hoursUntilNextEdit !== 1 ? "s" : ""}.
+                              {rateLimitInfo.lastEditAt && (
+                                <span className="text-yellow-700 dark:text-yellow-300 ml-2">
+                                  (Last edited: {new Date(rateLimitInfo.lastEditAt).toLocaleString()})
+                                </span>
+                              )}
+                            </span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+
+                {isLoadingContent ? (
+                  <Card>
+                    <CardContent className="pt-6">
+                      <div className="flex items-center justify-center py-8">
+                        <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+                        <span className="ml-2 text-muted-foreground">Loading content and keywords...</span>
+                      </div>
+                    </CardContent>
+                  </Card>
+                ) : (
+                  <>
+                    {/* Scan Complete Pages */}
+                    <Card className="border-green-200 dark:border-green-800">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <FileText className="w-5 h-5" />
+                          Scan Complete Pages
+                        </CardTitle>
+                        <CardDescription>
+                          Manage which pages are crawled and used for chatbot training.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {/* Current Pages */}
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium">Current Pages ({pages.length})</h4>
+                          {pages.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">No pages configured yet.</p>
+                          ) : (
+                            <div className="space-y-2 max-h-64 overflow-y-auto border rounded-lg p-3">
+                              {pages
+                                .filter(page => !pagesToRemove.includes(page.pageUrl))
+                                .map((page) => (
+                                  <div
+                                    key={page.pageUrl}
+                                    className="flex items-center justify-between p-2 rounded border bg-background hover:bg-muted/50"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium truncate">{page.title || page.pageUrl}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{page.pageUrl}</p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleRemovePage(page.pageUrl)}
+                                      disabled={isSavingContent || (rateLimitInfo && !rateLimitInfo.canEdit)}
+                                    >
+                                      <X className="h-4 w-4" />
+                                    </Button>
+                                  </div>
+                                ))}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Pages to Remove */}
+                        {pagesToRemove.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-red-600">Pages to Remove ({pagesToRemove.length})</h4>
+                            <div className="space-y-2 border border-red-200 dark:border-red-800 rounded-lg p-3 bg-red-50 dark:bg-red-950/20">
+                              {pagesToRemove.map((url) => {
+                                const page = pages.find(p => p.pageUrl === url);
+                                return (
+                                  <div
+                                    key={url}
+                                    className="flex items-center justify-between p-2 rounded border border-red-200 dark:border-red-800 bg-background"
+                                  >
+                                    <div className="flex-1 min-w-0">
+                                      <p className="text-sm font-medium line-through truncate">{page?.title || url}</p>
+                                      <p className="text-xs text-muted-foreground truncate">{url}</p>
+                                    </div>
+                                    <Button
+                                      variant="ghost"
+                                      size="sm"
+                                      onClick={() => handleUndoRemovePage(url)}
+                                      disabled={isSavingContent}
+                                    >
+                                      Undo
+                                    </Button>
+                                  </div>
+                                );
+                              })}
+                            </div>
+                          </div>
+                        )}
+
+                        {/* Add New Page */}
+                        <div className="space-y-2">
+                          <h4 className="text-sm font-medium">Add New Page</h4>
+                          <div className="flex gap-2">
+                            <Input
+                              value={newPageUrl}
+                              onChange={(e) => setNewPageUrl(e.target.value)}
+                              placeholder="https://yourdomain.com/page"
+                              onKeyDown={(e) => {
+                                if (e.key === "Enter") {
+                                  handleAddPage();
+                                }
+                              }}
+                              disabled={isSavingContent || (rateLimitInfo && !rateLimitInfo.canEdit)}
+                            />
+                            <Button
+                              onClick={handleAddPage}
+                              disabled={isSavingContent || (rateLimitInfo && !rateLimitInfo.canEdit)}
+                            >
+                              <Plus className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {/* Pages to Add */}
+                        {pagesToAdd.length > 0 && (
+                          <div className="space-y-2">
+                            <h4 className="text-sm font-medium text-green-600">Pages to Add ({pagesToAdd.length})</h4>
+                            <div className="space-y-2 border border-green-200 dark:border-green-800 rounded-lg p-3 bg-green-50 dark:bg-green-950/20">
+                              {pagesToAdd.map((url) => (
+                                <div
+                                  key={url}
+                                  className="flex items-center justify-between p-2 rounded border border-green-200 dark:border-green-800 bg-background"
+                                >
+                                  <p className="text-sm truncate flex-1">{url}</p>
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    onClick={() => handleRemoveAddedPage(url)}
+                                    disabled={isSavingContent}
+                                  >
+                                    <X className="h-4 w-4" />
+                                  </Button>
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Focus Keywords */}
+                    <Card className="border-green-200 dark:border-green-800">
+                      <CardHeader>
+                        <CardTitle className="flex items-center gap-2 text-lg">
+                          <Search className="w-5 h-5" />
+                          Focus Keywords
+                        </CardTitle>
+                        <CardDescription>
+                          Select keywords from Google Search Console to track and prioritize in your dashboard. Selected keywords ({focusKeywords.length}) are highlighted.
+                        </CardDescription>
+                      </CardHeader>
+                      <CardContent className="space-y-4">
+                        {!isGscConnected ? (
+                          <div className="text-center py-8">
+                            <p className="text-sm text-muted-foreground mb-4">
+                              Google Search Console is not connected. Please connect GSC to view and manage focus keywords.
+                            </p>
+                            <Button
+                              onClick={() => router.push("/onboarding?step=4")}
+                              className="bg-green-600 hover:bg-green-700"
+                            >
+                              Connect Google Search Console
+                            </Button>
+                          </div>
+                        ) : gscKeywordsRaw.length === 0 ? (
+                          <div className="text-center py-8">
+                            <p className="text-sm text-muted-foreground">
+                              No keywords found in Google Search Console. Make sure your site has search data.
+                            </p>
+                          </div>
+                        ) : (
+                          <>
+                            <div className="max-h-144 overflow-y-auto border rounded-lg p-3">
+                              <FocusKeywordSelector
+                                keywords={gscKeywordsRaw}
+                                selectedByPage={focusKeywordByPage}
+                                onToggle={handleFocusKeywordToggle}
+                                isSaving={isSavingContent || (rateLimitInfo && !rateLimitInfo.canEdit)}
+                                suggestions={[]}
+                                groupedByPage={groupedByPage}
+                                businessName={data?.businessName || ""}
+                                businessType={data?.businessType || ""}
+                                businessLocation={data?.businessLocation || ""}
+                                userId={user?.id || ""}
+                              />
+                            </div>
+                          </>
+                        )}
+                      </CardContent>
+                    </Card>
+
+                    {/* Save Button */}
+                    <div className="flex justify-end">
+                      <Button
+                        onClick={handleSaveContentKeywords}
+                        disabled={
+                          isSavingContent ||
+                          (rateLimitInfo && !rateLimitInfo.canEdit) ||
+                          (pagesToRemove.length === 0 &&
+                            pagesToAdd.length === 0 &&
+                            keywordsToRemove.length === 0 &&
+                            keywordsToAdd.length === 0)
+                        }
+                        className="gap-2 bg-green-600 hover:bg-green-700"
+                      >
+                        {isSavingContent ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin" />
+                            Saving...
+                          </>
+                        ) : (
+                          <>
+                            <Save className="h-4 w-4" />
+                            Save Changes
+                          </>
+                        )}
+                      </Button>
+                    </div>
+                  </>
+                )}
+
+                {/* Confirmation Dialog */}
+                <Dialog open={showConfirmDialog} onOpenChange={setShowConfirmDialog}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <AlertTriangle className="h-5 w-5 text-yellow-600" />
+                        Confirm Changes
+                      </DialogTitle>
+                      <DialogDescription>
+                        Please review your changes before saving. This will affect your chatbot training and focus keyword tracking.
+                      </DialogDescription>
+                    </DialogHeader>
+                    {pendingChanges && (
+                      <div className="space-y-3">
+                        <div className="bg-yellow-50 dark:bg-yellow-950/20 p-3 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                          <p className="text-sm font-medium mb-2">Summary of changes:</p>
+                          <ul className="text-sm space-y-1">
+                            {pendingChanges.pagesRemoved > 0 && (
+                              <li className="text-red-600">• Remove {pendingChanges.pagesRemoved} page{pendingChanges.pagesRemoved !== 1 ? "s" : ""}</li>
+                            )}
+                            {pendingChanges.pagesAdded > 0 && (
+                              <li className="text-green-600">• Add {pendingChanges.pagesAdded} page{pendingChanges.pagesAdded !== 1 ? "s" : ""}</li>
+                            )}
+                            {pendingChanges.keywordsRemoved > 0 && (
+                              <li className="text-red-600">• Remove {pendingChanges.keywordsRemoved} keyword{pendingChanges.keywordsRemoved !== 1 ? "s" : ""}</li>
+                            )}
+                            {pendingChanges.keywordsAdded > 0 && (
+                              <li className="text-green-600">• Add {pendingChanges.keywordsAdded} keyword{pendingChanges.keywordsAdded !== 1 ? "s" : ""}</li>
+                            )}
+                          </ul>
+                        </div>
+                        <div className="bg-red-50 dark:bg-red-950/20 p-3 rounded-lg border border-red-200 dark:border-red-800">
+                          <p className="text-sm font-medium text-red-900 dark:text-red-100 mb-1 flex items-center gap-2">
+                            <AlertTriangle className="h-4 w-4" />
+                            Warning: Changes cannot be undone
+                          </p>
+                          <p className="text-xs text-red-800 dark:text-red-200">
+                            Once saved, your previous selections will be permanently replaced. Make sure you&apos;re satisfied with your changes before confirming.
+                          </p>
+                        </div>
+                        <p className="text-sm font-medium text-foreground">
+                          These changes will permanently replace your current settings. Are you sure you want to continue?
+                        </p>
+                      </div>
+                    )}
+                    <DialogFooter>
+                      <Button
+                        variant="outline"
+                        onClick={() => {
+                          setShowConfirmDialog(false);
+                          setPendingChanges(null);
+                        }}
+                        disabled={isSavingContent}
+                      >
+                        Cancel
+                      </Button>
+                      <Button
+                        onClick={confirmSave}
+                        disabled={isSavingContent}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {isSavingContent ? (
+                          <>
+                            <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                            Saving...
+                          </>
+                        ) : (
+                          "Confirm & Save"
+                        )}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              </div>
+            )}
 
             {/* Integrations Tab */}
             {activeTab === "integrations" && (

@@ -60,6 +60,10 @@ const FocusKeywordSelector = ({
         if (candidatePosition < existing.position) {
           existing.position = candidatePosition;
         }
+        // Preserve AI-generated source if either is AI-generated
+        if (item.source === "ai-generated" || existing.source === "ai-generated") {
+          existing.source = "ai-generated";
+        }
       } else {
         map.set(key, {
           keyword: key,
@@ -67,6 +71,7 @@ const FocusKeywordSelector = ({
           impressions: item.impressions || 0,
           position: item.position ?? Number.MAX_SAFE_INTEGER,
           page: item.page || null,
+          source: item.source || "gsc-existing", // Preserve source
         });
       }
     });
@@ -345,13 +350,18 @@ const FocusKeywordSelector = ({
                     selectedByPage?.get(pageKey)?.toLowerCase() === lowerKeyword;
                   const isAssignedElsewhere =
                     assignedPageKey && assignedPageKey !== pageKey;
+                  const isAIGenerated = keyword.source === "ai-generated";
                   
                   return (
                     <label
                       key={`${group.page || "__unknown__"}-${keyword.keyword}-${idx}`}
                       className={cn(
                         "flex items-center justify-between gap-4 rounded-md border px-3 py-2 text-sm transition-colors",
-                        isSelected
+                        isAIGenerated && isSelected
+                          ? "border-purple-300 dark:border-purple-700 bg-purple-100 dark:bg-purple-900/30"
+                          : isAIGenerated
+                          ? "border-purple-200 dark:border-purple-800/50 bg-purple-50 dark:bg-purple-900/20 hover:bg-purple-100 dark:hover:bg-purple-900/30"
+                          : isSelected
                           ? "border-primary bg-primary/10"
                           : "border-transparent bg-muted/40 hover:bg-muted/60",
                         isAssignedElsewhere && !isSelected && "opacity-70"
@@ -361,24 +371,39 @@ const FocusKeywordSelector = ({
                         <Checkbox
                           checked={isSelected}
                           onCheckedChange={() =>
-                            handleToggle(keyword.keyword, group.page)
+                            handleToggle(keyword.keyword, group.page, keyword.source || "gsc-existing")
                           }
                           disabled={isSaving}
                         />
                         <div>
-                          <p className="font-medium leading-tight">{keyword.keyword}</p>
+                          <div className="flex items-center gap-2">
+                            <p className="font-medium leading-tight">{keyword.keyword}</p>
+                            {isAIGenerated && (
+                              <Badge variant="outline" className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 border-purple-200 dark:border-purple-800">
+                                AI
+                              </Badge>
+                            )}
+                          </div>
                           <div className="flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                            <span>{keyword.impressions} impressions</span>
-                            <span>Pos. {keyword.position}</span>
+                            {keyword.impressions > 0 ? (
+                              <>
+                                <span>{keyword.impressions} impressions</span>
+                                <span>Pos. {keyword.position}</span>
+                              </>
+                            ) : (
+                              <span className="text-purple-600 dark:text-purple-400">AI Generated</span>
+                            )}
                             {isAssignedElsewhere && (
                               <Badge variant="outline">Selected on another page</Badge>
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        {keyword.clicks} clicks
-                      </div>
+                      {keyword.clicks > 0 && (
+                        <div className="text-xs text-muted-foreground">
+                          {keyword.clicks} clicks
+                        </div>
+                      )}
                     </label>
                   );
                 })}

@@ -339,6 +339,16 @@ const SeoRecommendationPanel = ({
                 <span className="w-2 h-2 rounded-full bg-green-500"></span>
                 {keywordSource === "ai-generated" ? "Step 1: Optimize Meta Tags" : "Optimize Meta Tags"}
               </Label>
+              {keywordSource === "ai-generated" && (
+                <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
+                  <p className="text-xs text-blue-900 dark:text-blue-100">
+                    <strong>💡 What you&apos;re changing:</strong> The <strong>Meta Title</strong> is the clickable headline shown in Google search results, and the <strong>Meta Description</strong> is the short text snippet that appears below the title.
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                    <strong>📍 Where to find them:</strong> These are typically found in your website&apos;s SEO settings, page editor, or plugin settings (like Yoast SEO, Rank Math, or All in One SEO). Look for fields labeled &quot;SEO Title&quot; or &quot;Meta Title&quot; and &quot;Meta Description&quot; when editing your page.
+                  </p>
+                </div>
+              )}
               <div className="space-y-3">
                 <div>
                   <Label className="text-xs text-muted-foreground mb-1 block">Suggested Meta Title</Label>
@@ -386,6 +396,14 @@ const SeoRecommendationPanel = ({
                   <span className="w-2 h-2 rounded-full bg-green-500"></span>
                   Step 2: Update Page Content
                 </Label>
+                <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
+                  <p className="text-xs text-blue-900 dark:text-blue-100">
+                    <strong>💡 What you&apos;re changing:</strong> The H1 (Heading 1) is the main title that appears at the top of your page content. It&apos;s the largest heading on the page and tells both users and search engines what the page is about.
+                  </p>
+                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                    <strong>📍 Where to find it:</strong> In your page editor (WordPress, Wix, Squarespace, etc.), look for the main title field at the top of your content editor. It&apos;s usually the first thing you see when editing a page. Replace the current H1 with the suggested one below.
+                  </p>
+                </div>
                 {loadingH1 ? (
                   <p className="text-sm text-muted-foreground">Loading current H1...</p>
                 ) : currentH1 ? (

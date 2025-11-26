@@ -303,7 +303,7 @@ const OnboardingWizard = () => {
                     <Label htmlFor="customBusinessType">Please specify your business type <span className="text-red-500">*</span></Label>
                     <Input
                       id="customBusinessType"
-                      placeholder="e.g. Car Wash, Pet Grooming, Landscaping"
+                      placeholder="e.g. Car Wash, Tour Guide, Landscaping"
                       value={data.customBusinessType || ""}
                       onChange={(e) =>
                         updateData({ customBusinessType: e.target.value })
@@ -374,7 +374,7 @@ const OnboardingWizard = () => {
                 <div className="space-y-2">
                   <Label htmlFor="businessLocation">Business Location <span className="text-red-500">*</span></Label>
                   <p className="text-sm text-muted-foreground mt-2">
-                  Enter the city and state your business serves. <br></br> This will help optimize your local SEO keywords
+                  Enter the <span className="font-bold">City and State</span> your business serves. <br></br> This will help optimize your local SEO keywords
                 </p>
                   <Input
                     id="businessLocation"
