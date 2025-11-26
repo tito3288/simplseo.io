@@ -28,7 +28,7 @@ export async function GET(request) {
             if (typeof entry === "string") {
               const keyword = entry.trim();
               if (!keyword) return null;
-              return { keyword, pageUrl: null };
+              return { keyword, pageUrl: null, source: "gsc-existing" };
             }
             const keyword =
               typeof entry.keyword === "string" ? entry.keyword.trim() : null;
@@ -37,7 +37,8 @@ export async function GET(request) {
               typeof entry.pageUrl === "string" && entry.pageUrl.trim().length
                 ? entry.pageUrl.trim()
                 : null;
-            return { keyword, pageUrl };
+            const source = entry.source === "ai-generated" ? "ai-generated" : "gsc-existing";
+            return { keyword, pageUrl, source };
           })
           .filter(Boolean)
       : [];
@@ -83,6 +84,7 @@ export async function POST(request) {
           cleanedKeywordsMap.set(keyword.toLowerCase(), {
             keyword,
             pageUrl: null,
+            source: "gsc-existing", // Default for backwards compatibility
           });
         }
         return;
@@ -99,10 +101,13 @@ export async function POST(request) {
           ? entry.pageUrl.trim()
           : null;
 
-      cleanedKeywordsMap.set(lower, { keyword, pageUrl });
+      const source = entry.source === "ai-generated" ? "ai-generated" : "gsc-existing";
+
+      cleanedKeywordsMap.set(lower, { keyword, pageUrl, source });
     });
 
-    const cleanedKeywords = Array.from(cleanedKeywordsMap.values()).slice(0, 5);
+    // No limit - users can select focus keywords for all their pages
+    const cleanedKeywords = Array.from(cleanedKeywordsMap.values());
 
     await db
       .collection("focusKeywords")

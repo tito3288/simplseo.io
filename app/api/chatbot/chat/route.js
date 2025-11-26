@@ -217,6 +217,16 @@ ${userData?.impressionTrends?.slice(-7).map(day => `- ${day.date}: ${day.impress
 **🤖 AI-Generated SEO Tips:**
 ${userData?.aiTips?.slice(0, 5).map(tip => `- ${tip}`).join('\n') || 'No data available'}
 
+**🎯 Focus Keywords (User-Selected Keywords for Optimization):**
+${userData?.focusKeywords && userData.focusKeywords.length > 0
+  ? userData.focusKeywords.map((fk, idx) => {
+      const keyword = typeof fk === 'string' ? fk : fk.keyword;
+      const pageUrl = typeof fk === 'object' ? fk.pageUrl : null;
+      const source = typeof fk === 'object' ? (fk.source === 'ai-generated' ? 'AI-generated' : 'GSC-existing') : 'GSC-existing';
+      return `${idx + 1}. "${keyword}"${pageUrl ? ` → ${pageUrl}` : ''} (${source})`;
+    }).join('\n')
+  : 'No focus keywords selected yet. Users can select focus keywords in the Focus Keywords card on the dashboard to prioritize optimization efforts.'}
+
 **Time Period Flexibility:**
 - When users ask about "this month" or "last 30 days", use the full 28-day dataset
 - When users ask about "this week" or "last 7 days", focus on the most recent 7 days of trend data

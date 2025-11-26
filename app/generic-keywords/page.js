@@ -533,17 +533,17 @@ export default function GenericKeywordsPage() {
           )}
 
           {opportunity.actionItems?.length > 0 && (
-            <div className="bg-orange-50 dark:bg-orange-900/20 p-3 rounded-lg">
+            <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
               <div className="flex items-start gap-2">
-                <Wrench className="w-4 h-4 text-orange-600 mt-0.5 flex-shrink-0" />
+                <Wrench className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
                 <div>
-                  <p className="text-sm font-medium text-orange-800 dark:text-orange-200 mb-2">
+                  <p className="text-sm font-medium text-purple-700 dark:text-purple-400 mb-2">
                     Recommended Actions
                   </p>
-                  <ul className="text-sm text-orange-700 dark:text-orange-300 space-y-1">
+                  <ul className="text-sm text-foreground space-y-1">
                     {opportunity.actionItems.map((action, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="text-orange-600 mt-0.5">•</span>
+                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">•</span>
                         <span>{action}</span>
                       </li>
                     ))}

@@ -163,7 +163,7 @@ export const getFocusKeywords = async (userId) => {
         if (typeof entry === "string") {
           const keyword = entry.trim();
           if (!keyword) return null;
-          return { keyword, pageUrl: null };
+          return { keyword, pageUrl: null, source: "gsc-existing" };
         }
         const keyword =
           typeof entry.keyword === "string" ? entry.keyword.trim() : null;
@@ -172,7 +172,8 @@ export const getFocusKeywords = async (userId) => {
           typeof entry.pageUrl === "string" && entry.pageUrl.trim().length
             ? entry.pageUrl.trim()
             : null;
-        return { keyword, pageUrl };
+        const source = entry.source === "ai-generated" ? "ai-generated" : "gsc-existing";
+        return { keyword, pageUrl, source };
       })
       .filter(Boolean);
   } catch (error) {

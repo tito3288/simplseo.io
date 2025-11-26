@@ -413,7 +413,8 @@ export default function Chatbot() {
             lowCtrPages: chatbotData?.lowCtrPages || [],
             aiTips: chatbotData?.aiTips || [],
             easyWins: chatbotData?.easyWins || [],
-            impressionTrends: chatbotData?.impressionTrends || []
+            impressionTrends: chatbotData?.impressionTrends || [],
+            focusKeywords: chatbotData?.focusKeywords || []
           }
         }),
       });

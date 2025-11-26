@@ -5,6 +5,7 @@ import { Textarea } from "@/components/ui/textarea";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { useAuth } from "../contexts/AuthContext";
+import { getFocusKeywords } from "../lib/firestoreHelpers";
 import ReactMarkdown from "react-markdown";
 import TypingText from "./TypingText";
 
@@ -95,6 +96,7 @@ const ChatAssistant = ({
   const [isLoadingConversation, setIsLoadingConversation] = useState(true);
   const [completedTypingMessages, setCompletedTypingMessages] = useState(new Set());
   const isSavingRef = useRef(false); // Prevent duplicate saves
+  const [focusKeywords, setFocusKeywords] = useState([]);
 
   // Conversation management functions
   const loadConversations = async () => {
@@ -260,6 +262,21 @@ const ChatAssistant = ({
     }
   }, [user?.id, isInitialized]);
 
+  // Fetch focus keywords
+  useEffect(() => {
+    const loadFocusKeywords = async () => {
+      if (!user?.id) return;
+      try {
+        const keywords = await getFocusKeywords(user.id);
+        setFocusKeywords(keywords || []);
+      } catch (error) {
+        console.error("Failed to load focus keywords:", error);
+        setFocusKeywords([]);
+      }
+    };
+    loadFocusKeywords();
+  }, [user?.id]);
+
   // Check for stored chat context when component mounts
   useEffect(() => {
     const chatContext = localStorage.getItem("chatContext");
@@ -343,6 +360,7 @@ const ChatAssistant = ({
             lowCtrPages,
             impressionTrends,
             onboarding: data,
+            focusKeywords, // Add focus keywords to context
             // Enhanced context for better responses
             currentPage: typeof window !== 'undefined' ? window.location.pathname : '/dashboard',
             userFirstName: firstName,
@@ -521,6 +539,7 @@ const ChatAssistant = ({
             lowCtrPages,
             impressionTrends,
             onboarding: data,
+            focusKeywords, // Add focus keywords to context
             // Enhanced context for better responses
             currentPage: typeof window !== 'undefined' ? window.location.pathname : '/dashboard',
             userFirstName: firstName,

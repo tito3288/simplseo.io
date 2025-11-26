@@ -25,6 +25,7 @@ const Auth = () => {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [isTransitioning, setIsTransitioning] = useState(false);
   const { login, signup, signInWithGoogle, isLoading } = useAuth();
   const router = useRouter();
 
@@ -238,9 +239,14 @@ const Auth = () => {
           </p>
         </div>
 
-        <Card className="shadow-lg">
+        <Card 
+          key={isLogin ? "login" : "signup"}
+          className={`backdrop-blur-xl bg-background/40 border border-white/10 rounded-2xl shadow-2xl transition-opacity duration-300 ${isTransitioning ? 'opacity-0' : 'opacity-100'}`}
+        >
           <CardHeader>
-            <CardTitle>{isLogin ? "Log In" : "Create Account"}</CardTitle>
+            <CardTitle>
+              {isLogin ? "Log In" : "Create Account"}
+            </CardTitle>
             <CardDescription>
               {isLogin
                 ? "Welcome back! Sign in with your Google account to access your dashboard."
@@ -309,7 +315,15 @@ const Auth = () => {
                 <button
                   type="button"
                   className="ml-1 text-primary hover:underline font-medium"
-                  onClick={() => setIsLogin(!isLogin)}
+                  onClick={() => {
+                    setIsTransitioning(true);
+                    setTimeout(() => {
+                      setIsLogin(!isLogin);
+                      setTimeout(() => {
+                        setIsTransitioning(false);
+                      }, 50);
+                    }, 150);
+                  }}
                 >
                   {isLogin ? "Create one" : "Log in"}
                 </button>

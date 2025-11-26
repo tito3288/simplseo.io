@@ -64,6 +64,20 @@ import { Input } from "@/components/ui/input";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
+// Normalize URL for comparison (remove trailing slashes, ensure consistent format)
+const normalizeUrlForComparison = (url) => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    // Remove trailing slash except for root
+    const normalized = u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+    return normalized.toLowerCase();
+  } catch {
+    // Fallback: just remove trailing slash and lowercase
+    return url.trim().replace(/\/$/, '').toLowerCase();
+  }
+};
+
 if (typeof window !== "undefined") {
   window.google = window.google || {};
 }
@@ -92,6 +106,7 @@ export default function Dashboard() {
   const [isFilteringKeywords, setIsFilteringKeywords] = useState(false);
   const [focusKeywords, setFocusKeywords] = useState([]);
   const [focusKeywordByPage, setFocusKeywordByPage] = useState(new Map());
+  const [focusKeywordSourceByPage, setFocusKeywordSourceByPage] = useState(new Map()); // Track source: "ai-generated" or "gsc-existing"
   const [initialFocusKeywordsLoaded, setInitialFocusKeywordsLoaded] = useState(
     false
   );
@@ -109,15 +124,17 @@ export default function Dashboard() {
   const [isInitialCrawlRunning, setIsInitialCrawlRunning] = useState(false);
 
   const normalizePageKey = (page) => page || "__unknown__";
-  const assignmentsToEntries = (assignments) =>
+  const assignmentsToEntries = (assignments, sourceMap = new Map()) =>
     Array.from(assignments.entries())
       .map(([pageKey, keyword]) => {
         if (typeof keyword !== "string") return null;
         const trimmed = keyword.trim();
         if (!trimmed) return null;
+        const source = sourceMap.get(pageKey) || "gsc-existing"; // Default to gsc-existing if not specified
         return {
           keyword: trimmed,
           pageUrl: pageKey === "__unknown__" ? null : pageKey,
+          source, // "ai-generated" or "gsc-existing"
         };
       })
       .filter(Boolean);
@@ -686,6 +703,7 @@ export default function Dashboard() {
         setFocusKeywords([]);
         setInitialFocusKeywordsLoaded(false);
         setFocusKeywordByPage(new Map());
+        setFocusKeywordSourceByPage(new Map());
         setHasAutoSelectedFocusKeywords(false);
         return;
       }
@@ -694,18 +712,23 @@ export default function Dashboard() {
         if (Array.isArray(stored) && stored.length > 0) {
           const keywordList = [];
           const assignments = new Map();
-          stored.forEach(({ keyword, pageUrl }) => {
+          const sources = new Map();
+          stored.forEach(({ keyword, pageUrl, source }) => {
             if (!keyword) return;
             keywordList.push(keyword);
             const pageKey = normalizePageKey(pageUrl);
             assignments.set(pageKey, keyword);
+            // Store source, defaulting to "gsc-existing" for backwards compatibility
+            sources.set(pageKey, source || "gsc-existing");
           });
           setFocusKeywords(keywordList);
           setFocusKeywordByPage(assignments);
+          setFocusKeywordSourceByPage(sources);
           setHasAutoSelectedFocusKeywords(true);
         } else {
           setFocusKeywords([]);
           setFocusKeywordByPage(new Map());
+          setFocusKeywordSourceByPage(new Map());
         }
       } catch (error) {
         console.error("Failed to load focus keywords:", error);
@@ -722,7 +745,7 @@ export default function Dashboard() {
     currentAssignments = new Map(),
     rows = []
   ) => {
-    if (!keywordsList.length || !rows.length) {
+    if (!keywordsList.length) {
       return new Map();
     }
 
@@ -730,9 +753,10 @@ export default function Dashboard() {
     const reservedPages = new Set();
     const previousByKeyword = new Map();
 
+    // Build map of previous assignments (from Firestore)
     currentAssignments?.forEach((keyword, pageKey) => {
       if (!keyword) return;
-      previousByKeyword.set(keyword.toLowerCase(), pageKey);
+      previousByKeyword.set(keyword.toLowerCase(), { pageKey, keyword });
     });
 
     const rowsByKeyword = new Map();
@@ -754,29 +778,42 @@ export default function Dashboard() {
       if (!lower) return;
 
       const keywordRows = rowsByKeyword.get(lower) || [];
-      if (!keywordRows.length) return;
+      const previousAssignment = previousByKeyword.get(lower);
 
-      let chosenPageKey = previousByKeyword.get(lower);
+      // If keyword exists in GSC, use GSC logic
+      if (keywordRows.length > 0) {
+        let chosenPageKey = previousAssignment?.pageKey;
 
-      if (chosenPageKey) {
-        const stillValid = keywordRows.some(
-          (row) => normalizePageKey(row.page) === chosenPageKey
-        );
-        if (!stillValid || reservedPages.has(chosenPageKey)) {
-          chosenPageKey = null;
+        if (chosenPageKey) {
+          const stillValid = keywordRows.some(
+            (row) => normalizePageKey(row.page) === chosenPageKey
+          );
+          if (!stillValid || reservedPages.has(chosenPageKey)) {
+            chosenPageKey = null;
+          }
         }
-      }
 
-      if (!chosenPageKey) {
-        const candidate = keywordRows.find(
-          (row) => !reservedPages.has(normalizePageKey(row.page))
-        );
-        chosenPageKey = normalizePageKey((candidate || keywordRows[0]).page);
-      }
+        if (!chosenPageKey) {
+          const candidate = keywordRows.find(
+            (row) => !reservedPages.has(normalizePageKey(row.page))
+          );
+          chosenPageKey = normalizePageKey((candidate || keywordRows[0]).page);
+        }
 
-      if (chosenPageKey && !reservedPages.has(chosenPageKey)) {
-        next.set(chosenPageKey, keyword);
-        reservedPages.add(chosenPageKey);
+        if (chosenPageKey && !reservedPages.has(chosenPageKey)) {
+          next.set(chosenPageKey, keyword);
+          reservedPages.add(chosenPageKey);
+        }
+      } else {
+        // Keyword doesn't exist in GSC - preserve it from previous assignments (Firestore)
+        // This allows hardcoded/AI keywords to persist
+        if (previousAssignment) {
+          const pageKey = previousAssignment.pageKey;
+          if (!reservedPages.has(pageKey)) {
+            next.set(pageKey, keyword);
+            reservedPages.add(pageKey);
+          }
+        }
       }
     });
 
@@ -784,13 +821,8 @@ export default function Dashboard() {
   }, []); // Empty deps since it's a pure function
 
   useEffect(() => {
-    if (!gscKeywords.length) {
-      if (focusKeywords.length === 0 && focusKeywordByPage.size) {
-        setFocusKeywordByPage(new Map());
-      }
-      return;
-    }
-
+    // Always rebuild assignments, even if no GSC keywords
+    // This allows non-GSC keywords (hardcoded/AI) to persist
     setFocusKeywordByPage((prev) =>
       buildAssignmentsFromKeywords(focusKeywords, prev, gscKeywords)
     );
@@ -1503,13 +1535,39 @@ export default function Dashboard() {
   const prioritizedLowCtrPages = useMemo(() => {
     return lowCtrPages
       .map((page) => {
-        const focusMatches = page.keywords?.filter((keyword) =>
-          focusKeywordSet.has(keyword.toLowerCase())
-        );
-        const primaryKeyword = focusMatches?.[0] || page.keywords?.[0] || null;
+        // First, check if there's an assigned focus keyword for this page URL
+        // This should ALWAYS take priority, regardless of source (AI-generated or GSC-existing)
+        const normalizedPageUrl = normalizeUrlForComparison(page.page);
+        let assignedKeyword = null;
+        
+        for (const [pageKey, keyword] of focusKeywordByPage.entries()) {
+          if (pageKey && pageKey !== "__unknown__") {
+            const normalizedPageKey = normalizeUrlForComparison(pageKey);
+            if (normalizedPageKey === normalizedPageUrl) {
+              assignedKeyword = keyword;
+              break;
+            }
+          }
+        }
+        
+        // If we have an assigned keyword, use it (even if it doesn't appear in GSC data)
+        let primaryKeyword = assignedKeyword;
+        let focusKeywords = [];
+        
+        if (assignedKeyword) {
+          focusKeywords = [assignedKeyword];
+        } else {
+          // Fallback: find keywords from GSC data that match focus keywords
+          const focusMatches = page.keywords?.filter((keyword) =>
+            focusKeywordSet.has(keyword.toLowerCase())
+          );
+          focusKeywords = focusMatches || [];
+          primaryKeyword = focusMatches?.[0] || page.keywords?.[0] || null;
+        }
+        
         return {
           ...page,
-          focusKeywords: focusMatches || [],
+          focusKeywords,
           primaryKeyword,
         };
       })
@@ -1521,7 +1579,7 @@ export default function Dashboard() {
         }
         return b.impressions - a.impressions;
       });
-  }, [lowCtrPages, focusKeywordSet]);
+  }, [lowCtrPages, focusKeywordSet, focusKeywordByPage]);
  
   const focusKeywordsNotShownLowCtr = useMemo(() => {
     const shown = new Set();
@@ -1559,6 +1617,7 @@ export default function Dashboard() {
     keyword,
     page,
     isSelectedForPage,
+    source = "gsc-existing", // Default to gsc-existing if not specified
   }) => {
     if (!user?.id || !keyword) return;
 
@@ -1566,16 +1625,20 @@ export default function Dashboard() {
     const lowerKeyword = keyword.toLowerCase();
 
     const nextAssignments = new Map(focusKeywordByPage);
+    const nextSources = new Map(focusKeywordSourceByPage);
 
     if (isSelectedForPage) {
       nextAssignments.delete(pageKey);
+      nextSources.delete(pageKey);
     } else {
       nextAssignments.delete(pageKey);
+      nextSources.delete(pageKey);
       for (const [existingPageKey, existingKeyword] of Array.from(
         nextAssignments.entries()
       )) {
         if (existingKeyword?.toLowerCase() === lowerKeyword) {
           nextAssignments.delete(existingPageKey);
+          nextSources.delete(existingPageKey);
         }
       }
 
@@ -1585,8 +1648,10 @@ export default function Dashboard() {
         );
         const resolvedPageKey = normalizePageKey(keywordRow?.page);
         nextAssignments.set(resolvedPageKey, keyword);
+        nextSources.set(resolvedPageKey, source);
       } else {
         nextAssignments.set(pageKey, keyword);
+        nextSources.set(pageKey, source);
       }
     }
 
@@ -1598,9 +1663,10 @@ export default function Dashboard() {
       )
     );
 
-    const entries = assignmentsToEntries(nextAssignments);
+    const entries = assignmentsToEntries(nextAssignments, nextSources);
 
     setFocusKeywordByPage(nextAssignments);
+    setFocusKeywordSourceByPage(nextSources);
     setFocusKeywords(uniqueKeywords);
 
     setIsSavingFocusKeywords(true);
@@ -1754,7 +1820,7 @@ export default function Dashboard() {
         nextAssignments.set(pageKey, keyword);
       });
 
-    const entries = assignmentsToEntries(nextAssignments);
+    const entries = assignmentsToEntries(nextAssignments, new Map()); // Auto-selected are gsc-existing
 
     if (!entries.length) {
       toast.error("We couldn't find unique keywords per page to suggest yet.");
@@ -1762,8 +1828,14 @@ export default function Dashboard() {
     }
 
     const autoKeywords = entries.map((entry) => entry.keyword);
+    // Set all sources to gsc-existing for auto-selected keywords
+    const autoSources = new Map();
+    nextAssignments.forEach((_, pageKey) => {
+      autoSources.set(pageKey, "gsc-existing");
+    });
 
     setFocusKeywordByPage(nextAssignments);
+    setFocusKeywordSourceByPage(autoSources);
     setFocusKeywords(autoKeywords);
 
     setIsSavingFocusKeywords(true);
@@ -2188,6 +2260,9 @@ export default function Dashboard() {
                   suggestions={nonBrandedKeywords}
                   groupedByPage={groupedByPage}
                   businessName={data?.businessName || ""}
+                  businessType={data?.businessType || ""}
+                  businessLocation={data?.businessLocation || ""}
+                  userId={user?.id || ""}
                 />
                 {/* Submit button for post-onboarding flow */}
                 {postOnboardingStep === 'keywords' && (
@@ -2252,7 +2327,7 @@ export default function Dashboard() {
       <Card className="col-span-full mb-6">
         <CardHeader className="pb-2">
           <CardTitle className="flex items-center justify-between">
-            <span>Website Visitors</span>
+            <span>Search Impressions</span>
             <DateRangeFilter
               value={dateRange}
               onValueChange={(value) => setDateRange(value)}
@@ -2260,7 +2335,7 @@ export default function Dashboard() {
             />
           </CardTitle>
           <CardDescription>
-            Track impressions over time - Last {dateRange === "all" ? "year" : `${dateRange} days`}
+            Track how often your website appears in Google search results - Last {dateRange === "all" ? "year" : `${dateRange} days`}
           </CardDescription>
         </CardHeader>
         <CardContent>
@@ -2278,7 +2353,7 @@ export default function Dashboard() {
                 Connect Google Search Console
               </h3>
               <p className="text-muted-foreground text-sm mb-4">
-                Track impressions over time and see how your website performs in search results
+                Track how often your website appears in Google search results and see your search visibility over time
               </p>
               <Button onClick={requestGSCAuthToken}>Connect GSC</Button>
             </div>
@@ -2289,7 +2364,10 @@ export default function Dashboard() {
                   <CartesianGrid strokeDasharray="3 3" vertical={false} />
                   <XAxis dataKey="date" />
                   <YAxis />
-                  <Tooltip />
+                  <Tooltip 
+                    formatter={(value) => value}
+                    labelFormatter={(label) => `Date: ${label}`}
+                  />
                   <Line
                     type="monotone"
                     dataKey="impressions"
@@ -2312,8 +2390,8 @@ export default function Dashboard() {
           {data.businessType === "Dentist"
             ? "Add your business hours, services, and patient reviews to improve your local SEO as a dental practice."
             : `Add your business hours and location details to your website to improve your local SEO visibility in ${
-                data.businessLocation || "your area"
-              }.`}
+                data.businessLocation || "your area"  
+              }. Embed Google reviews to your website if you have any, this will help also with discoverability`}
         </AlertDescription>
       </Alert> 
       {/* Getting Started Card */}

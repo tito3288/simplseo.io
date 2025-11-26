@@ -35,6 +35,15 @@ const createSafeDocId = (userId, pageUrl) => {
   return `${userId}_${urlHash}`;
 };
 
+// Helper function to capitalize first letter of each word
+const capitalizeWords = (text) => {
+  if (!text) return '';
+  return text
+    .split(' ')
+    .map(word => word.charAt(0).toUpperCase() + word.slice(1).toLowerCase())
+    .join(' ');
+};
+
 const SeoRecommendationPanel = ({
   title,
   pageUrl,
@@ -42,6 +51,8 @@ const SeoRecommendationPanel = ({
   metaDescriptionTip = "",
   suggestedTitle = "",
   suggestedDescription = "",
+  keywordSource = "gsc-existing", // "ai-generated" or "gsc-existing"
+  focusKeyword = "",
 }) => {
   const { user } = useAuth();
 
@@ -55,17 +66,20 @@ const SeoRecommendationPanel = ({
   const [showRefreshButton, setShowRefreshButton] = useState(false);
   const [daysSinceImplementation, setDaysSinceImplementation] = useState(null);
   const [thirtyDayProgress, setThirtyDayProgress] = useState(null);
+  const [currentH1, setCurrentH1] = useState(null);
+  const [loadingH1, setLoadingH1] = useState(false);
 
   const copyToClipboard = async (text, type) => {
     try {
       // Remove any surrounding quotes before copying
       const cleanText = text?.replace(/^["']|["']$/g, '') || '';
       await navigator.clipboard.writeText(cleanText);
-      toast.success(
-        `${
-          type === "title" ? "Meta title" : "Meta description"
-        } copied to clipboard`
-      );
+      const typeLabel = 
+        type === "title" ? "Meta title" :
+        type === "description" ? "Meta description" :
+        type === "h1" ? "H1" :
+        "Text";
+      toast.success(`${typeLabel} copied to clipboard`);
     } catch {
       toast.error("Failed to copy text");
     }
@@ -236,6 +250,40 @@ const SeoRecommendationPanel = ({
     fetchExisting();
   }, [user, pageUrl]);
 
+  // Fetch H1 from pageContentCache for AI-generated keywords
+  useEffect(() => {
+    const fetchH1 = async () => {
+      if (keywordSource !== "ai-generated" || !user?.id || !pageUrl) {
+        return;
+      }
+
+      setLoadingH1(true);
+      try {
+        const response = await fetch("/api/page-content/get-h1", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            pageUrl,
+          }),
+        });
+
+        if (response.ok) {
+          const data = await response.json();
+          setCurrentH1(data.h1 || null);
+        }
+      } catch (error) {
+        console.error("Error fetching H1:", error);
+      } finally {
+        setLoadingH1(false);
+      }
+    };
+
+    if (isOpen && keywordSource === "ai-generated") {
+      fetchH1();
+    }
+  }, [isOpen, keywordSource, user?.id, pageUrl]);
+
   return (
     <>
       <Collapsible
@@ -265,50 +313,136 @@ const SeoRecommendationPanel = ({
         </CollapsibleTrigger>
 
         <CollapsibleContent className="space-y-4 rounded-lg border bg-card p-4 shadow-sm">
-          <h3 className="text-lg font-semibold">Fix this SEO issue</h3>
+          <div className="flex items-center justify-between">
+            <h3 className="text-lg font-semibold">Fix this SEO issue</h3>
+            {keywordSource === "ai-generated" && (
+              <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
+                AI Suggested Keyword
+              </span>
+            )}
+          </div>
+
+          {keywordSource === "ai-generated" && focusKeyword && (
+            <div className="rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3 mb-4">
+              <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
+                Keyword: <span className="font-semibold">{focusKeyword}</span>
+              </p>
+              <p className="text-xs text-blue-700 dark:text-blue-300">
+                Status: Not ranking yet (AI suggested)
+              </p>
+            </div>
+          )}
 
           <div className="space-y-4">
             <div>
-              <Label className="mb-2">Suggested Meta Title</Label>
-              <div className="flex items-center justify-between">
-                <Textarea
-                  value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
-                  readOnly
-                  className="resize-none"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+              <Label className="mb-2 flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                {keywordSource === "ai-generated" ? "Step 1: Optimize Meta Tags" : "Optimize Meta Tags"}
+              </Label>
+              <div className="space-y-3">
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Suggested Meta Title</Label>
+                  <div className="flex items-center justify-between">
+                    <Textarea
+                      value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
+                      readOnly
+                      className="resize-none"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
+                <div>
+                  <Label className="text-xs text-muted-foreground mb-1 block">Suggested Meta Description</Label>
+                  <div className="flex items-center justify-between">
+                    <Textarea
+                      value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
+                      readOnly
+                      className="resize-none"
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      onClick={() =>
+                        copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
+                      }
+                    >
+                      <Copy className="h-4 w-4" />
+                    </Button>
+                  </div>
+                </div>
               </div>
-              <p className="text-sm text-muted-foreground">{metaTitleTip}</p>
             </div>
 
-            <div>
-              <Label className="mb-2">Suggested Meta Description</Label>
-              <div className="flex items-center justify-between">
-                <Textarea
-                  value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
-                  readOnly
-                  className="resize-none"
-                />
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={() =>
-                    copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
-                  }
-                >
-                  <Copy className="h-4 w-4" />
-                </Button>
+            {/* H1 Replacement Section for AI-generated keywords */}
+            {keywordSource === "ai-generated" && focusKeyword && (
+              <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                <Label className="mb-3 block font-semibold flex items-center gap-2">
+                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                  Step 2: Update Page Content
+                </Label>
+                {loadingH1 ? (
+                  <p className="text-sm text-muted-foreground">Loading current H1...</p>
+                ) : currentH1 ? (
+                  <div className="space-y-3">
+                    <div className="rounded-md border bg-background p-3 space-y-2">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground font-medium">Current H1: <span className="text-muted-foreground/70 font-normal">(H1 is the header/title in your page)</span></span>
+                        <div className="mt-1 p-2 bg-muted/50 rounded border border-muted">
+                          <span className="font-medium text-foreground">{currentH1}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center justify-center text-muted-foreground">
+                        ↓
+                      </div>
+                      <div className="text-sm">
+                        <span className="text-muted-foreground font-medium">Replace with:</span>
+                        <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
+                          <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
+                      className="w-full"
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy H1 Replacement
+                    </Button>
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <div className="rounded-md border bg-background p-3">
+                      <div className="text-sm">
+                        <span className="text-muted-foreground font-medium">Suggested H1:</span>
+                        <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
+                          <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
+                        </div>
+                      </div>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
+                      className="w-full"
+                    >
+                      <Copy className="h-4 w-4 mr-2" />
+                      Copy H1 Replacement
+                    </Button>
+                  </div>
+                )}
+                <p className="text-xs text-muted-foreground mt-3">
+                  💡 <strong>Why:</strong> This keyword isn&apos;t ranking yet. Adding it to your H1 helps Google understand what this page is about.
+                </p>
               </div>
-              <p className="text-sm text-muted-foreground">
-                {metaDescriptionTip}
-              </p>
-            </div>
+            )}
 
             <div className="flex items-center space-x-2">
               {!isImplemented ? (

@@ -373,6 +373,9 @@ const OnboardingWizard = () => {
                 </div>
                 <div className="space-y-2">
                   <Label htmlFor="businessLocation">Business Location <span className="text-red-500">*</span></Label>
+                  <p className="text-sm text-muted-foreground mt-2">
+                  Enter the city and state your business serves. <br></br> This will help optimize your local SEO keywords
+                </p>
                   <Input
                     id="businessLocation"
                     placeholder="e.g. Seattle, WA"
@@ -383,9 +386,6 @@ const OnboardingWizard = () => {
                     required
                   />
                 </div>
-                <p className="text-sm text-muted-foreground mt-2">
-                  This helps us optimize your local SEO strategy
-                </p>
                 <p className="text-sm text-muted-foreground mt-4">
                   <span className="text-red-500">*</span> All fields are required to continue
                 </p>

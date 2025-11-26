@@ -471,6 +471,23 @@ ${headingsFormatted || "      • (none)"}`;
   - Top Keywords: ${JSON.stringify(context.gscKeywords.slice(0, 10))}
   - Business Info: ${JSON.stringify(context.onboarding)}
   
+  **🎯 Focus Keywords (User-Selected Keywords for Optimization):**
+  ${context.focusKeywords && context.focusKeywords.length > 0
+    ? context.focusKeywords.map((fk, idx) => {
+        const keyword = typeof fk === 'string' ? fk : fk.keyword;
+        const pageUrl = typeof fk === 'object' ? fk.pageUrl : null;
+        const source = typeof fk === 'object' ? (fk.source === 'ai-generated' ? 'AI-generated' : 'GSC-existing') : 'GSC-existing';
+        return `${idx + 1}. "${keyword}"${pageUrl ? ` → ${pageUrl}` : ''} (${source})`;
+      }).join('\n  ')
+    : '  No focus keywords selected yet. Users can select focus keywords in the Focus Keywords card on the dashboard to prioritize optimization efforts.'}
+  
+  **When users ask about focus keywords:**
+  - Reference the specific keywords they've selected and which pages they're assigned to
+  - Provide recommendations for optimizing pages based on their selected focus keywords
+  - Help them understand if their focus keyword choices are good or if they should consider alternatives
+  - Explain the difference between AI-generated and GSC-existing keywords
+  - Suggest improvements if a page doesn't have a focus keyword yet
+  
   **Page-Specific Focus:**
   ${context.currentPage === '/low-ctr' ? 'Focus on improving click-through rates and meta descriptions.' : ''}
   ${context.currentPage === '/easy-wins' ? 'Focus on keywords close to page 1 and ranking improvements.' : ''}

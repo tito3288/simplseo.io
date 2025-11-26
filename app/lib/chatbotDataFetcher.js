@@ -1,5 +1,6 @@
 // app/lib/chatbotDataFetcher.js
 import { createGSCTokenManager } from "./gscTokenManager";
+import { db } from "../lib/firebaseAdmin";
 
 export const fetchChatbotData = async (userId) => {
   try {
@@ -37,9 +38,42 @@ export const fetchChatbotData = async (userId) => {
     // Fetch all data from GSC
     const allData = await fetchAllGSCData(gscData.siteUrl, validToken);
     
+    // Fetch focus keywords from Firestore (server-side)
+    let focusKeywords = [];
+    try {
+      const focusKeywordsDoc = await db.collection("focusKeywords").doc(userId).get();
+      if (focusKeywordsDoc.exists) {
+        const data = focusKeywordsDoc.data();
+        if (Array.isArray(data.keywords)) {
+          focusKeywords = data.keywords
+            .map((entry) => {
+              if (!entry) return null;
+              if (typeof entry === "string") {
+                return { keyword: entry.trim(), pageUrl: null, source: "gsc-existing" };
+              }
+              const keyword = typeof entry.keyword === "string" ? entry.keyword.trim() : null;
+              if (!keyword) return null;
+              const pageUrl = typeof entry.pageUrl === "string" && entry.pageUrl.trim().length
+                ? entry.pageUrl.trim()
+                : null;
+              const source = entry.source === "ai-generated" ? "ai-generated" : "gsc-existing";
+              return { keyword, pageUrl, source };
+            })
+            .filter(Boolean);
+          console.log("✅ Focus keywords loaded:", focusKeywords.length);
+        }
+      }
+    } catch (error) {
+      console.error("❌ Error fetching focus keywords:", error);
+      // Continue without focus keywords if fetch fails
+    }
+    
     return {
       success: true,
-      data: allData
+      data: {
+        ...allData,
+        focusKeywords
+      }
     };
     
   } catch (error) {

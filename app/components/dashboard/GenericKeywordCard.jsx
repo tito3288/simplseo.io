@@ -205,11 +205,11 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
   }
 
   return (
-    <Card className="border-red-200 dark:border-red-800">
+    <Card className="border-red-200 dark:border-purple-500">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
-          <Target className="w-5 h-5" />
-          Generic Keyword Opportunities
+          <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />
+          AI Generic Keyword Opportunities
           <Badge className="bg-red-100 text-red-700">High Priority</Badge>
         </CardTitle>
         <CardDescription>
@@ -244,7 +244,7 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
               </div>
               
               {opportunity.contentIdea && (
-                <p className="text-xs text-red-600 dark:text-red-400 mt-1 font-medium">
+                <p className="text-xs text-purple-700 dark:text-purple-400 mt-1 font-medium">
                   💡 {opportunity.contentIdea}
                 </p>
               )}

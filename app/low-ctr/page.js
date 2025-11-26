@@ -37,6 +37,20 @@ import { getFocusKeywords } from "../lib/firestoreHelpers";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
+// Normalize URL for comparison (remove trailing slashes, ensure consistent format)
+const normalizeUrlForComparison = (url) => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    // Remove trailing slash except for root
+    const normalized = u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+    return normalized.toLowerCase();
+  } catch {
+    // Fallback: just remove trailing slash and lowercase
+    return url.trim().replace(/\/$/, '').toLowerCase();
+  }
+};
+
 // Helper function to create safe document IDs
 const createSafeDocId = (userId, pageUrl) => {
   // Create a more unique hash to avoid collisions
@@ -102,6 +116,7 @@ export default function LowCtrPage() {
   const [focusKeywordAssignments, setFocusKeywordAssignments] = useState(
     new Map()
   );
+  const [focusKeywordSourceByPage, setFocusKeywordSourceByPage] = useState(new Map()); // Track source: "ai-generated" or "gsc-existing"
   const [isGscConnected, setIsGscConnected] = useState(false);
   const [focusKeywordsLoaded, setFocusKeywordsLoaded] = useState(false);
   const [gscKeywordRows, setGscKeywordRows] = useState([]);
@@ -284,16 +299,22 @@ export default function LowCtrPage() {
         if (Array.isArray(keywords) && keywords.length > 0) {
           const keywordList = [];
           const assignments = new Map();
-          keywords.forEach(({ keyword, pageUrl }) => {
+          const sources = new Map();
+          keywords.forEach(({ keyword, pageUrl, source }) => {
             if (!keyword) return;
             keywordList.push(keyword);
             assignments.set(keyword.toLowerCase(), pageUrl || null);
+            if (pageUrl) {
+              sources.set(pageUrl, source || "gsc-existing");
+            }
           });
           setFocusKeywords(keywordList);
           setFocusKeywordAssignments(assignments);
+          setFocusKeywordSourceByPage(sources);
         } else {
           setFocusKeywords([]);
           setFocusKeywordAssignments(new Map());
+          setFocusKeywordSourceByPage(new Map());
         }
       } catch (error) {
         console.error("Failed to load focus keywords:", error);
@@ -364,7 +385,14 @@ export default function LowCtrPage() {
     });
 
     return orderedFocusKeywords
-      .filter((keyword) => !shown.has(keyword.toLowerCase()))
+      .filter((keyword) => {
+        const lower = keyword.toLowerCase();
+        // Include if:
+        // 1. Not shown in low-CTR pages (doesn't appear in GSC data for low-CTR pages)
+        // 2. Has a page assignment (assigned to a specific page URL)
+        const assignedPage = focusKeywordAssignments.get(lower);
+        return !shown.has(lower) && assignedPage;
+      })
       .map((keyword) => {
         const lower = keyword.toLowerCase();
         const data = focusKeywordTopRows.get(lower) || null;
@@ -387,6 +415,40 @@ export default function LowCtrPage() {
 
     return lowCtrPages
       .map((page) => {
+        // First, check if there's an assigned focus keyword for this page URL
+        const normalizedPageUrl = normalizeUrlForComparison(page.page);
+        let assignedKeyword = null;
+        
+        for (const [keywordLower, assignedPageUrl] of focusKeywordAssignments.entries()) {
+          if (assignedPageUrl) {
+            const normalizedAssignedUrl = normalizeUrlForComparison(assignedPageUrl);
+            if (normalizedAssignedUrl === normalizedPageUrl) {
+              const originalKeyword = focusKeywords.find(k => k.toLowerCase() === keywordLower);
+              if (originalKeyword) {
+                assignedKeyword = originalKeyword;
+                break;
+              }
+            }
+          }
+        }
+        
+        // If we have an assigned keyword, use it (even if it doesn't appear in GSC data)
+        if (assignedKeyword) {
+          const matchingKeywords = [assignedKeyword];
+          const additionalKeywords = (page.keywords || []).filter((keyword) => {
+            if (!keyword) return false;
+            return keyword.toLowerCase() !== assignedKeyword.toLowerCase();
+          });
+
+          return {
+            ...page,
+            focusKeyword: assignedKeyword,
+            matchingKeywords,
+            additionalKeywords,
+          };
+        }
+        
+        // Fallback: find keywords from GSC data that match focus keywords
         const matchingKeywords = (page.keywords || []).filter((keyword) =>
           focusKeywordSet.has(keyword.toLowerCase())
         );
@@ -408,7 +470,7 @@ export default function LowCtrPage() {
         };
       })
       .filter(Boolean);
-  }, [lowCtrPages, focusKeywordSet]);
+  }, [lowCtrPages, focusKeywordSet, focusKeywordAssignments, focusKeywords]);
 
   const buildSuggestionKey = (pageUrl, focusKeyword) =>
     `${pageUrl}::${focusKeyword ? focusKeyword.toLowerCase() : "__none__"}`;
@@ -729,6 +791,7 @@ export default function LowCtrPage() {
 
   const suggestionsToRender = suggestionTargets.map((target) => {
     const suggestion = aiMetaByPage[target.key];
+    const source = focusKeywordSourceByPage.get(target.pageUrl) || "gsc-existing";
     return {
       pageUrl: target.pageUrl,
       focusKeyword: target.focusKeyword,
@@ -736,6 +799,7 @@ export default function LowCtrPage() {
       description:
         suggestion?.description ||
         "Your AI-powered meta description will appear here shortly.",
+      source, // "ai-generated" or "gsc-existing"
     };
   });
 
@@ -919,7 +983,7 @@ export default function LowCtrPage() {
                         </p>
                       )}
                       <p className="mt-3 text-xs text-muted-foreground">
-                        Try updating the page&apos;s title, meta description, and on-page content to target this keyword more directly.
+                        Try updating the page&apos;s title, meta description, and on-page content using the <span className="font-bold">AI-Powered SEO Suggestions</span> section to target this keyword more directly.
                       </p>
                     </li>
                   ))}
@@ -963,10 +1027,35 @@ export default function LowCtrPage() {
             ) : (
               <ul className="space-y-2">
                 {lowCtrPages.map((page, idx) => {
-                  const focusMatch = page.keywords?.find((keyword) =>
-                    focusKeywordSet.has(keyword.toLowerCase())
-                  );
-                  const primaryKeyword = focusMatch || page.keywords?.[0] || null;
+                  // Find the focus keyword specifically assigned to THIS page URL
+                  // This should ALWAYS take priority, regardless of source (AI-generated or GSC-existing)
+                  let assignedFocusKeyword = null;
+                  const normalizedPageUrl = normalizeUrlForComparison(page.page);
+                  
+                  for (const [keywordLower, assignedPageUrl] of focusKeywordAssignments.entries()) {
+                    if (assignedPageUrl) {
+                      const normalizedAssignedUrl = normalizeUrlForComparison(assignedPageUrl);
+                      if (normalizedAssignedUrl === normalizedPageUrl) {
+                        // Find the original keyword (case-sensitive) from focusKeywords
+                        const originalKeyword = focusKeywords.find(k => k.toLowerCase() === keywordLower);
+                        if (originalKeyword) {
+                          assignedFocusKeyword = originalKeyword;
+                          break;
+                        }
+                      }
+                    }
+                  }
+                  
+                  // Only use GSC match as fallback if NO assigned keyword was found
+                  // This ensures user-selected keywords (including AI-generated) always take priority
+                  const focusMatch = !assignedFocusKeyword 
+                    ? page.keywords?.find((keyword) =>
+                        focusKeywordSet.has(keyword.toLowerCase())
+                      )
+                    : null;
+                  
+                  const primaryKeyword = assignedFocusKeyword || focusMatch || page.keywords?.[0] || null;
+                  
                   return (
                     <li key={idx} className="flex flex-col gap-1">
                       <div className="flex items-center gap-2">
@@ -979,7 +1068,7 @@ export default function LowCtrPage() {
                         >
                           {page.page}
                         </a>
-                        {focusMatch && (
+                        {(assignedFocusKeyword || focusMatch) && (
                           <Badge variant="outline" className="text-[10px] uppercase tracking-wide">
                             Focus keyword
                           </Badge>
@@ -1027,6 +1116,8 @@ export default function LowCtrPage() {
                   pageUrl={meta.pageUrl}
                   suggestedTitle={meta.title}
                   suggestedDescription={meta.description}
+                  keywordSource={meta.source}
+                  focusKeyword={meta.focusKeyword}
                 />
               );
             })
