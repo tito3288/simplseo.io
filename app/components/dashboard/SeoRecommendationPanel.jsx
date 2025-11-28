@@ -150,12 +150,18 @@ const SeoRecommendationPanel = ({
       const titleRes = await fetch("/api/seo-assistant/meta-title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageUrl }),
+        body: JSON.stringify({ 
+          pageUrl,
+          userId: user?.id, // ✅ Add userId so API can fetch onboarding data
+        }),
       });
       const descRes = await fetch("/api/seo-assistant/meta-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pageUrl }),
+        body: JSON.stringify({ 
+          pageUrl,
+          userId: user?.id, // ✅ Add userId so API can fetch onboarding data
+        }),
       });
 
       await deleteDoc(doc(db, "seoMetaTitles", encodeURIComponent(pageUrl)));

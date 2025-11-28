@@ -120,10 +120,10 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
 
   if (loading) {
     return (
-      <Card className="border-red-200 dark:border-red-800">
+      <Card className="border-purple-400 dark:border-red-800">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
-            <Target className="w-5 h-5" />
+          <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />
             Generic Keyword Opportunities
             <Badge className="bg-red-100 text-red-700">High Priority</Badge>
           </CardTitle>
@@ -147,7 +147,7 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
             <Target className="w-5 h-5" />
-            Generic Keyword Opportunities
+            AI Generic Keyword Opportunities
             <Badge className="bg-red-100 text-red-700">High Priority</Badge>
           </CardTitle>
           <CardDescription>
@@ -176,7 +176,7 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
 
   if (opportunities.length === 0) {
     return (
-      <Card className="border-red-200 dark:border-purple-500">
+      <Card className="border-purple-400 dark:border-purple-500">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-lg">
           <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />
@@ -205,7 +205,7 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
   }
 
   return (
-    <Card className="border-red-200 dark:border-purple-500">
+    <Card className="border-purple-400 dark:border-purple-500">
       <CardHeader>
         <CardTitle className="flex items-center gap-2 text-lg">
           <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />

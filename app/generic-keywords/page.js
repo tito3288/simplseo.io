@@ -636,7 +636,7 @@ export default function GenericKeywordsPage() {
       </div>
 
       {/* Dummy Success Story Card - For Preview Only */}
-      <Card className="mb-6 border-green-200 bg-green-50 dark:border-green-900/20 dark:bg-green-900/10">
+      {/* <Card className="mb-6 border-green-200 bg-green-50 dark:border-green-900/20 dark:bg-green-900/10">
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
             <CheckCircle className="w-5 h-5" />
@@ -648,7 +648,7 @@ export default function GenericKeywordsPage() {
         </CardHeader>
         <CardContent>
           <div className="space-y-4">
-            {/* Dummy Success Story */}
+            
             <div className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-green-200 dark:border-green-800">
               <div className="flex items-start justify-between">
                 <div className="flex-1">
@@ -691,7 +691,7 @@ export default function GenericKeywordsPage() {
             </div>
           </div>
         </CardContent>
-      </Card>
+      </Card> */}
 
       {/* Success Stories Section */}
       {successStories.length > 0 && (

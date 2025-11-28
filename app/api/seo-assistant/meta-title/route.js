@@ -116,11 +116,14 @@ Suggest a **short, clear, keyword-optimized meta title** for the following page:
 
 ---
 Page URL: ${pageUrl}
+Business Name: ${onboarding?.businessName || "N/A"}
 Business Location: ${onboarding?.businessLocation || "N/A"}
 Business Type: ${onboarding?.businessType || "N/A"}
 Focus Keywords: ${focusKeywordsString || "N/A"}
 Context (Impressions, CTR, etc): ${JSON.stringify(context)}
----`;
+---
+
+**IMPORTANT:** If a Business Name is provided above, you MUST use the EXACT business name as written. Do not modify, abbreviate, or guess the business name. Use it exactly as provided.`;
 
   // Include playbook examples if available
   if (playbookStrategies.length > 0) {
@@ -149,6 +152,7 @@ Context (Impressions, CTR, etc): ${JSON.stringify(context)}
 - Focus on clarity and primary keywords.
 - Use separators like "|" or "-" if needed, but keep them short.
 - Avoid repeating words or making the title feel too long.
+- **CRITICAL:** If a Business Name is provided, use it EXACTLY as written - do not modify, abbreviate, or guess variations.
 - **Only** output the meta title — no quotes, no extra text.
 `;
 

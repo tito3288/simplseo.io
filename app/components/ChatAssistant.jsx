@@ -54,7 +54,7 @@ const ChatAssistant = ({
       },
       '/generic-keywords': {
         title: 'Generic Keywords Analysis',
-        message: "I see you're on the Generic Keywords page! This analyzes broad, non-branded keywords that could bring in new traffic. Need help understanding what you're seeing?",
+        message: "I see you're on the AI Generic Keywords page! This analyzes broad, non-branded keywords that could bring in new traffic. Need help understanding what you're seeing?",
         help: "I can explain the keyword analysis, help you understand the opportunities, or guide you on how to optimize for these generic terms."
       },
       '/generic-keywords-ranking': {
@@ -676,7 +676,7 @@ const ChatAssistant = ({
                   <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse delay-75"></div>
                   <div className="w-1.5 h-1.5 rounded-full bg-[#00bf63] animate-pulse delay-150"></div>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">Loading conversation...</p>
+                {/* <p className="text-xs text-muted-foreground mt-1">Loading conversation...</p> */}
               </div>
             </div>
           ) : (

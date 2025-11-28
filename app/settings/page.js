@@ -1890,27 +1890,6 @@ export default function Settings() {
                       </div>
                     </div>
                   </div>
-
-                  {/* Save Button */}
-                  <div className="flex justify-end pt-4">
-                    <Button 
-                      onClick={handleSave} 
-                      disabled={isSaving}
-                      className="gap-2 bg-green-600 hover:bg-green-700"
-                    >
-                      {isSaving ? (
-                        <>
-                          <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
-                          Saving...
-                        </>
-                      ) : (
-                        <>
-                          <Save className="w-4 h-4" />
-                          Save Changes
-                        </>
-                      )}
-                    </Button>
-                  </div>
                 </CardContent>
               </Card>
             )}

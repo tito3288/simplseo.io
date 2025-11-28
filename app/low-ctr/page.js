@@ -544,6 +544,7 @@ export default function LowCtrPage() {
     try {
       const payload = {
         pageUrl,
+        userId: user?.id, // ✅ Add userId so API can fetch onboarding data
         context: {
           source: "low-ctr-suggestions",
           ...(focusKeywordArg ? { focusKeyword: focusKeywordArg } : {}),
@@ -850,15 +851,6 @@ export default function LowCtrPage() {
             disabled={!focusKeywordSet.size}
           >
             Focus keywords view
-          </Button>
-          <Button
-            variant={viewMode === "raw" ? "default" : "outline"}
-            onClick={() => {
-              setUserHasToggledView(true);
-              setViewMode("raw");
-            }}
-          >
-            Raw data view
           </Button>
         </div>
         {!focusKeywordSet.size && focusKeywordsLoaded && (

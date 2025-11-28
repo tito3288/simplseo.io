@@ -117,6 +117,7 @@ export default function EasyWinsPage() {
                 headers: { "Content-Type": "application/json" },
                 body: JSON.stringify({
                   pageUrl: kw.page,
+                  userId: user?.id, // ✅ Add userId so API can fetch onboarding data
                   keyword: kw.keyword,
                   context: {
                     type: "easy-win",

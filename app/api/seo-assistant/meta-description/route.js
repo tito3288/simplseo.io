@@ -71,10 +71,13 @@ export async function POST(req) {
 You are an SEO expert. Suggest a compelling meta description for the following page.
 
 Page: ${pageUrl}
-Business Location: ${onboarding.businessLocation || "N/A"}
-Business Type: ${onboarding.businessType || "N/A"}
+Business Name: ${onboarding?.businessName || "N/A"}
+Business Location: ${onboarding?.businessLocation || "N/A"}
+Business Type: ${onboarding?.businessType || "N/A"}
 Focus Keywords: ${focusKeywordsString || "N/A"}
-Context: ${JSON.stringify(context)}`;
+Context: ${JSON.stringify(context)}
+
+**IMPORTANT:** If a Business Name is provided above, you MUST use the EXACT business name as written. Do not modify, abbreviate, or guess the business name. Use it exactly as provided.`;
 
   // Include playbook examples if available
   if (playbookStrategies.length > 0) {
@@ -101,6 +104,7 @@ Context: ${JSON.stringify(context)}`;
 - Highlight the page's purpose or benefit.
 - Include a strong call-to-action if possible.
 - Naturally incorporate the provided focus keywords when available.
+- **CRITICAL:** If a Business Name is provided, use it EXACTLY as written - do not modify, abbreviate, or guess variations.
 Only return the meta description — no quotes or explanations.
 `;
 
