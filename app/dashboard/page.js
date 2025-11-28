@@ -61,6 +61,7 @@ import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
+import { initializeFeedbackTracking } from "../lib/feedbackPromptTracker";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -249,6 +250,14 @@ export default function Dashboard() {
     [user?.id, isLoadingCrawlReview, hasLoadedCrawlReview]
   );
   const hasFocusKeywords = focusKeywords.length > 0;
+  
+  // Initialize feedback tracking on first dashboard visit
+  useEffect(() => {
+    if (user?.id) {
+      initializeFeedbackTracking(user.id);
+    }
+  }, [user?.id]);
+  
   useEffect(() => {
     if (
       data?.siteCrawlStatus === "completed" ||

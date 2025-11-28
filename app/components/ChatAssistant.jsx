@@ -8,6 +8,12 @@ import { useAuth } from "../contexts/AuthContext";
 import { getFocusKeywords } from "../lib/firestoreHelpers";
 import ReactMarkdown from "react-markdown";
 import TypingText from "./TypingText";
+import { useRouter } from "next/navigation";
+import { 
+  shouldShowFeedbackPrompt, 
+  updatePromptDismissed,
+  markFeedbackButtonClicked 
+} from "../lib/feedbackPromptTracker";
 
 const ChatAssistant = ({
   onClose,
@@ -20,6 +26,7 @@ const ChatAssistant = ({
 }) => {
   const { data } = useOnboarding();
   const { user } = useAuth();
+  const router = useRouter();
   const firstName = data?.name ? data.name.split(" ")[0] : "";
   // Get current page context for personalized welcome message
   const getPageContext = () => {
@@ -97,6 +104,7 @@ const ChatAssistant = ({
   const [completedTypingMessages, setCompletedTypingMessages] = useState(new Set());
   const isSavingRef = useRef(false); // Prevent duplicate saves
   const [focusKeywords, setFocusKeywords] = useState([]);
+  const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
 
   // Conversation management functions
   const loadConversations = async () => {
@@ -276,6 +284,43 @@ const ChatAssistant = ({
     };
     loadFocusKeywords();
   }, [user?.id]);
+
+  // Check if feedback prompt should be shown
+  useEffect(() => {
+    const checkFeedbackPrompt = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const shouldShow = await shouldShowFeedbackPrompt(user.id);
+        if (shouldShow) {
+          setShowFeedbackPrompt(true);
+        }
+      } catch (error) {
+        console.error("Error checking feedback prompt:", error);
+      }
+    };
+    
+    // Check after chat is initialized
+    if (isInitialized) {
+      checkFeedbackPrompt();
+    }
+  }, [user?.id, isInitialized]);
+
+  const handleLeaveFeedback = async () => {
+    if (user?.id) {
+      await markFeedbackButtonClicked(user.id);
+    }
+    setShowFeedbackPrompt(false);
+    router.push("/contact");
+    onClose(); // Close chat when redirecting
+  };
+
+  const handleDismissFeedback = async () => {
+    if (user?.id) {
+      await updatePromptDismissed(user.id);
+    }
+    setShowFeedbackPrompt(false);
+  };
 
   // Check for stored chat context when component mounts
   useEffect(() => {
@@ -681,6 +726,38 @@ const ChatAssistant = ({
             </div>
           ) : (
             <>
+              {/* Feedback Prompt */}
+              {showFeedbackPrompt && (
+                <div className="bg-gradient-to-r from-green-500/20 to-blue-500/20 border-2 border-green-500/50 rounded-lg p-4 mb-3">
+                  <div className="flex items-start gap-3">
+                    <div className="text-2xl flex-shrink-0">💬</div>
+                    <div className="flex-1">
+                      <h3 className="font-semibold mb-2 text-foreground">We'd love your feedback!</h3>
+                      <p className="text-sm text-muted-foreground mb-3">
+                        You've been using SimplSEO for a while. How's it going? 
+                        Your feedback helps us improve!
+                      </p>
+                      <div className="flex gap-2">
+                        <Button
+                          onClick={handleLeaveFeedback}
+                          className="bg-green-600 hover:bg-green-700 text-white"
+                          size="sm"
+                        >
+                          Leave Feedback
+                        </Button>
+                        <Button
+                          onClick={handleDismissFeedback}
+                          variant="outline"
+                          size="sm"
+                        >
+                          Maybe Later
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+              
               {messages.map((message) => (
                 <div
                   key={message.id}

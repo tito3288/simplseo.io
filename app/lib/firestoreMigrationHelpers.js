@@ -71,13 +71,60 @@ export async function getCachedPageContent(userId, pageUrl) {
 }
 
 /**
+ * Filter out navigation elements from headings array
+ * Removes common navigation patterns like "Register", "Log in", etc.
+ */
+function filterNavigationHeadings(headings) {
+  if (!headings || !Array.isArray(headings)) {
+    return headings;
+  }
+
+  // Common navigation patterns to skip
+  const navPatterns = [
+    'register', 'log in', 'login', 'sign in', 'sign up', 'signup',
+    'home', 'menu', 'navigation', 'nav', 'skip to', 'skip',
+    'search', 'cart', 'account', 'profile', 'settings', 'logout',
+    'registration', 'sign out', 'signout'
+  ];
+
+  return headings.filter(heading => {
+    if (!heading) return false;
+    
+    // Extract text from different formats
+    let text = '';
+    if (typeof heading === 'string') {
+      text = heading.trim();
+    } else if (heading && typeof heading === 'object') {
+      text = (heading.text || heading.content || String(heading)).trim();
+    }
+    
+    if (!text) return false;
+    
+    // Skip very short headings (likely navigation)
+    if (text.length < 10) return false;
+    
+    // Skip navigation patterns
+    const lowerText = text.toLowerCase();
+    const isNav = navPatterns.some(pattern => lowerText.includes(pattern));
+    
+    return !isNav;
+  });
+}
+
+/**
  * Cache page content (writes to BOTH old and new structures for backward compatibility)
  * Works with both client SDK (browser) and admin SDK (server)
  */
 export async function cachePageContent(userId, pageUrl, contentData) {
   try {
-    const cacheData = {
+    // Filter out navigation elements from headings before caching
+    const filteredContentData = {
       ...contentData,
+      headings: filterNavigationHeadings(contentData.headings),
+    };
+    
+    const cacheData = {
+      ...filteredContentData,
       userId,
       pageUrl,
       cachedAt: new Date().toISOString(),

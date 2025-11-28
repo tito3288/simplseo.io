@@ -192,8 +192,16 @@ const FocusKeywordSelector = ({
         }
       } else {
         const errorData = await response.json().catch(() => ({}));
-        console.error("Failed to generate suggestions:", errorData.error);
-        alert("Failed to generate keyword suggestions. Please try again.");
+        const errorMessage = errorData.error || "Failed to generate keyword suggestions. Please try again.";
+        
+        console.error("Failed to generate suggestions:", errorMessage);
+        
+        // Show more helpful error message
+        if (errorMessage.includes("No page content") || errorMessage.includes("crawl")) {
+          alert("No page content available. Please crawl this page first from the 'Scan Complete Pages' section to generate keyword suggestions.");
+        } else {
+          alert(errorMessage);
+        }
       }
     } catch (error) {
       console.error("Error generating AI keywords:", error);

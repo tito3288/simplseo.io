@@ -376,40 +376,6 @@ export default function LowCtrPage() {
     return map;
   }, [gscKeywordRows, focusKeywordSet]);
 
-  const focusKeywordsNotShown = useMemo(() => {
-    const shown = new Set();
-    lowCtrPages.forEach((page) => {
-      page.keywords?.forEach((keyword) => {
-        shown.add(keyword.toLowerCase());
-      });
-    });
-
-    return orderedFocusKeywords
-      .filter((keyword) => {
-        const lower = keyword.toLowerCase();
-        // Include if:
-        // 1. Not shown in low-CTR pages (doesn't appear in GSC data for low-CTR pages)
-        // 2. Has a page assignment (assigned to a specific page URL)
-        const assignedPage = focusKeywordAssignments.get(lower);
-        return !shown.has(lower) && assignedPage;
-      })
-      .map((keyword) => {
-        const lower = keyword.toLowerCase();
-        const data = focusKeywordTopRows.get(lower) || null;
-        const mappedPage = focusKeywordAssignments.get(lower) || null;
-        return {
-          keyword,
-          data,
-          page: mappedPage ?? data?.page ?? null,
-        };
-      });
-  }, [
-    orderedFocusKeywords,
-    lowCtrPages,
-    focusKeywordTopRows,
-    focusKeywordAssignments,
-  ]);
-
   const focusLowCtrPages = useMemo(() => {
     if (!focusKeywordSet.size) return [];
 
@@ -471,6 +437,43 @@ export default function LowCtrPage() {
       })
       .filter(Boolean);
   }, [lowCtrPages, focusKeywordSet, focusKeywordAssignments, focusKeywords]);
+
+  const focusKeywordsNotShown = useMemo(() => {
+    // Build a set of keywords that are actually assigned to low-CTR pages
+    const shownInLowCtr = new Set();
+    
+    // Only mark keywords that are actually focus keywords for low-CTR pages
+    focusLowCtrPages.forEach((page) => {
+      if (page.focusKeyword) {
+        shownInLowCtr.add(page.focusKeyword.toLowerCase());
+      }
+    });
+
+    return orderedFocusKeywords
+      .filter((keyword) => {
+        const lower = keyword.toLowerCase();
+        // Include if:
+        // 1. Not shown in focusLowCtrPages (not assigned to a low-CTR page)
+        // 2. Has a page assignment (assigned to a specific page URL)
+        const assignedPage = focusKeywordAssignments.get(lower);
+        return !shownInLowCtr.has(lower) && assignedPage;
+      })
+      .map((keyword) => {
+        const lower = keyword.toLowerCase();
+        const data = focusKeywordTopRows.get(lower) || null;
+        const mappedPage = focusKeywordAssignments.get(lower) || null;
+        return {
+          keyword,
+          data,
+          page: mappedPage ?? data?.page ?? null,
+        };
+      });
+  }, [
+    orderedFocusKeywords,
+    focusLowCtrPages,
+    focusKeywordTopRows,
+    focusKeywordAssignments,
+  ]);
 
   const buildSuggestionKey = (pageUrl, focusKeyword) =>
     `${pageUrl}::${focusKeyword ? focusKeyword.toLowerCase() : "__none__"}`;

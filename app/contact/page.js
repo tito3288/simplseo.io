@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/select";
 import { Mail, Send, MessageSquare, HelpCircle, Bug, Lightbulb, MapPin, Phone } from "lucide-react";
 import { toast } from "sonner";
+import { markFeedbackSubmitted } from "../lib/feedbackPromptTracker";
 
 export default function ContactPage() {
   const { user } = useAuth();
@@ -90,6 +91,11 @@ export default function ContactPage() {
 
       if (!response.ok) {
         throw new Error("Failed to send message");
+      }
+
+      // Mark feedback as submitted (stops future prompts)
+      if (user?.id) {
+        await markFeedbackSubmitted(user.id);
       }
 
       toast.success("Message sent successfully!", {

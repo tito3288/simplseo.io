@@ -265,6 +265,7 @@ const SeoRecommendationPanel = ({
 
       setLoadingH1(true);
       try {
+        console.log(`🔍 Fetching H1 for: ${pageUrl}`);
         const response = await fetch("/api/page-content/get-h1", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -276,10 +277,22 @@ const SeoRecommendationPanel = ({
 
         if (response.ok) {
           const data = await response.json();
-          setCurrentH1(data.h1 || null);
+          console.log(`✅ H1 API response:`, data);
+          if (data.h1) {
+            console.log(`✅ Setting current H1: ${data.h1}`);
+            setCurrentH1(data.h1);
+          } else {
+            console.log(`⚠️ No H1 in response`);
+            setCurrentH1(null);
+          }
+        } else {
+          const errorData = await response.json().catch(() => ({}));
+          console.error(`❌ H1 API error: ${response.status}`, errorData);
+          setCurrentH1(null);
         }
       } catch (error) {
         console.error("Error fetching H1:", error);
+        setCurrentH1(null);
       } finally {
         setLoadingH1(false);
       }

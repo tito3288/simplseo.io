@@ -9,6 +9,11 @@ service cloud.firestore {
     // Allow users to read/write their own user data (including GSC tokens)
     match /users/{userId} {
       allow read, write: if request.auth != null && request.auth.uid == userId;
+      
+      // Allow users to read/write their own feedback prompt data
+      match /feedbackPrompt/{docId} {
+        allow read, write: if request.auth != null && request.auth.uid == userId;
+      }
     }
     
     // Allow users to read/write their own GSC tokens
