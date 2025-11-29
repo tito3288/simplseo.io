@@ -119,7 +119,7 @@ export const getCachedSitePages = async (userId, maxPages = 5) => {
 };
 
 // Focus keyword helpers
-export const saveFocusKeywords = async (userId, keywords) => {
+export const saveFocusKeywords = async (userId, keywords, snapshot = null) => {
   try {
     const response = await fetch("/api/focus-keywords", {
       method: "POST",
@@ -129,6 +129,7 @@ export const saveFocusKeywords = async (userId, keywords) => {
       body: JSON.stringify({
         userId,
         keywords,
+        snapshot, // Include snapshot if provided
       }),
     });
 

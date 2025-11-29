@@ -72,6 +72,7 @@ export async function POST(req) {
       pagesToAdd = [],
       keywordsToRemove = [],
       keywordsToAdd = [],
+      snapshot = null, // Updated snapshot from Settings
     } = await req.json();
 
     if (!userId) {
@@ -176,7 +177,7 @@ export async function POST(req) {
 
       // If pages are being removed, delete them from pageContentCache
       if (pagesToRemove.length > 0) {
-        const { getCachedSitePages } = await import("../../../../lib/firestoreMigrationHelpers");
+        const { getCachedSitePages } = await import("../../../lib/firestoreMigrationHelpers");
         const cachedPages = await getCachedSitePages(userId, {
           source: "site-crawl",
           limit: 1000,
@@ -239,7 +240,7 @@ export async function POST(req) {
             if (scrapeRes.ok) {
               const scrapeJson = await scrapeRes.json();
               if (scrapeJson?.data) {
-                const { cachePageContent } = await import("../../../../lib/firestoreMigrationHelpers");
+                const { cachePageContent } = await import("../../../lib/firestoreMigrationHelpers");
                 await cachePageContent(userId, url, {
                   ...scrapeJson.data,
                   source: "site-crawl",
@@ -311,15 +312,22 @@ export async function POST(req) {
         }
       });
 
+      const updateData = {
+        userId,
+        keywords: Array.from(keywordMap.values()),
+        updatedAt: new Date().toISOString(),
+      };
+
+      // Update snapshot if provided (from Settings save)
+      if (snapshot && typeof snapshot === 'object') {
+        updateData.snapshot = {
+          ...snapshot,
+          savedAt: new Date().toISOString(),
+        };
+      }
+
       // Save updated keywords
-      await focusKeywordsRef.set(
-        {
-          userId,
-          keywords: Array.from(keywordMap.values()),
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      await focusKeywordsRef.set(updateData, { merge: true });
     }
 
     // Update edit history

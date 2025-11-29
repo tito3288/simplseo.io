@@ -46,6 +46,7 @@ export async function GET(request) {
     return NextResponse.json({
       keywords: sanitizedKeywords,
       updatedAt: data.updatedAt || null,
+      snapshot: data.snapshot || null, // Include snapshot if available
     });
   } catch (error) {
     console.error("Failed to load focus keywords:", error);
@@ -58,7 +59,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    const { userId, keywords = [] } = await request.json();
+    const { userId, keywords = [], snapshot = null } = await request.json();
 
     if (!userId) {
       return NextResponse.json(
@@ -109,17 +110,24 @@ export async function POST(request) {
     // No limit - users can select focus keywords for all their pages
     const cleanedKeywords = Array.from(cleanedKeywordsMap.values());
 
+    const updateData = {
+      userId,
+      keywords: cleanedKeywords,
+      updatedAt: new Date().toISOString(),
+    };
+
+    // Save snapshot if provided (contains full state of FocusKeywordSelector when submitted)
+    if (snapshot && typeof snapshot === 'object') {
+      updateData.snapshot = {
+        ...snapshot,
+        savedAt: new Date().toISOString(),
+      };
+    }
+
     await db
       .collection("focusKeywords")
       .doc(userId)
-      .set(
-        {
-          userId,
-          keywords: cleanedKeywords,
-          updatedAt: new Date().toISOString(),
-        },
-        { merge: true }
-      );
+      .set(updateData, { merge: true });
 
     return NextResponse.json({
       success: true,

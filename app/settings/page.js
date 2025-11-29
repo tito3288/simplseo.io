@@ -151,6 +151,33 @@ export default function Settings() {
 
   const normalizePageKey = (page) => page || "__unknown__";
 
+  // Normalize and validate manual URL (same as dashboard)
+  const normalizeManualUrl = (value) => {
+    if (!value || !data?.websiteUrl) return null;
+    try {
+      const raw = value.trim();
+      if (!raw) return null;
+      const base = data.websiteUrl.startsWith("http")
+        ? data.websiteUrl
+        : `https://${data.websiteUrl}`;
+      const baseUrl = new URL(base);
+      const baseHostname = baseUrl.hostname.replace(/^www\./, ""); // Normalize: remove www
+      const baseOrigin = baseUrl.origin;
+      
+      const normalized = new URL(raw, baseOrigin).toString();
+      const cleaned = normalized.split("#")[0].replace(/\/$/, "");
+      const cleanedUrl = new URL(cleaned);
+      const cleanedHostname = cleanedUrl.hostname.replace(/^www\./, ""); // Normalize: remove www
+      
+      // Compare hostnames (without www) instead of full origins
+      if (cleanedHostname !== baseHostname) return null;
+      
+      return cleaned;
+    } catch {
+      return null;
+    }
+  };
+
   useEffect(() => {
     if (typeof window !== "undefined" && !authLoading && !user) {
       router.push("/auth");
@@ -231,13 +258,17 @@ export default function Settings() {
       // Load focus keywords
       const keywordsRes = await fetch(`/api/focus-keywords?userId=${encodeURIComponent(user.id)}`);
       let loadedKeywords = [];
+      let snapshot = null;
+      
+      // Build focusKeywordByPage Map from Firestore
+      const assignments = new Map();
       if (keywordsRes.ok) {
         const keywordsData = await keywordsRes.json();
         loadedKeywords = keywordsData.keywords || [];
+        snapshot = keywordsData.snapshot || null;
         setFocusKeywords(loadedKeywords);
 
         // Build focusKeywordByPage Map
-        const assignments = new Map();
         loadedKeywords.forEach(({ keyword, pageUrl, source }) => {
           if (!keyword) return;
           const pageKey = normalizePageKey(pageUrl);
@@ -246,8 +277,49 @@ export default function Settings() {
         setFocusKeywordByPage(assignments);
       }
 
-      // Load GSC keywords (pass loadedKeywords so AI keywords can be added)
-      await loadGSCKeywords(loadedKeywords);
+      // If snapshot exists, use it instead of reconstructing from GSC
+      if (snapshot && snapshot.groupedByPage && snapshot.gscKeywordsRaw) {
+        // Restore from snapshot
+        const restoredGroupedByPage = new Map();
+        snapshot.groupedByPage.forEach(({ page, keywords }) => {
+          if (page) {
+            restoredGroupedByPage.set(normalizePageKey(page), keywords || []);
+          }
+        });
+        
+        // Also add AI-generated keywords from gscKeywordsRaw to groupedByPage
+        snapshot.gscKeywordsRaw.forEach((kw) => {
+          if (kw.source === "ai-generated" && kw.page && kw.keyword) {
+            const pageKey = normalizePageKey(kw.page);
+            if (!restoredGroupedByPage.has(pageKey)) {
+              restoredGroupedByPage.set(pageKey, []);
+            }
+            const keywordLower = kw.keyword.toLowerCase();
+            const pageKeywords = restoredGroupedByPage.get(pageKey) || [];
+            if (!pageKeywords.includes(keywordLower)) {
+              restoredGroupedByPage.set(pageKey, [...pageKeywords, keywordLower]);
+            }
+          }
+        });
+        
+        setGroupedByPage(restoredGroupedByPage);
+        setGscKeywordsRaw(snapshot.gscKeywordsRaw || []);
+        
+        // Restore selectedByPage from snapshot (merge with assignments from Firestore)
+        const restoredSelectedByPage = new Map(assignments); // Start with Firestore assignments
+        snapshot.selectedByPage?.forEach(({ page, keyword }) => {
+          if (page && keyword) {
+            restoredSelectedByPage.set(normalizePageKey(page), keyword);
+          }
+        });
+        setFocusKeywordByPage(restoredSelectedByPage);
+        
+        // Set GSC connected to true since we have snapshot data
+        setIsGscConnected(true);
+      } else {
+        // Load GSC keywords (pass loadedKeywords so AI keywords can be added)
+        await loadGSCKeywords(loadedKeywords);
+      }
     } catch (error) {
       console.error("Failed to load content and keywords:", error);
       toast.error("Failed to load content and keywords");
@@ -328,12 +400,30 @@ export default function Settings() {
           ctr: `${(row.ctr * 100).toFixed(1)}%`,
         }));
 
-        // Store raw GSC keywords (needed for FocusKeywordSelector)
-        setGscKeywordsRaw(formatted);
+        // Create a map of keyword+page -> source from Firestore
+        const keywordSourceMap = new Map();
+        currentFocusKeywords.forEach(({ keyword, pageUrl, source }) => {
+          if (!keyword || !pageUrl) return;
+          const key = `${keyword.toLowerCase()}|${normalizePageKey(pageUrl)}`;
+          keywordSourceMap.set(key, source);
+        });
+
+        // Merge source into GSC keywords to preserve source from Firestore
+        const formattedWithSource = formatted.map(kw => {
+          const key = `${kw.keyword.toLowerCase()}|${normalizePageKey(kw.page)}`;
+          const source = keywordSourceMap.get(key);
+          return {
+            ...kw,
+            source: source || "gsc-existing", // Default to gsc-existing if not in Firestore
+          };
+        });
+
+        // Store raw GSC keywords with source preserved (needed for FocusKeywordSelector)
+        setGscKeywordsRaw(formattedWithSource);
 
         // Group by keyword (get unique keywords with their best metrics) - for display summary
         const keywordMap = new Map();
-        formatted.forEach((kw) => {
+        formattedWithSource.forEach((kw) => {
           const key = kw.keyword.toLowerCase();
           if (!keywordMap.has(key)) {
             keywordMap.set(key, {
@@ -367,8 +457,25 @@ export default function Settings() {
 
         // Build groupedByPage Map for FocusKeywordSelector
         const grouped = new Map();
-        formatted.forEach((kw) => {
-          const pageKey = normalizePageKey(kw.page);
+        // Track normalized page URLs to prevent duplicates (handle trailing slash variations)
+        const normalizedPages = new Map(); // normalized -> original page URL
+        
+        // Helper to normalize for deduplication (remove trailing slash, lowercase)
+        const normalizeForDedup = (url) => {
+          if (!url || url === "__unknown__") return "__unknown__";
+          return url.trim().replace(/\/$/, '').toLowerCase();
+        };
+        
+        // First, add all pages from GSC keywords
+        formattedWithSource.forEach((kw) => {
+          const normalized = normalizeForDedup(kw.page);
+          const pageKey = normalizedPages.get(normalized) || normalizePageKey(kw.page);
+          
+          // Store the first occurrence of this normalized URL
+          if (!normalizedPages.has(normalized)) {
+            normalizedPages.set(normalized, normalizePageKey(kw.page));
+          }
+          
           if (!grouped.has(pageKey)) {
             grouped.set(pageKey, []);
           }
@@ -378,14 +485,26 @@ export default function Settings() {
           }
         });
         
-        // Add AI-generated keywords from currentFocusKeywords to groupedByPage
+        // IMPORTANT: Add ALL pages from currentFocusKeywords to ensure they appear
+        // even if they don't have keywords in current GSC data
         currentFocusKeywords.forEach(({ keyword, pageUrl, source }) => {
-          if (!keyword || source !== "ai-generated") return;
+          if (!keyword || !pageUrl) return;
           
-          const pageKey = normalizePageKey(pageUrl);
+          const normalized = normalizeForDedup(pageUrl);
+          // Use existing pageKey if this normalized URL was already seen
+          const pageKey = normalizedPages.get(normalized) || normalizePageKey(pageUrl);
+          
+          // Store the first occurrence
+          if (!normalizedPages.has(normalized)) {
+            normalizedPages.set(normalized, normalizePageKey(pageUrl));
+          }
+          
+          // Ensure the page exists in groupedByPage
           if (!grouped.has(pageKey)) {
             grouped.set(pageKey, []);
           }
+          
+          // Add the keyword to the page's keyword list if not already present
           const keywordLower = keyword.toLowerCase();
           if (!grouped.get(pageKey).includes(keywordLower)) {
             grouped.get(pageKey).push(keywordLower);
@@ -394,30 +513,31 @@ export default function Settings() {
         
         setGroupedByPage(grouped);
         
-        // Add AI-generated keywords to gscKeywordsRaw so they appear in the list
+        // Add selected keywords that don't appear in current GSC data to gscKeywordsRaw
         const existingKeywords = new Set(
-          formatted.map(kw => kw.keyword?.toLowerCase())
+          formattedWithSource.map(kw => kw.keyword?.toLowerCase())
         );
         
-        const aiKeywordsToAdd = currentFocusKeywords
-          .filter(({ keyword, source }) => {
-            if (!keyword || source !== "ai-generated") return false;
+        const keywordsToAdd = currentFocusKeywords
+          .filter(({ keyword }) => {
+            if (!keyword) return false;
+            // Add if keyword doesn't exist in current GSC data
             return !existingKeywords.has(keyword.toLowerCase());
           })
-          .map(({ keyword, pageUrl }) => ({
+          .map(({ keyword, pageUrl, source }) => ({
             keyword,
             page: pageUrl || null,
             clicks: 0,
             impressions: 0,
             position: 999, // High position since no GSC data
             ctr: "0%",
-            source: "ai-generated", // Mark as AI-generated
+            source: source || "gsc-existing", // Preserve source (ai-generated or gsc-existing)
           }));
         
-        if (aiKeywordsToAdd.length > 0) {
-          setGscKeywordsRaw([...formatted, ...aiKeywordsToAdd]);
+        if (keywordsToAdd.length > 0) {
+          setGscKeywordsRaw([...formattedWithSource, ...keywordsToAdd]);
         } else {
-          setGscKeywordsRaw(formatted);
+          setGscKeywordsRaw(formattedWithSource);
         }
       } else {
         setGscKeywords([]);
@@ -455,25 +575,75 @@ export default function Settings() {
     setPagesToRemove(pagesToRemove.filter(url => url !== pageUrl));
   };
 
-  const handleAddPage = () => {
+  const handleAddPage = async () => {
     if (!newPageUrl.trim()) {
       toast.error("Please enter a valid URL");
       return;
     }
 
-    // Basic URL validation
-    try {
-      new URL(newPageUrl.trim());
-    } catch {
-      toast.error("Please enter a valid URL");
+    if (!data?.websiteUrl) {
+      toast.error("Please set your website URL in settings first");
       return;
     }
 
-    if (!pagesToAdd.includes(newPageUrl.trim())) {
-      setPagesToAdd([...pagesToAdd, newPageUrl.trim()]);
-      setNewPageUrl("");
-    } else {
+    // Validate and normalize URL (same as dashboard)
+    const normalized = normalizeManualUrl(newPageUrl.trim());
+    if (!normalized) {
+      try {
+        const userUrl = new URL(data.websiteUrl.startsWith("http") ? data.websiteUrl : `https://${data.websiteUrl}`);
+        const userDomain = userUrl.hostname.replace(/^www\./, '');
+        toast.error(`URL must belong to your website domain (${userDomain})`);
+      } catch {
+        toast.error("Invalid URL or URL does not belong to your website domain");
+      }
+      return;
+    }
+
+    // Check if URL already exists in current pages
+    const existingPageUrls = pages.map((p) => p.pageUrl || p.url).filter(Boolean);
+    if (existingPageUrls.includes(normalized)) {
+      toast.error("This page is already in your list");
+      return;
+    }
+
+    // Check if URL is already being added
+    if (pagesToAdd.includes(normalized)) {
       toast.error("This URL is already being added");
+      return;
+    }
+
+    // Check if URL is in the remove list (allow re-adding)
+    if (pagesToRemove.includes(normalized)) {
+      // Remove from remove list and add to add list
+      setPagesToRemove(pagesToRemove.filter(url => url !== normalized));
+    }
+
+    // Optional: Verify URL is crawlable before adding (same as dashboard)
+    try {
+      const scrapeRes = await fetch("/api/scrape-content", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageUrl: normalized }),
+      });
+
+      if (!scrapeRes.ok) {
+        toast.error(`Failed to verify URL: ${normalized}. The page may not be accessible.`);
+        return;
+      }
+
+      const scrapeJson = await scrapeRes.json();
+      if (!scrapeJson?.data || !scrapeJson.data.textContent) {
+        toast.error(`Invalid URL: ${normalized} has no crawlable content.`);
+        return;
+      }
+
+      // URL is valid and crawlable, add it
+      setPagesToAdd([...pagesToAdd, normalized]);
+      setNewPageUrl("");
+      toast.success("Page added successfully!");
+    } catch (error) {
+      console.error("Error verifying URL:", error);
+      toast.error("Failed to verify URL. Please try again.");
     }
   };
 
@@ -611,6 +781,27 @@ export default function Settings() {
     setShowConfirmDialog(false);
 
     try {
+      // Create updated snapshot with current state after changes
+      const updatedSnapshot = {
+        groupedByPage: Array.from(groupedByPage.entries()).map(([page, keywords]) => ({
+          page,
+          keywords: Array.isArray(keywords) ? keywords : [],
+        })),
+        gscKeywordsRaw: gscKeywordsRaw.map(kw => ({
+          keyword: kw.keyword,
+          page: kw.page,
+          clicks: kw.clicks || 0,
+          impressions: kw.impressions || 0,
+          position: kw.position || 999,
+          ctr: kw.ctr || "0%",
+          source: kw.source || "gsc-existing",
+        })),
+        selectedByPage: Array.from(focusKeywordByPage.entries()).map(([page, keyword]) => ({
+          page,
+          keyword,
+        })),
+      };
+
       const res = await fetch("/api/content-keywords/edit", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -620,6 +811,7 @@ export default function Settings() {
           pagesToAdd,
           keywordsToRemove,
           keywordsToAdd,
+          snapshot: updatedSnapshot, // Include updated snapshot
         }),
       });
 
@@ -635,7 +827,10 @@ export default function Settings() {
         return;
       }
 
-      toast.success("Changes saved successfully!");
+      toast.success("Changes saved successfully!", {
+        description: "You can make changes again in 24 hours.",
+        duration: 8000, // Show for 8 seconds so user doesn't miss it
+      });
       
       // Reset state
       setPagesToRemove([]);

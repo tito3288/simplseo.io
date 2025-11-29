@@ -1680,7 +1680,60 @@ export default function Dashboard() {
 
     setIsSavingFocusKeywords(true);
     try {
-      await saveFocusKeywords(user.id, entries);
+      // Create a set of keywords already in gscKeywordsRaw
+      const existingKeywordsSet = new Set(
+        gscKeywords.map(kw => `${kw.keyword.toLowerCase()}|${normalizePageKey(kw.page)}`)
+      );
+      
+      // Collect all keywords for gscKeywordsRaw (GSC + AI-generated selected keywords)
+      const allKeywordsRaw = [...gscKeywords.map(kw => ({
+        keyword: kw.keyword,
+        page: kw.page,
+        clicks: kw.clicks || 0,
+        impressions: kw.impressions || 0,
+        position: kw.position || 999,
+        ctr: kw.ctr || "0%",
+        source: kw.source || "gsc-existing",
+      }))];
+      
+      // Add AI-generated keywords that are selected but not in GSC data
+      nextAssignments.forEach((keyword, pageKey) => {
+        const source = nextSources.get(pageKey) || "gsc-existing";
+        if (source === "ai-generated") {
+          const key = `${keyword.toLowerCase()}|${normalizePageKey(pageKey)}`;
+          if (!existingKeywordsSet.has(key)) {
+            // Find the page URL (might be pageKey or need to resolve)
+            const pageUrl = Array.from(groupedByPage.keys()).find(
+              url => normalizePageKey(url) === pageKey
+            ) || pageKey;
+            
+            allKeywordsRaw.push({
+              keyword,
+              page: pageUrl === "__unknown__" ? null : pageUrl,
+              clicks: 0,
+              impressions: 0,
+              position: 999,
+              ctr: "0%",
+              source: "ai-generated",
+            });
+          }
+        }
+      });
+      
+      // Create snapshot of current FocusKeywordSelector state
+      const snapshot = {
+        groupedByPage: Array.from(groupedByPage.entries()).map(([page, keywords]) => ({
+          page,
+          keywords: Array.isArray(keywords) ? keywords : [],
+        })),
+        gscKeywordsRaw: allKeywordsRaw,
+        selectedByPage: Array.from(nextAssignments.entries()).map(([page, keyword]) => ({
+          page,
+          keyword,
+        })),
+      };
+
+      await saveFocusKeywords(user.id, entries, snapshot);
       setHasAutoSelectedFocusKeywords(true);
       toast.success("Focus keywords updated.");
     } catch (error) {
@@ -1849,7 +1902,60 @@ export default function Dashboard() {
 
     setIsSavingFocusKeywords(true);
     try {
-      await saveFocusKeywords(user.id, entries);
+      // Create a set of keywords already in gscKeywordsRaw
+      const existingKeywordsSet = new Set(
+        gscKeywords.map(kw => `${kw.keyword.toLowerCase()}|${normalizePageKey(kw.page)}`)
+      );
+      
+      // Collect all keywords for gscKeywordsRaw (GSC + AI-generated selected keywords)
+      const allKeywordsRaw = [...gscKeywords.map(kw => ({
+        keyword: kw.keyword,
+        page: kw.page,
+        clicks: kw.clicks || 0,
+        impressions: kw.impressions || 0,
+        position: kw.position || 999,
+        ctr: kw.ctr || "0%",
+        source: kw.source || "gsc-existing",
+      }))];
+      
+      // Add AI-generated keywords that are selected but not in GSC data
+      nextAssignments.forEach((keyword, pageKey) => {
+        const source = autoSources.get(pageKey) || "gsc-existing";
+        if (source === "ai-generated") {
+          const key = `${keyword.toLowerCase()}|${normalizePageKey(pageKey)}`;
+          if (!existingKeywordsSet.has(key)) {
+            // Find the page URL (might be pageKey or need to resolve)
+            const pageUrl = Array.from(groupedByPage.keys()).find(
+              url => normalizePageKey(url) === pageKey
+            ) || pageKey;
+            
+            allKeywordsRaw.push({
+              keyword,
+              page: pageUrl === "__unknown__" ? null : pageUrl,
+              clicks: 0,
+              impressions: 0,
+              position: 999,
+              ctr: "0%",
+              source: "ai-generated",
+            });
+          }
+        }
+      });
+      
+      // Create snapshot for auto-selected keywords
+      const snapshot = {
+        groupedByPage: Array.from(groupedByPage.entries()).map(([page, keywords]) => ({
+          page,
+          keywords: Array.isArray(keywords) ? keywords : [],
+        })),
+        gscKeywordsRaw: allKeywordsRaw,
+        selectedByPage: Array.from(nextAssignments.entries()).map(([page, keyword]) => ({
+          page,
+          keyword,
+        })),
+      };
+
+      await saveFocusKeywords(user.id, entries, snapshot);
       setHasAutoSelectedFocusKeywords(true);
       toast.success("Picked starter focus keywords for you.");
     } catch (error) {
