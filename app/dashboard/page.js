@@ -56,6 +56,12 @@ import {
   saveFocusKeywords,
   getFocusKeywords,
 } from "../lib/firestoreHelpers";
+import {
+  fetchWithCache,
+  CACHE_DURATIONS,
+  generateKeywordSignature,
+  clearCache,
+} from "../lib/apiCache";
 import FocusKeywordSelector from "../components/dashboard/FocusKeywordSelector";
 import { Badge } from "@/components/ui/badge";
 import { cn } from "@/lib/utils";
@@ -627,26 +633,32 @@ export default function Dashboard() {
 
   const generateMetaDescription = useCallback(async (pageUrl) => {
     try {
-      const res = await fetch("/api/seo-assistant/meta-description", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          pageUrl,
-          onboarding: data,
-          context: { lowCtrPages, aiTips }, // same context as titles
-          userId: user?.id,
-        }),
-      });
+      const cacheParams = {
+        pageUrl,
+        businessName: data?.businessName,
+        businessType: data?.businessType
+      };
 
-      if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
-      }
-      
-      const json = await res.json();
+      const result = await fetchWithCache(
+        "/api/seo-assistant/meta-description",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pageUrl,
+            onboarding: data,
+            context: { lowCtrPages, aiTips }, // same context as titles
+            userId: user?.id,
+          }),
+        },
+        CACHE_DURATIONS.META_DESCRIPTION,
+        cacheParams
+      );
+
       return (
-        json.description ||
+        result.description ||
         "Your page is ranking but not getting clicks. Consider improving your title or meta description."
       );
     } catch (err) {
@@ -657,25 +669,31 @@ export default function Dashboard() {
 
   const generateMetaTitle = useCallback(async (pageUrl) => {
     try {
-      const res = await fetch("/api/seo-assistant/meta-title", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          pageUrl,
-          onboarding: data,
-          context: { lowCtrPages, aiTips }, // feel free to expand this later
-          userId: user?.id,
-        }),
-      });
+      const cacheParams = {
+        pageUrl,
+        businessName: data?.businessName,
+        businessType: data?.businessType
+      };
 
-      if (!res.ok) {
-        throw new Error(`API error: ${res.status}`);
-      }
-      
-      const json = await res.json();
-      return json.title || "Suggested Meta Title";
+      const result = await fetchWithCache(
+        "/api/seo-assistant/meta-title",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            pageUrl,
+            onboarding: data,
+            context: { lowCtrPages, aiTips }, // feel free to expand this later
+            userId: user?.id,
+          }),
+        },
+        CACHE_DURATIONS.META_TITLE,
+        cacheParams
+      );
+
+      return result.title || "Suggested Meta Title";
     } catch (err) {
       console.error("❌ Failed to fetch AI meta title", err);
       return "Suggested Meta Title";
@@ -1279,24 +1297,38 @@ export default function Dashboard() {
       
       setIsFilteringKeywords(true);
       try {
-        const response = await fetch('/api/filter-branded-keywords', {
-          method: 'POST',
-          headers: {
-            'Content-Type': 'application/json',
+        // Generate signature from keywords to detect when they change
+        const keywordSignature = generateKeywordSignature(gscKeywords);
+        
+        const cacheParams = {
+          keywordsCount: gscKeywords.length,
+          keywordSignature: keywordSignature, // Include signature to detect keyword changes
+          businessName: data.businessName,
+          businessType: data.businessType
+        };
+
+        const result = await fetchWithCache(
+          '/api/filter-branded-keywords',
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+              keywords: gscKeywords,
+              businessName: data.businessName,
+              businessType: data.businessType
+            })
           },
-          body: JSON.stringify({
-            keywords: gscKeywords,
-            businessName: data.businessName,
-            businessType: data.businessType
-          })
-        });
+          CACHE_DURATIONS.FILTER_BRANDED_KEYWORDS,
+          cacheParams
+        );
 
-        if (!response.ok) {
-          throw new Error(`API error: ${response.status}`);
+        if (result.fromCache) {
+          console.log(`✅ AI filtering result (cached, ${result.cacheAge}h old):`, result);
+        } else {
+          console.log("✅ AI filtering result (fresh):", result);
         }
-
-        const result = await response.json();
-        console.log("✅ AI filtering result:", result);
         console.log(
           "🔍 Branded keywords from AI:",
           result.branded?.map((kw) => kw.keyword) || []
@@ -1353,6 +1385,31 @@ export default function Dashboard() {
 
     filterKeywordsWithAI();
   }, [gscKeywords, data?.businessName, data?.businessType, user?.id, initialFocusKeywordsLoaded]);
+
+  // Track previous business info to detect changes and clear cache
+  const prevBusinessInfoRef = useRef({ businessName: null, businessType: null });
+  
+  // Clear cache when business name or type changes
+  useEffect(() => {
+    const prevBusinessName = prevBusinessInfoRef.current.businessName;
+    const prevBusinessType = prevBusinessInfoRef.current.businessType;
+    
+    // Only clear cache if business info actually changed
+    if (
+      (data?.businessName && data.businessName !== prevBusinessName) ||
+      (data?.businessType && data.businessType !== prevBusinessType)
+    ) {
+      if (prevBusinessName || prevBusinessType) {
+        console.log("🔄 Business info changed, cache will be invalidated on next fetch");
+      }
+      
+      // Update ref
+      prevBusinessInfoRef.current = {
+        businessName: data?.businessName || null,
+        businessType: data?.businessType || null
+      };
+    }
+  }, [data?.businessName, data?.businessType]);
 
   const requestGSCAuthToken = async () => {
     // Reset error flag for new attempt

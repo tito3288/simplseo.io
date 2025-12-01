@@ -68,6 +68,7 @@ const OnboardingWizard = () => {
   const [isLoadingProperties, setIsLoadingProperties] = useState(false);
   const [googleAccessToken, setGoogleAccessToken] = useState(null);
   const [googleRefreshToken, setGoogleRefreshToken] = useState(null);
+  const [oauthError, setOauthError] = useState(null);
   const { user, isLoading } = useAuth();
 
   useEffect(() => {
@@ -189,13 +190,34 @@ const OnboardingWizard = () => {
     const refreshToken = urlParams.get('refresh_token');
     const email = urlParams.get('email');
     const step = urlParams.get('step');
+    const error = urlParams.get('error');
     
     console.log("🔍 OAuth callback tokens:", {
       hasAccessToken: !!accessToken,
       hasRefreshToken: !!refreshToken,
       email: email,
-      step: step
+      step: step,
+      error: error
     });
+    
+    // Handle error case
+    if (error === 'google_auth_failed') {
+      console.error("❌ Google OAuth failed");
+      setOauthError("Failed to connect Google account. Please try again.");
+      // Set step to 4 if provided, otherwise stay on current step
+      if (step) {
+        setCurrentStep(parseInt(step));
+      }
+      // Clean up URL but keep error for user feedback
+      const newUrl = `${window.location.pathname}${step ? `?step=${step}` : ''}`;
+      window.history.replaceState({}, document.title, newUrl);
+      return;
+    }
+    
+    // Clear error if OAuth succeeded
+    if (accessToken && email) {
+      setOauthError(null);
+    }
     
     if (accessToken && email) {
       setGoogleAccessToken(accessToken);
@@ -437,6 +459,13 @@ const OnboardingWizard = () => {
 
                 {data.hasGSC && (
                   <div className="space-y-4 mt-4">
+                    {/* Error message display */}
+                    {oauthError && (
+                      <div className="bg-destructive/10 border border-destructive/50 text-destructive px-4 py-3 rounded-md">
+                        <p className="text-sm font-medium">{oauthError}</p>
+                        <p className="text-xs mt-1 opacity-90">Please check that the redirect URI matches your Google Cloud Console settings.</p>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       <Label htmlFor="gscProperty">Select GSC Property</Label>
                       <Select

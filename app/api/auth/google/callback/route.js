@@ -3,6 +3,11 @@ import { google } from "googleapis";
 
 export async function GET(req) {
   try {
+    // ✅ FIX: Extract origin dynamically from request URL
+    const requestUrl = new URL(req.url);
+    const origin = `${requestUrl.protocol}//${requestUrl.host}`;
+    const callbackUrl = `${origin}/api/auth/google/callback`;
+    
     const { searchParams } = new URL(req.url);
     const code = searchParams.get('code');
     const state = searchParams.get('state');
@@ -10,20 +15,25 @@ export async function GET(req) {
     console.log('Google OAuth Callback Debug:', {
       code: code ? 'present' : 'missing',
       state,
+      origin,
+      callbackUrl,
       clientId: process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID ? 'present' : 'missing',
       clientSecret: process.env.GOOGLE_CLIENT_SECRET ? 'present' : 'missing',
-      appUrl: process.env.NEXT_PUBLIC_APP_URL || 'missing'
     });
 
     if (!code) {
-      return NextResponse.json({ error: "Authorization code is required" }, { status: 400 });
+      // ✅ FIX: Include step=4 in error redirect
+      const errorUrl = new URL('/onboarding', origin);
+      errorUrl.searchParams.set('error', 'google_auth_failed');
+      errorUrl.searchParams.set('step', '4');
+      return NextResponse.redirect(errorUrl.toString());
     }
 
-    // Create OAuth2 client
+    // ✅ FIX: Use dynamic origin for OAuth2 client
     const oauth2Client = new google.auth.OAuth2(
       process.env.NEXT_PUBLIC_GOOGLE_CLIENT_ID,
       process.env.GOOGLE_CLIENT_SECRET,
-      `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/api/auth/google/callback`
+      callbackUrl
     );
 
     // Exchange code for tokens
@@ -34,9 +44,8 @@ export async function GET(req) {
     const oauth2 = google.oauth2({ version: 'v2', auth: oauth2Client });
     const userInfo = await oauth2.userinfo.get();
 
-    // Redirect back to onboarding with tokens (preserve step 4)
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    const redirectUrl = new URL('/onboarding', baseUrl);
+    // ✅ FIX: Use dynamic origin for redirect
+    const redirectUrl = new URL('/onboarding', origin);
     redirectUrl.searchParams.set('access_token', tokens.access_token);
     redirectUrl.searchParams.set('refresh_token', tokens.refresh_token || '');
     redirectUrl.searchParams.set('email', userInfo.data.email);
@@ -46,7 +55,12 @@ export async function GET(req) {
 
   } catch (error) {
     console.error("Google OAuth callback error:", error);
-    const baseUrl = process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000';
-    return NextResponse.redirect(`${baseUrl}/onboarding?error=google_auth_failed`);
+    // ✅ FIX: Extract origin dynamically and include step=4
+    const requestUrl = new URL(req.url);
+    const origin = `${requestUrl.protocol}//${requestUrl.host}`;
+    const errorUrl = new URL('/onboarding', origin);
+    errorUrl.searchParams.set('error', 'google_auth_failed');
+    errorUrl.searchParams.set('step', '4');
+    return NextResponse.redirect(errorUrl.toString());
   }
 }

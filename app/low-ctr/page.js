@@ -34,6 +34,10 @@ import {
 import ContentAuditPanel from "../components/dashboard/ContentAuditPanel";
 import { Badge } from "@/components/ui/badge";
 import { getFocusKeywords } from "../lib/firestoreHelpers";
+import {
+  fetchWithCache,
+  CACHE_DURATIONS,
+} from "../lib/apiCache";
 
 const GSC_SCOPE = "https://www.googleapis.com/auth/webmasters.readonly";
 
@@ -555,33 +559,40 @@ export default function LowCtrPage() {
         ...(focusKeywordArg ? { focusKeywords: [focusKeywordArg] } : {}),
       };
 
-      const [titleRes, descRes] = await Promise.all([
-        fetch("/api/seo-assistant/meta-title", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }),
-        fetch("/api/seo-assistant/meta-description", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(payload),
-        }),
+      // Cache params for both title and description
+      const cacheParams = {
+        pageUrl,
+        focusKeyword: focusKeywordArg || null,
+        source: "low-ctr-suggestions"
+      };
+
+      const [titleResult, descResult] = await Promise.all([
+        fetchWithCache(
+          "/api/seo-assistant/meta-title",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          CACHE_DURATIONS.META_TITLE,
+          cacheParams
+        ).catch(() => ({ title: null, fromCache: false })),
+        fetchWithCache(
+          "/api/seo-assistant/meta-description",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload),
+          },
+          CACHE_DURATIONS.META_DESCRIPTION,
+          cacheParams
+        ).catch(() => ({ description: null, fromCache: false }))
       ]);
-
-      if (!titleRes.ok) {
-        console.error(`Title API error for ${pageUrl}:`, titleRes.status);
-      }
-      if (!descRes.ok) {
-        console.error(`Description API error for ${pageUrl}:`, descRes.status);
-      }
-
-      const titleJson = titleRes.ok ? await titleRes.json() : { title: null };
-      const descJson = descRes.ok ? await descRes.json() : { description: null };
 
       return {
         pageUrl,
-        title: titleJson.title || "Suggested Title",
-        description: descJson.description || "Suggested Description",
+        title: titleResult.title || "Suggested Title",
+        description: descResult.description || "Suggested Description",
         focusKeyword: focusKeywordArg || null,
         key,
       };

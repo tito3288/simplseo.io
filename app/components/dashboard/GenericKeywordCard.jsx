@@ -4,6 +4,11 @@ import { useState, useEffect } from "react";
 import { useAuth } from "../../contexts/AuthContext";
 import { useOnboarding } from "../../contexts/OnboardingContext";
 import {
+  fetchWithCache,
+  CACHE_DURATIONS,
+  generateKeywordSignature,
+} from "../../lib/apiCache";
+import {
   Card,
   CardContent,
   CardDescription,
@@ -42,27 +47,44 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
         websiteUrl: data.websiteUrl
       });
 
-      const response = await fetch("/api/generic-keywords/analyze", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
+      // Generate signature from keywords to detect when they change
+      const keywordSignature = generateKeywordSignature(gscKeywords);
+      
+      const cacheParams = {
+        gscKeywordsCount: gscKeywords?.length || 0,
+        keywordSignature: keywordSignature, // Include signature to detect keyword changes
+        businessType: data.businessType,
+        customBusinessType: data.customBusinessType,
+        businessLocation: data.businessLocation,
+        websiteUrl: data.websiteUrl,
+        userId: user.id
+      };
+
+      const result = await fetchWithCache(
+        "/api/generic-keywords/analyze",
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            gscKeywords: gscKeywords || [],
+            businessType: data.businessType,
+            customBusinessType: data.customBusinessType,
+            businessLocation: data.businessLocation,
+            websiteUrl: data.websiteUrl,
+            userId: user.id,
+          }),
         },
-        body: JSON.stringify({
-          gscKeywords: gscKeywords || [],
-          businessType: data.businessType,
-          customBusinessType: data.customBusinessType,
-          businessLocation: data.businessLocation,
-          websiteUrl: data.websiteUrl,
-          userId: user.id, // Add userId for caching
-        }),
-      });
+        CACHE_DURATIONS.GENERIC_KEYWORDS_ANALYZE,
+        cacheParams
+      );
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status}`);
+      if (result.fromCache) {
+        console.log(`✅ Generic Keywords response (cached, ${result.cacheAge}h old):`, result);
+      } else {
+        console.log("✅ Generic Keywords response (fresh):", result);
       }
-
-      const result = await response.json();
-      console.log("✅ Generic Keywords response:", result);
 
       if (result.opportunities && result.opportunities.length > 0) {
         setOpportunities(result.opportunities);
