@@ -10,11 +10,15 @@ import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { toast } from "sonner";
 import { db } from "../../lib/firebaseConfig";
 import { doc, setDoc, getDoc, deleteDoc } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
+import {
+  fetchWithCache,
+  CACHE_DURATIONS,
+} from "../../lib/apiCache";
 import {
   Tooltip,
   TooltipTrigger,
@@ -68,6 +72,10 @@ const SeoRecommendationPanel = ({
   const [thirtyDayProgress, setThirtyDayProgress] = useState(null);
   const [currentH1, setCurrentH1] = useState(null);
   const [loadingH1, setLoadingH1] = useState(false);
+  const [currentMetaTitle, setCurrentMetaTitle] = useState(null);
+  const [currentMetaDescription, setCurrentMetaDescription] = useState(null);
+  const [loadingMetaTags, setLoadingMetaTags] = useState(false);
+  const fetchedPageUrlRef = useRef(null);
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -303,6 +311,53 @@ const SeoRecommendationPanel = ({
     }
   }, [isOpen, keywordSource, user?.id, pageUrl]);
 
+  // Fetch current meta tags when panel opens (with caching)
+  useEffect(() => {
+    const fetchCurrentMetaTags = async () => {
+      if (!isOpen || !pageUrl) return;
+      
+      // Reset state if pageUrl changed
+      if (fetchedPageUrlRef.current !== pageUrl) {
+        setCurrentMetaTitle(null);
+        setCurrentMetaDescription(null);
+        fetchedPageUrlRef.current = pageUrl;
+      }
+      
+      // Don't fetch if we already have data for this pageUrl (same session)
+      if (fetchedPageUrlRef.current === pageUrl && (currentMetaTitle !== null || currentMetaDescription !== null)) {
+        return;
+      }
+      
+      setLoadingMetaTags(true);
+      try {
+        const result = await fetchWithCache(
+          "/api/scrape-content",
+          {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ pageUrl }),
+          },
+          24 * 60 * 60 * 1000, // 24 hours cache
+          { pageUrl } // cache params
+        );
+
+        if (result.success && result.data) {
+          setCurrentMetaTitle(result.data.title || null);
+          setCurrentMetaDescription(result.data.metaDescription || null);
+        }
+      } catch (error) {
+        console.error("Error fetching current meta tags:", error);
+        setCurrentMetaTitle(null);
+        setCurrentMetaDescription(null);
+      } finally {
+        setLoadingMetaTags(false);
+      }
+    };
+
+    fetchCurrentMetaTags();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen, pageUrl]);
+
   return (
     <>
       <Collapsible
@@ -368,41 +423,86 @@ const SeoRecommendationPanel = ({
                   </p>
                 </div>
               )}
-              <div className="space-y-3">
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1 block">Suggested Meta Title</Label>
-                  <div className="flex items-center justify-between">
-                    <Textarea
-                      value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
-                      readOnly
-                      className="resize-none"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+              <div className="space-y-4">
+                {/* Meta Title Comparison Card */}
+                <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                  <Label className="text-sm font-medium">Meta Title</Label>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
+                      {loadingMetaTags ? (
+                        <p className="text-xs text-muted-foreground italic">Loading...</p>
+                      ) : currentMetaTitle ? (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100">
+                          {currentMetaTitle}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Not found</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-center text-muted-foreground py-1">
+                      ↓ Replace with ↓
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Textarea
+                          value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
+                          readOnly
+                          className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
+                          className="flex-shrink-0"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
-                <div>
-                  <Label className="text-xs text-muted-foreground mb-1 block">Suggested Meta Description</Label>
-                  <div className="flex items-center justify-between">
-                    <Textarea
-                      value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
-                      readOnly
-                      className="resize-none"
-                    />
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() =>
-                        copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
-                      }
-                    >
-                      <Copy className="h-4 w-4" />
-                    </Button>
+
+                {/* Meta Description Comparison Card */}
+                <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                  <Label className="text-sm font-medium">Meta Description</Label>
+                  <div className="space-y-2">
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
+                      {loadingMetaTags ? (
+                        <p className="text-xs text-muted-foreground italic">Loading...</p>
+                      ) : currentMetaDescription ? (
+                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100 max-h-32 overflow-y-auto">
+                          {currentMetaDescription}
+                        </div>
+                      ) : (
+                        <p className="text-xs text-muted-foreground italic">Not found</p>
+                      )}
+                    </div>
+                    <div className="flex items-center justify-center text-muted-foreground py-1">
+                      ↓ Replace with ↓
+                    </div>
+                    <div>
+                      <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
+                      <div className="flex items-center justify-between gap-2">
+                        <Textarea
+                          value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
+                          readOnly
+                          className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() =>
+                            copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
+                          }
+                          className="flex-shrink-0"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>

@@ -107,19 +107,22 @@ const ChatAssistant = ({
   const [showFeedbackPrompt, setShowFeedbackPrompt] = useState(false);
 
   // Conversation management functions
-  const loadConversations = async () => {
-    if (!user?.id) return;
+  const loadConversations = async (includeActiveCorner = false) => {
+    if (!user?.id) return null;
     
     try {
-      const response = await fetch(`/api/conversations?userId=${user.id}`);
+      const url = `/api/conversations?userId=${user.id}${includeActiveCorner ? '&includeActiveCorner=true' : ''}`;
+      const response = await fetch(url);
       const result = await response.json();
       
       if (result.success) {
         setConversations(result.conversations);
+        return result.conversations; // Return conversations for reuse
       }
     } catch (error) {
       console.error("Error loading conversations:", error);
     }
+    return null;
   };
 
   const saveConversation = async (messagesToSave) => {
@@ -193,36 +196,31 @@ const ChatAssistant = ({
     }
   };
 
-  const loadMostRecentConversation = async () => {
-    if (!user?.id) return false;
+  // Load most recent conversation from already-fetched conversations list
+  const loadMostRecentConversationFromList = async (conversationsList) => {
+    if (!conversationsList || conversationsList.length === 0) return false;
     
     try {
-      // Include active corner conversations when loading for the corner bubble
-      const response = await fetch(`/api/conversations?userId=${user.id}&includeActiveCorner=true`);
-      const result = await response.json();
+      // Find the most recent conversation that was started in the corner bubble
+      // and hasn't been ended in the corner bubble
+      const cornerConversation = conversationsList.find(conv => 
+        (conv.source === 'corner-bubble' || 
+         (conv.messages && conv.messages.length > 0 && conv.messages[0].source === 'corner-bubble')) &&
+        !conv.cornerEnded // Not ended in corner bubble
+      );
       
-      if (result.success && result.conversations.length > 0) {
-        // Find the most recent conversation that was started in the corner bubble
-        // and hasn't been ended in the corner bubble
-        const cornerConversation = result.conversations.find(conv => 
-          (conv.source === 'corner-bubble' || 
-           (conv.messages && conv.messages.length > 0 && conv.messages[0].source === 'corner-bubble')) &&
-          !conv.cornerEnded // Not ended in corner bubble
-        );
+      if (cornerConversation) {
+        // Load the full conversation (we need the messages)
+        const conversationResponse = await fetch(`/api/conversations/${cornerConversation.id}`);
+        const conversationResult = await conversationResponse.json();
         
-        if (cornerConversation) {
-          // Load the full conversation
-          const conversationResponse = await fetch(`/api/conversations/${cornerConversation.id}`);
-          const conversationResult = await conversationResponse.json();
-          
-          if (conversationResult.success) {
-            const loadedMessages = conversationResult.conversation.messages;
-            setMessages(loadedMessages);
-            // Mark all loaded messages as completed (skip typing animation)
-            setCompletedTypingMessages(new Set(loadedMessages.map(msg => msg.id)));
-            setCurrentConversationId(cornerConversation.id);
-            return true; // Successfully loaded a corner conversation
-          }
+        if (conversationResult.success) {
+          const loadedMessages = conversationResult.conversation.messages;
+          setMessages(loadedMessages);
+          // Mark all loaded messages as completed (skip typing animation)
+          setCompletedTypingMessages(new Set(loadedMessages.map(msg => msg.id)));
+          setCurrentConversationId(cornerConversation.id);
+          return true; // Successfully loaded a corner conversation
         }
       }
     } catch (error) {
@@ -241,21 +239,26 @@ const ChatAssistant = ({
   const resizeRef = useRef(null);
 
   // Load conversations and most recent conversation when component mounts
+  // Optimized: Single API call for conversations, reuse data for finding most recent
   useEffect(() => {
     if (user?.id && !isInitialized) {
       const initializeChat = async () => {
         setIsLoadingConversation(true);
-        await loadConversations();
         
         // Check if we should skip loading old conversation (user clicked "End Conversation")
         const skipLoad = localStorage.getItem("skipLoadConversation");
         if (skipLoad === "true") {
           // Clear the flag and start fresh
           localStorage.removeItem("skipLoadConversation");
+          // Still load conversations list (for history), but don't load most recent
+          await loadConversations(false);
           setMessages([defaultWelcome]);
         } else {
-          // Try to load most recent conversation
-          const conversationLoaded = await loadMostRecentConversation();
+          // Single call with includeActiveCorner=true to get both list AND active conversations
+          const conversationsList = await loadConversations(true);
+          
+          // Use the same data to find and load most recent conversation
+          const conversationLoaded = await loadMostRecentConversationFromList(conversationsList);
           
           // If no conversation was loaded, show welcome message
           if (!conversationLoaded) {

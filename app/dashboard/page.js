@@ -10,7 +10,6 @@ import { useRouter } from "next/navigation";
 import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPanel";
 import Link from "next/link";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
-import { useMinimumLoading } from "../hooks/use-minimum-loading";
 
 import {
   Card,
@@ -97,7 +96,8 @@ export default function Dashboard() {
   const [gscAccessToken, setGscAccessToken] = useState(null);
   const [gscKeywords, setGscKeywords] = useState([]);
   const [gscImpressionTrends, setGscImpressionTrends] = useState([]);
-  const [dateRange, setDateRange] = useState("28"); // Changed from "7" to "28"
+  const dateRange = "28"; // Fixed at 28 days for all dashboard data (optimal sweet spot)
+  const [chartDateRange, setChartDateRange] = useState("28"); // Separate date range for chart only
   const [topPages, setTopPages] = useState([]);
   const [lowCtrPages, setLowCtrPages] = useState([]);
   const [aiTips, setAiTips] = useState([]);
@@ -628,8 +628,6 @@ export default function Dashboard() {
     }
   };
   
-  // Use minimum loading time for professional UX
-  const shouldShowLoader = useMinimumLoading(isLoadingGscData, 3000);
 
   const generateMetaDescription = useCallback(async (pageUrl) => {
     try {
@@ -855,16 +853,12 @@ export default function Dashboard() {
     );
   }, [gscKeywords, focusKeywords, buildAssignmentsFromKeywords, focusKeywordByPage.size]);
 
-  // Define fetchSearchAnalyticsData before fetchAndMatchGSC (which depends on it)
-  const fetchSearchAnalyticsData = useCallback(async (siteUrl, token, range) => {
+  // Fetch dashboard metrics (always uses 28 days - optimal sweet spot)
+  const fetchDashboardMetrics = useCallback(async (siteUrl, token) => {
     setIsLoadingGscData(true);
     const today = new Date();
     const startDate = new Date();
-    if (range === "all") {
-      startDate.setFullYear(today.getFullYear() - 1);
-    } else {
-      startDate.setDate(today.getDate() - parseInt(range));
-    }
+    startDate.setDate(today.getDate() - parseInt(dateRange)); // Always 28 days
 
     const formatDate = (d) => d.toISOString().split("T")[0];
     const from = formatDate(startDate);
@@ -892,7 +886,6 @@ export default function Dashboard() {
       );
 
       const keywordJson = await keywordRes.json();
-
 
       if (keywordJson.rows) {
         const formatted = keywordJson.rows.map((row) => ({
@@ -972,14 +965,33 @@ export default function Dashboard() {
         });
 
         setAiTips(ai);
-
-        // Removed auto-selection: Users should manually choose their focus keywords
-        // Previously, keywords were auto-selected based on clicks/impressions thresholds
       } else {
         setGscKeywords([]);
         setTopPages([]);
       }
+    } catch (err) {
+      console.error("❌ Failed to fetch dashboard metrics:", err);
+    } finally {
+      setIsLoadingGscData(false);
+    }
+  }, [dateRange]);
 
+  // Fetch chart trends (uses chartDateRange - can be changed by user)
+  const fetchChartTrends = useCallback(async (siteUrl, token, range) => {
+    setIsRefreshingData(true);
+    const today = new Date();
+    const startDate = new Date();
+    if (range === "all") {
+      startDate.setFullYear(today.getFullYear() - 1);
+    } else {
+      startDate.setDate(today.getDate() - parseInt(range));
+    }
+
+    const formatDate = (d) => d.toISOString().split("T")[0];
+    const from = formatDate(startDate);
+    const to = formatDate(today);
+
+    try {
       // 🔹 Fetch daily impressions for the chart
       const trendsRes = await fetch(
         `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
@@ -1019,12 +1031,11 @@ export default function Dashboard() {
         setGscImpressionTrends([]);
       }
     } catch (err) {
-      console.error("❌ Failed to fetch GSC data:", err);
+      console.error("❌ Failed to fetch chart trends:", err);
     } finally {
-      setIsLoadingGscData(false);
-      setIsRefreshingData(false); // Reset refreshing state after data fetch
+      setIsRefreshingData(false);
     }
-  }, [user?.id]);
+  }, []);
 
   // Fetch focus keywords with 90-day period (separate from dashboard metrics)
   const fetchFocusKeywords = useCallback(async (siteUrl, token) => {
@@ -1117,8 +1128,11 @@ export default function Dashboard() {
       const tokenManager = createGSCTokenManager(user.id);
       await tokenManager.storeTokens(null, token, selectedProperty);
       
-      // Fetch dashboard metrics with user's selected date range
-      fetchSearchAnalyticsData(selectedProperty, token, dateRange);
+      // Fetch dashboard metrics (always 28 days - optimal sweet spot)
+      fetchDashboardMetrics(selectedProperty, token);
+      
+      // Fetch chart trends (uses chartDateRange - can be changed by user)
+      fetchChartTrends(selectedProperty, token, chartDateRange);
       
       // Fetch focus keywords with fixed 90-day period (separate from dashboard metrics)
       fetchFocusKeywords(selectedProperty, token);
@@ -1141,7 +1155,7 @@ export default function Dashboard() {
         });
       }
     }
-  }, [user?.id, data?.gscProperty, dateRange, hasShownGscError, fetchSearchAnalyticsData, fetchFocusKeywords]);
+  }, [user?.id, data?.gscProperty, chartDateRange, hasShownGscError, fetchDashboardMetrics, fetchChartTrends, fetchFocusKeywords]);
 
   useEffect(() => {
     if (isLoading || !user?.id) return;
@@ -1281,14 +1295,13 @@ export default function Dashboard() {
   //   }
   // }, [gscAccessToken, dateRange]);
 
-  // ✅ NEW: Refresh all data when date range changes
+  // ✅ Refresh chart data when chart date range changes (doesn't affect other dashboard data)
   useEffect(() => {
-    if (gscAccessToken && isGscConnected) {
-      console.log(`🔄 Date range changed to ${dateRange} days, refreshing all data...`);
-      setIsRefreshingData(true);
-      fetchAndMatchGSC(gscAccessToken);
+    if (gscAccessToken && isGscConnected && data?.gscProperty) {
+      console.log(`🔄 Chart date range changed to ${chartDateRange} days, refreshing chart data...`);
+      fetchChartTrends(data.gscProperty, gscAccessToken, chartDateRange);
     }
-  }, [dateRange, gscAccessToken, isGscConnected, fetchAndMatchGSC]);
+  }, [chartDateRange, gscAccessToken, isGscConnected, data?.gscProperty, fetchChartTrends]);
 
   // AI-powered brand filtering effect
   useEffect(() => {
@@ -1616,19 +1629,18 @@ export default function Dashboard() {
           }
         }
         
-        // If we have an assigned keyword, use it (even if it doesn't appear in GSC data)
+        // Only use assigned keywords - no fallback to GSC matching
+        // This ensures only pages where the user explicitly selected a focus keyword are marked
         let primaryKeyword = assignedKeyword;
         let focusKeywords = [];
         
         if (assignedKeyword) {
           focusKeywords = [assignedKeyword];
+          primaryKeyword = assignedKeyword;
         } else {
-          // Fallback: find keywords from GSC data that match focus keywords
-          const focusMatches = page.keywords?.filter((keyword) =>
-            focusKeywordSet.has(keyword.toLowerCase())
-          );
-          focusKeywords = focusMatches || [];
-          primaryKeyword = focusMatches?.[0] || page.keywords?.[0] || null;
+          // No assigned keyword - use first keyword from GSC data as primary
+          // but don't mark it as a focus keyword
+          primaryKeyword = page.keywords?.[0] || null;
         }
         
         return {
@@ -2501,19 +2513,18 @@ export default function Dashboard() {
           <CardTitle className="flex items-center justify-between">
             <span>Search Impressions</span>
             <DateRangeFilter
-              value={dateRange}
-              onValueChange={(value) => setDateRange(value)}
+              value={chartDateRange}
+              onValueChange={(value) => setChartDateRange(value)}
               isLoading={isRefreshingData}
             />
           </CardTitle>
           <CardDescription>
-            Track how often your website appears in Google search results - Last {dateRange === "all" ? "year" : `${dateRange} days`}
+            Track how often your website appears in Google search results - Last {chartDateRange === "all" ? "year" : `${chartDateRange} days`}
           </CardDescription>
         </CardHeader>
         <CardContent>
-          {shouldShowLoader ? (
+          {isLoadingGscData && gscImpressionTrends.length === 0 ? (
             <div className="text-center py-8">
-              <SquashBounceLoader size="lg" className="mb-4" />
               <p className="text-sm text-muted-foreground">Loading chart data...</p>
             </div>
           ) : !isGscConnected ? (
@@ -2654,7 +2665,7 @@ export default function Dashboard() {
                 <CardDescription>
                   These pages show up in searches but aren&apos;t getting many
                   clicks. Consider rewriting their titles and meta descriptions
-                  to improve click-through rate. Data from last {dateRange === "all" ? "year" : `${dateRange} days`}.
+                  to improve click-through rate. Data from last 28 days.
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">
@@ -2664,7 +2675,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {isGscConnected ? (
-              shouldShowLoader ? (
+              isLoadingGscData && prioritizedLowCtrPages.length === 0 ? (
                 <div className="text-center py-8">
                   <SquashBounceLoader size="lg" className="mb-4" />
                   <p className="text-sm text-muted-foreground">Loading CTR data...</p>
@@ -2839,7 +2850,7 @@ export default function Dashboard() {
           </CardHeader>
           <CardContent>
             {isGscConnected ? (
-              shouldShowLoader ? (
+              isLoadingGscData && gscKeywords.length === 0 ? (
                 <div className="text-center py-8">
                   <SquashBounceLoader size="lg" className="mb-4" />
                   <p className="text-sm text-muted-foreground">Loading opportunities...</p>
@@ -2879,7 +2890,7 @@ export default function Dashboard() {
                   </span>
                 </CardTitle>
                 <CardDescription>
-                  Your most clicked search terms in the last {dateRange === "all" ? "year" : `${dateRange} days`}
+                  Your most clicked search terms in the last 28 days
                 </CardDescription>
               </div>
               <Button asChild variant="outline" size="sm">
@@ -2888,7 +2899,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {shouldShowLoader ? (
+            {isLoadingGscData && gscKeywords.length === 0 ? (
               <div className="text-center py-8">
                 <SquashBounceLoader size="lg" className="mb-4" />
                 <p className="text-sm text-muted-foreground">Loading keywords...</p>
@@ -2911,7 +2922,7 @@ export default function Dashboard() {
                   </span>
                 </CardTitle>
                 <CardDescription>
-                  Pages that appeared in search results in the last {dateRange === "all" ? "year" : `${dateRange} days`} (may include
+                  Pages that appeared in search results in the last 28 days (may include
                   0-click pages)
                 </CardDescription>
               </div>
@@ -2921,7 +2932,7 @@ export default function Dashboard() {
             </div>
           </CardHeader>
           <CardContent>
-            {shouldShowLoader ? (
+            {isLoadingGscData && topPages.length === 0 ? (
               <div className="text-center py-8">
                 <SquashBounceLoader size="lg" className="mb-4" />
                 <p className="text-sm text-muted-foreground">Loading pages...</p>

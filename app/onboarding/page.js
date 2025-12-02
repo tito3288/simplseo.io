@@ -393,20 +393,64 @@ const OnboardingWizard = () => {
                     Location Information
                   </h2>
                 </div>
-                <div className="space-y-2">
-                  <Label htmlFor="businessLocation">Business Location <span className="text-red-500">*</span></Label>
-                  <p className="text-sm text-muted-foreground mt-2">
-                  Enter the <span className="font-bold">City and State</span> your business serves. <br></br> This will help optimize your local SEO keywords
-                </p>
-                  <Input
-                    id="businessLocation"
-                    placeholder="e.g. Seattle, WA"
-                    value={data.businessLocation}
-                    onChange={(e) =>
-                      updateData({ businessLocation: e.target.value })
-                    }
-                    required
-                  />
+                <div className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="businessLocation">
+                      Business Location <span className="text-red-500">*</span>
+                    </Label>
+                    {data.servesMultipleCities ? (
+                      <>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Enter the <span className="font-bold">State</span> your business serves. <br></br> This will help optimize your local SEO keywords for all your locations.
+                        </p>
+                        <Input
+                          id="businessLocation"
+                          placeholder="e.g. Washington"
+                          value={data.businessLocation}
+                          onChange={(e) =>
+                            updateData({ businessLocation: e.target.value })
+                          }
+                          required
+                        />
+                      </>
+                    ) : (
+                      <>
+                        <p className="text-sm text-muted-foreground mt-2">
+                          Enter the <span className="font-bold">City and State</span> your business serves. <br></br> This will help optimize your local SEO keywords
+                        </p>
+                        <Input
+                          id="businessLocation"
+                          placeholder="e.g. Seattle, WA"
+                          value={data.businessLocation}
+                          onChange={(e) =>
+                            updateData({ businessLocation: e.target.value })
+                          }
+                          required
+                        />
+                      </>
+                    )}
+                  </div>
+                  
+                  <div className="flex items-center justify-between p-4 border rounded-lg bg-card">
+                    <div className="space-y-0.5">
+                      <Label htmlFor="servesMultipleCities" className="text-base font-medium">
+                        Do you serve multiple cities?
+                      </Label>
+                      <p className="text-sm text-muted-foreground">
+                        Toggle this if your business has locations in multiple cities, if not just enter City and State above.
+                      </p>
+                    </div>
+                    <Switch
+                      id="servesMultipleCities"
+                      checked={data.servesMultipleCities || false}
+                      onCheckedChange={(checked) => {
+                        updateData({ 
+                          servesMultipleCities: checked,
+                          businessLocation: "" // Clear location when toggling
+                        });
+                      }}
+                    />
+                  </div>
                 </div>
                 <p className="text-sm text-muted-foreground mt-4">
                   <span className="text-red-500">*</span> All fields are required to continue

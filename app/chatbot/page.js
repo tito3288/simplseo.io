@@ -310,12 +310,18 @@ export default function Chatbot() {
     const loadSavedConversation = () => {
       const stored = localStorage.getItem("chatbotMessages-v1");
       if (stored) {
-        const { messages: savedMessages, timestamp } = JSON.parse(stored);
+        const { messages: savedMessages, timestamp, conversationId } = JSON.parse(stored);
         const now = new Date().getTime();
         const oneHour = 60 * 60 * 1000;
 
         if (now - timestamp < oneHour && savedMessages.length > 0) {
           setMessages(savedMessages);
+          // Mark all loaded messages as completed (skip typing animation on refresh)
+          setCompletedTypingMessages(new Set(savedMessages.map(msg => msg.id)));
+          // Restore conversation ID so follow-ups update the same conversation
+          if (conversationId) {
+            setCurrentConversationId(conversationId);
+          }
           return;
         }
       }
@@ -436,10 +442,11 @@ export default function Chatbot() {
       setMessages(prev => {
         const updated = [...prev, aiMessage];
         
-        // Save conversation to localStorage
+        // Save conversation to localStorage (including conversationId for continuity)
         const conversation = {
           messages: updated,
-          timestamp: new Date().getTime()
+          timestamp: new Date().getTime(),
+          conversationId: currentConversationId // Will be updated after Firebase save
         };
         localStorage.setItem("chatbotMessages-v1", JSON.stringify(conversation));
 
@@ -456,9 +463,16 @@ export default function Chatbot() {
             });
           } else {
             // Create new conversation (only if not already saving)
-            saveConversation(messagesToSave).then(conversationId => {
-              if (conversationId) {
-                setCurrentConversationId(conversationId);
+            saveConversation(messagesToSave).then(newConversationId => {
+              if (newConversationId) {
+                setCurrentConversationId(newConversationId);
+                // Update localStorage with the new conversationId
+                const storedData = localStorage.getItem("chatbotMessages-v1");
+                if (storedData) {
+                  const parsed = JSON.parse(storedData);
+                  parsed.conversationId = newConversationId;
+                  localStorage.setItem("chatbotMessages-v1", JSON.stringify(parsed));
+                }
               }
               isSavingRef.current = false;
             }).catch(() => {
@@ -1044,9 +1058,9 @@ export default function Chatbot() {
                         <div className="bg-muted p-4 rounded-lg mr-2 sm:mr-4 max-w-[80%]">
                           <div className="flex items-center space-x-2">
                             <div className="flex space-x-1">
-                              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
-                              <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce"></div>
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                              <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
                             </div>
                             <span className="text-sm text-muted-foreground">Thinking...</span>
                           </div>

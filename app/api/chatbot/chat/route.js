@@ -297,7 +297,7 @@ Remember: You have access to their real Google Search Console data from the last
 
     // Call OpenAI API
     const completion = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-4-turbo", // Conversational AI - GPT-4-turbo maintains quality at lower cost
       messages: messagesArray,
       max_tokens: 1000,
       temperature: 0.7,

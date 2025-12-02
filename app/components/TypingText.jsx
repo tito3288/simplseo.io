@@ -14,12 +14,23 @@ export default function TypingText({
   const [isComplete, setIsComplete] = useState(false);
   const indexRef = useRef(0);
   const timeoutRef = useRef(null);
+  const onCompleteRef = useRef(onComplete);
+
+  // Keep onComplete ref updated without triggering effect re-runs
+  useEffect(() => {
+    onCompleteRef.current = onComplete;
+  }, [onComplete]);
 
   useEffect(() => {
-    // Reset when text changes
+    // Reset state for new text
     setDisplayedText("");
     setIsComplete(false);
     indexRef.current = 0;
+
+    // Clear any existing timeout
+    if (timeoutRef.current) {
+      clearTimeout(timeoutRef.current);
+    }
 
     const typeText = () => {
       if (indexRef.current < text.length) {
@@ -28,8 +39,8 @@ export default function TypingText({
         timeoutRef.current = setTimeout(typeText, speed);
       } else {
         setIsComplete(true);
-        if (onComplete) {
-          onComplete();
+        if (onCompleteRef.current) {
+          onCompleteRef.current();
         }
       }
     };
@@ -42,7 +53,7 @@ export default function TypingText({
         clearTimeout(timeoutRef.current);
       }
     };
-  }, [text, speed, onComplete]);
+  }, [text, speed]); // onComplete removed - accessed via ref
 
   if (isMarkdown) {
     return (

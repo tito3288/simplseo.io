@@ -28,7 +28,7 @@ Guidelines:
 `.trim();
 
     const response = await openai.chat.completions.create({
-      model: "gpt-4",
+      model: "gpt-3.5-turbo", // Simple rewrite task - GPT-3.5-turbo is sufficient and much cheaper
       messages: [{ role: "user", content: prompt }],
     });
 

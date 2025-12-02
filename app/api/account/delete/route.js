@@ -27,7 +27,28 @@ export async function POST(req) {
       console.log("⚠️ Error deleting onboarding:", error.message);
     }
 
-    // 2. Delete user profile data
+    // 2. Delete feedbackPrompt subcollection (must be done before deleting user document)
+    try {
+      const feedbackPromptSnapshot = await db
+        .collection("users")
+        .doc(userId)
+        .collection("feedbackPrompt")
+        .get();
+      
+      if (feedbackPromptSnapshot.docs.length > 0) {
+        const batchFeedback = db.batch();
+        feedbackPromptSnapshot.docs.forEach((doc) => {
+          batchFeedback.delete(doc.ref);
+          deleteCount++;
+        });
+        await batchFeedback.commit();
+        console.log(`✅ Deleted ${feedbackPromptSnapshot.docs.length} feedbackPrompt documents`);
+      }
+    } catch (error) {
+      console.log("⚠️ Error deleting feedbackPrompt:", error.message);
+    }
+
+    // 3. Delete user profile data
     try {
       const userRef = db.collection("users").doc(userId);
       const userSnap = await userRef.get();
@@ -40,7 +61,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting user profile:", error.message);
     }
 
-    // 3. Delete implementedSeoTips
+    // 4. Delete implementedSeoTips
     try {
       const implementedSeoTipsSnapshot = await db
         .collection("implementedSeoTips")
@@ -60,7 +81,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting implementedSeoTips:", error.message);
     }
 
-    // 4. Delete intentMismatches (both structures)
+    // 5. Delete intentMismatches (both structures)
     try {
       // New structure: intentMismatches/{userId}/analyses
       try {
@@ -106,7 +127,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting intentMismatches:", error.message);
     }
 
-    // 5. Delete internalLinkSuggestions
+    // 6. Delete internalLinkSuggestions
     try {
       const internalLinkSnapshot = await db
         .collection("internalLinkSuggestions")
@@ -126,7 +147,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting internalLinkSuggestions:", error.message);
     }
 
-    // 6. Delete contentAuditResults
+    // 7. Delete contentAuditResults
     try {
       const contentAuditSnapshot = await db
         .collection("contentAuditResults")
@@ -146,7 +167,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting contentAuditResults:", error.message);
     }
 
-    // 7. Delete aiSuggestions
+    // 8. Delete aiSuggestions
     try {
       const aiSuggestionsSnapshot = await db
         .collection("aiSuggestions")
@@ -166,7 +187,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting aiSuggestions:", error.message);
     }
 
-    // 8. Delete pageContentCache (both structures)
+    // 9. Delete pageContentCache (both structures)
     try {
       // New structure: pageContentCache/{userId}/pages
       try {
@@ -212,7 +233,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting pageContentCache:", error.message);
     }
 
-    // 9. Delete siteCrawls
+    // 10. Delete siteCrawls
     try {
       const siteCrawlsRef = db.collection("siteCrawls").doc(userId);
       const siteCrawlsSnap = await siteCrawlsRef.get();
@@ -225,7 +246,7 @@ export async function POST(req) {
       console.error("❌ Error deleting siteCrawls:", error.message);
     }
 
-    // 10. Delete focusKeywords
+    // 11. Delete focusKeywords
     try {
       const focusKeywordsRef = db.collection("focusKeywords").doc(userId);
       const focusKeywordsSnap = await focusKeywordsRef.get();
@@ -238,7 +259,7 @@ export async function POST(req) {
       console.error("❌ Error deleting focusKeywords:", error.message);
     }
 
-    // 11. Delete conversations
+    // 12. Delete conversations
     try {
       const conversationsSnapshot = await db
         .collection("conversations")
@@ -258,7 +279,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting conversations:", error.message);
     }
 
-    // 12. Delete seoMetaTitles (both structures)
+    // 13. Delete seoMetaTitles (both structures)
     try {
       // New structure: seoMetaTitles/{userId}/titles
       try {
@@ -304,7 +325,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting seoMetaTitles:", error.message);
     }
 
-    // 13. Delete seoMetaDescriptions (both structures)
+    // 14. Delete seoMetaDescriptions (both structures)
     try {
       // New structure: seoMetaDescriptions/{userId}/descriptions
       try {
@@ -350,7 +371,7 @@ export async function POST(req) {
       console.log("⚠️ Error deleting seoMetaDescriptions:", error.message);
     }
 
-    // 14. Delete genericKeywordsCache
+    // 15. Delete genericKeywordsCache
     try {
       const genericKeywordsSnapshot = await db
         .collection("genericKeywordsCache")
@@ -370,7 +391,7 @@ export async function POST(req) {
       console.error("❌ Error deleting genericKeywordsCache:", error.message);
     }
 
-    // 15. Delete contentKeywordEdits
+    // 16. Delete contentKeywordEdits
     try {
       const contentKeywordEditsRef = db.collection("contentKeywordEdits").doc(userId);
       const contentKeywordEditsSnap = await contentKeywordEditsRef.get();

@@ -537,7 +537,7 @@ ${renderedPageSummaries}
   ];
 
   const completion = await openai.chat.completions.create({
-    model: "gpt-4",
+    model: "gpt-4-turbo", // Conversational AI - GPT-4-turbo maintains quality at lower cost
     messages: messagesArray,
   });
 

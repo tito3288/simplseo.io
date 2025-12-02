@@ -402,39 +402,21 @@ export default function LowCtrPage() {
           }
         }
         
-        // If we have an assigned keyword, use it (even if it doesn't appear in GSC data)
-        if (assignedKeyword) {
-          const matchingKeywords = [assignedKeyword];
-          const additionalKeywords = (page.keywords || []).filter((keyword) => {
-            if (!keyword) return false;
-            return keyword.toLowerCase() !== assignedKeyword.toLowerCase();
-          });
-
-          return {
-            ...page,
-            focusKeyword: assignedKeyword,
-            matchingKeywords,
-            additionalKeywords,
-          };
-        }
-        
-        // Fallback: find keywords from GSC data that match focus keywords
-        const matchingKeywords = (page.keywords || []).filter((keyword) =>
-          focusKeywordSet.has(keyword.toLowerCase())
-        );
-        if (!matchingKeywords.length) {
+        // Only include pages with assigned keywords - no fallback to GSC matching
+        // This ensures only pages where the user explicitly selected a focus keyword appear
+        if (!assignedKeyword) {
           return null;
         }
 
-        const focusKeyword = matchingKeywords[0];
+        const matchingKeywords = [assignedKeyword];
         const additionalKeywords = (page.keywords || []).filter((keyword) => {
           if (!keyword) return false;
-          return !matchingKeywords.includes(keyword);
+          return keyword.toLowerCase() !== assignedKeyword.toLowerCase();
         });
 
         return {
           ...page,
-          focusKeyword,
+          focusKeyword: assignedKeyword,
           matchingKeywords,
           additionalKeywords,
         };

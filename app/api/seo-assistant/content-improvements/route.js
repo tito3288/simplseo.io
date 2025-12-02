@@ -19,7 +19,7 @@ export async function POST(req) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        model: "gpt-4",
+        model: "gpt-4-turbo", // Complex analysis - GPT-4-turbo maintains quality at lower cost
         messages: [
           {
             role: "system",

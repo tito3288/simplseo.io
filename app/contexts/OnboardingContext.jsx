@@ -9,6 +9,7 @@ const initialData = {
   websiteUrl: "",
   businessType: "",
   businessLocation: "",
+  servesMultipleCities: false, // Track if business serves multiple cities
   cmsPlatform: "",
   hasGSC: false,
   gscProperty: "",
