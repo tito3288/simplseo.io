@@ -177,7 +177,7 @@ export default function ContactPage() {
                   </p>
                   
                   <p className="text-lg font-medium mt-6">
-                    Tell us what&apos;s on your mind
+                    Tell us what&apos;s on your mind 🧠
                   </p>
                 </div>
               </div>

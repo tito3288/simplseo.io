@@ -309,7 +309,7 @@ const FocusKeywordSelector = ({
                     size="sm"
                     onClick={() => handleSuggestKeywords(pageUrl)}
                     disabled={isLoading || !userId}
-                    className="flex items-center gap-2 bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-100 border border-purple-200 dark:border-purple-800/50 hover:bg-purple-200 dark:hover:bg-purple-900/50 hover:border-purple-300 dark:hover:border-purple-700/50 disabled:bg-purple-100/50 dark:disabled:bg-purple-900/20 disabled:text-purple-400 dark:disabled:text-purple-500 disabled:border-purple-200/50 dark:disabled:border-purple-800/30 shadow-xs"
+                    className="flex items-center gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white border-0 disabled:opacity-50 disabled:cursor-not-allowed shadow-md"
                   >
                     {isLoading ? (
                       <>

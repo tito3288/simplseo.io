@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check } from "lucide-react";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
@@ -54,6 +54,15 @@ export default function GenericKeywordsPage() {
   const [markAsCreatedDialog, setMarkAsCreatedDialog] = useState({ open: false, opportunity: null });
   const [markAsCreatedUrl, setMarkAsCreatedUrl] = useState("");
   const [isMarkingAsCreated, setIsMarkingAsCreated] = useState(false);
+  
+  // Content Outline Modal State
+  const [contentOutlineDialog, setContentOutlineDialog] = useState({ open: false, opportunity: null });
+  const [contentOutline, setContentOutline] = useState(null);
+  const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
+  const [copiedField, setCopiedField] = useState(null);
+  
+  // Cache for content outlines (persists during session)
+  const [outlineCache, setOutlineCache] = useState(new Map());
 
   // Helper function to get display name for page types
   const getPageTypeDisplayName = (pageType) => {
@@ -332,9 +341,109 @@ export default function GenericKeywordsPage() {
   };
 
   const getDifficultyColor = (difficulty) => {
-    if (difficulty === 'Easy') return "bg-green-100 text-green-800";
-    if (difficulty === 'Medium') return "bg-yellow-100 text-yellow-800";
-    return "bg-red-100 text-red-800";
+    if (difficulty === 'Easy') return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+    if (difficulty === 'Medium') return "bg-yellow-100 text-yellow-800 dark:bg-yellow-900/30 dark:text-yellow-300";
+    return "bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300";
+  };
+
+  const getIntentColor = (intent) => {
+    switch (intent) {
+      case 'Transactional':
+        return "bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300";
+      case 'Commercial':
+        return "bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300";
+      case 'Informational':
+        return "bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300";
+      case 'Navigational':
+        return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+      default:
+        return "bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300";
+    }
+  };
+
+  const getIntentIcon = (intent) => {
+    switch (intent) {
+      case 'Transactional':
+        return "🛒";
+      case 'Commercial':
+        return "🔍";
+      case 'Informational':
+        return "📚";
+      case 'Navigational':
+        return "🧭";
+      default:
+        return "🔍";
+    }
+  };
+
+  const getBuyerReadinessColor = (readiness) => {
+    switch (readiness) {
+      case 'High':
+        return "text-green-600 dark:text-green-400";
+      case 'Medium':
+        return "text-yellow-600 dark:text-yellow-400";
+      case 'Low':
+        return "text-red-600 dark:text-red-400";
+      default:
+        return "text-gray-600 dark:text-gray-400";
+    }
+  };
+
+  const generateContentOutline = async (opportunity, forceRegenerate = false) => {
+    const cacheKey = opportunity.keyword.toLowerCase();
+    
+    // Check cache first (unless forcing regeneration)
+    if (!forceRegenerate && outlineCache.has(cacheKey)) {
+      setContentOutline(outlineCache.get(cacheKey));
+      return;
+    }
+    
+    setIsGeneratingOutline(true);
+    setContentOutline(null);
+    
+    try {
+      const response = await fetch("/api/generic-keywords/content-outline", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          keyword: opportunity.keyword,
+          pageType: opportunity.pageType?.type || "Service Page",
+          businessType: data?.businessType,
+          businessLocation: data?.businessLocation,
+          businessName: data?.businessName,
+          websiteUrl: data?.websiteUrl,
+        }),
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        setContentOutline(result.outline);
+        
+        // Cache the result
+        setOutlineCache(prev => {
+          const newCache = new Map(prev);
+          newCache.set(cacheKey, result.outline);
+          return newCache;
+        });
+      } else {
+        toast.error("Failed to generate content outline");
+      }
+    } catch (error) {
+      console.error("Error generating outline:", error);
+      toast.error("Failed to generate content outline");
+    } finally {
+      setIsGeneratingOutline(false);
+    }
+  };
+
+  const copyToClipboard = async (text, field) => {
+    try {
+      await navigator.clipboard.writeText(text);
+      setCopiedField(field);
+      setTimeout(() => setCopiedField(null), 2000);
+    } catch (error) {
+      console.error("Failed to copy:", error);
+    }
   };
 
   const getVolumeColor = (volume) => {
@@ -485,13 +594,14 @@ export default function GenericKeywordsPage() {
     <Card
       key={key}
       className={cn(
-        "hover:shadow-md transition-shadow border-l-4 border-l-blue-200 dark:border-l-blue-800",
-        isFeatured && "border-l-primary/60 bg-primary/5 dark:bg-primary/10"
+        "hover:shadow-md transition-shadow",
+        isFeatured && "bg-primary/5 dark:bg-primary/10"
       )}
     >
       <CardContent className="pt-6">
         <div className="flex flex-col gap-4">
-          <div className="flex items-start justify-between">
+          {/* Header with keyword and badges */}
+          <div className="flex items-start justify-between flex-wrap gap-3">
             <div className="flex items-start gap-3">
               {getOpportunityIcon(opportunity.category)}
               <div>
@@ -504,11 +614,20 @@ export default function GenericKeywordsPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 justify-end">
+              {/* Intent Badge */}
+              {opportunity.intent?.category && (
+                <Badge className={getIntentColor(opportunity.intent.category)}>
+                  {getIntentIcon(opportunity.intent.category)} {opportunity.intent.category}
+                </Badge>
+              )}
+              {/* Difficulty Score Badge */}
+              {opportunity.difficultyAnalysis?.score && (
+                <Badge className={getDifficultyColor(opportunity.difficultyAnalysis.label)}>
+                  Difficulty: {opportunity.difficultyAnalysis.score}/10
+                </Badge>
+              )}
               <Badge className={getPriorityColor(opportunity.priority)}>
                 Priority {opportunity.priority}
-              </Badge>
-              <Badge className={getDifficultyColor(opportunity.difficulty)}>
-                {opportunity.difficulty}
               </Badge>
               <Badge className={getVolumeColor(opportunity.searchVolume)}>
                 {opportunity.searchVolume} Volume
@@ -516,6 +635,108 @@ export default function GenericKeywordsPage() {
             </div>
           </div>
 
+          {/* Intent & Buyer Readiness Info */}
+          {opportunity.intent && (
+            <div className="bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 p-4 rounded-lg border border-blue-100 dark:border-blue-800/30">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-blue-100 dark:bg-blue-900/40 rounded-lg">
+                  <Search className="w-4 h-4 text-blue-600 dark:text-blue-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-2 mb-1">
+                    <p className="text-sm font-semibold text-blue-800 dark:text-blue-200">
+                      Search Intent: {opportunity.intent.category}
+                    </p>
+                    {opportunity.intent.buyerReadiness && (
+                      <span className={cn("text-xs font-medium", getBuyerReadinessColor(opportunity.intent.buyerReadiness))}>
+                        • {opportunity.intent.buyerReadiness} Buyer Readiness
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-sm text-blue-700 dark:text-blue-300">
+                    {opportunity.intent.explanation}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Why This Keyword Matters */}
+          {opportunity.valueExplanation && (
+            <div className="bg-gradient-to-r from-green-50 to-emerald-50 dark:from-green-900/20 dark:to-emerald-900/20 p-4 rounded-lg border border-green-100 dark:border-green-800/30">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-green-100 dark:bg-green-900/40 rounded-lg">
+                  <Lightbulb className="w-4 h-4 text-green-600 dark:text-green-400" />
+                </div>
+                <div>
+                  <p className="text-sm font-semibold text-green-800 dark:text-green-200 mb-1">
+                    Why This Keyword Matters
+                  </p>
+                  <p className="text-sm text-green-700 dark:text-green-300">
+                    {opportunity.valueExplanation}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Page Type Recommendation */}
+          {opportunity.pageType && (
+            <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-lg border border-purple-100 dark:border-purple-800/30">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-purple-100 dark:bg-purple-900/40 rounded-lg">
+                  <FileText className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-semibold text-purple-800 dark:text-purple-200 mb-1">
+                    Recommended: Create a {opportunity.pageType.type}
+                  </p>
+                  <p className="text-sm text-purple-700 dark:text-purple-300 mb-2">
+                    {opportunity.pageType.reason}
+                  </p>
+                  {opportunity.pageType.suggestedUrl && (
+                    <p className="text-xs text-purple-600 dark:text-purple-400 font-mono bg-purple-100 dark:bg-purple-900/40 px-2 py-1 rounded inline-block">
+                      Suggested URL: {opportunity.pageType.suggestedUrl}
+                    </p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Difficulty Analysis */}
+          {opportunity.difficultyAnalysis && (
+            <div className="bg-gradient-to-r from-orange-50 to-amber-50 dark:from-orange-900/20 dark:to-amber-900/20 p-4 rounded-lg border border-orange-100 dark:border-orange-800/30">
+              <div className="flex items-start gap-3">
+                <div className="p-2 bg-orange-100 dark:bg-orange-900/40 rounded-lg">
+                  <TrendingUp className="w-4 h-4 text-orange-600 dark:text-orange-400" />
+                </div>
+                <div className="flex-1">
+                  <div className="flex items-center gap-3 mb-1">
+                    <p className="text-sm font-semibold text-orange-800 dark:text-orange-200">
+                      SEO Difficulty: {opportunity.difficultyAnalysis.label} ({opportunity.difficultyAnalysis.score}/10)
+                    </p>
+                    {/* Visual difficulty bar */}
+                    <div className="flex-1 max-w-32 h-2 bg-orange-200 dark:bg-orange-900/40 rounded-full overflow-hidden">
+                      <div 
+                        className={cn(
+                          "h-full rounded-full transition-all",
+                          opportunity.difficultyAnalysis.score <= 3 ? "bg-green-500" :
+                          opportunity.difficultyAnalysis.score <= 6 ? "bg-yellow-500" : "bg-red-500"
+                        )}
+                        style={{ width: `${opportunity.difficultyAnalysis.score * 10}%` }}
+                      />
+                    </div>
+                  </div>
+                  <p className="text-sm text-orange-700 dark:text-orange-300">
+                    {opportunity.difficultyAnalysis.explanation}
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Content Strategy */}
           {opportunity.contentIdea && (
             <div className="bg-blue-50 dark:bg-blue-900/20 p-4 rounded-lg">
               <div className="flex items-start gap-2">
@@ -532,43 +753,51 @@ export default function GenericKeywordsPage() {
             </div>
           )}
 
+          {/* Recommended Actions */}
           {opportunity.actionItems?.length > 0 && (
-            <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
-              <div className="flex items-start gap-2">
-                <Wrench className="w-4 h-4 text-purple-600 dark:text-purple-400 mt-0.5 flex-shrink-0" />
-                <div>
-                  <p className="text-sm font-medium text-purple-700 dark:text-purple-400 mb-2">
-                    Recommended Actions
-                  </p>
-                  <ul className="text-sm text-foreground space-y-1">
+            <Collapsible>
+              <CollapsibleTrigger asChild>
+                <Button variant="ghost" size="sm" className="w-full justify-between">
+                  <div className="flex items-center gap-2">
+                    <Wrench className="w-4 h-4 text-purple-600 dark:text-purple-400" />
+                    <span className="text-sm font-medium">Recommended Actions ({opportunity.actionItems.length})</span>
+                  </div>
+                  <ChevronDown className="w-4 h-4" />
+                </Button>
+              </CollapsibleTrigger>
+              <CollapsibleContent>
+                <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg mt-2">
+                  <ul className="text-sm text-foreground space-y-2">
                     {opportunity.actionItems.map((action, idx) => (
                       <li key={idx} className="flex items-start gap-2">
-                        <span className="text-purple-600 dark:text-purple-400 mt-0.5">•</span>
+                        <span className="text-purple-600 dark:text-purple-400 mt-0.5 font-bold">{idx + 1}.</span>
                         <span>{action}</span>
                       </li>
                     ))}
                   </ul>
                 </div>
-              </div>
-            </div>
+              </CollapsibleContent>
+            </Collapsible>
           )}
 
-          <div className="flex flex-wrap items-center gap-4 text-sm text-muted-foreground">
-            <span className="font-medium text-foreground">
-              {opportunity.potential} potential
-            </span>
-            <span>•</span>
-            <span>Difficulty: {opportunity.difficulty}</span>
-            <span>•</span>
-            <span>
-              Suggested for:{" "}
-              {categoryLabels[opportunity.category] || "Additional"}
-            </span>
-          </div>
+          {/* Action Buttons */}
+          <div className="pt-4 border-t border-border flex flex-wrap gap-2">
+            {/* Generate Content Outline Button */}
+            <Button
+              variant="default"
+              size="sm"
+              onClick={() => {
+                setContentOutlineDialog({ open: true, opportunity });
+                generateContentOutline(opportunity);
+              }}
+              className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+            >
+              <Sparkles className="w-4 h-4" />
+              Generate Content Outline
+            </Button>
 
-          {/* Mark as Created Button */}
-          {!createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase()) && (
-            <div className="pt-4 border-t border-border">
+            {/* Mark as Created Button */}
+            {!createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase()) ? (
               <Button
                 variant="outline"
                 size="sm"
@@ -576,23 +805,18 @@ export default function GenericKeywordsPage() {
                   setMarkAsCreatedDialog({ open: true, opportunity });
                   setMarkAsCreatedUrl("");
                 }}
-                className="w-full gap-2"
+                className="gap-2"
               >
                 <CheckCircle className="w-4 h-4" />
                 Mark as Created
               </Button>
-            </div>
-          )}
-
-          {/* Show if already created */}
-          {createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase()) && (
-            <div className="pt-4 border-t border-border">
-              <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                <CheckCircle className="w-4 h-4 text-green-600" />
-                <span>Marked as created</span>
+            ) : (
+              <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 px-3 py-1.5 bg-green-50 dark:bg-green-900/20 rounded-md">
+                <CheckCircle className="w-4 h-4" />
+                <span>Created</span>
               </div>
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </CardContent>
     </Card>
@@ -952,6 +1176,273 @@ export default function GenericKeywordsPage() {
           </div>
         </>
       )}
+
+      {/* Content Outline Dialog */}
+      <Dialog open={contentOutlineDialog.open} onOpenChange={(open) => {
+        if (!open) {
+          setContentOutlineDialog({ open: false, opportunity: null });
+          setContentOutline(null);
+        }
+      }}>
+        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Sparkles className="w-5 h-5 text-purple-600" />
+              Content Outline for "{contentOutlineDialog.opportunity?.keyword}"
+            </DialogTitle>
+            <DialogDescription>
+              Use this AI-generated outline to create a <span className="font-bold">New Page</span> on your website that is SEO-optimized.
+            </DialogDescription>
+          </DialogHeader>
+          
+          {isGeneratingOutline ? (
+            <div className="flex flex-col items-center justify-center py-12">
+              <Loader2 className="w-8 h-8 animate-spin text-purple-600 mb-4" />
+              <p className="text-muted-foreground">Generating your content outline...</p>
+              <p className="text-xs text-muted-foreground mt-2">This may take a few seconds</p>
+            </div>
+          ) : contentOutline ? (
+            <div className="space-y-6 py-4">
+              {/* Cache indicator */}
+              {outlineCache.has(contentOutlineDialog.opportunity?.keyword?.toLowerCase()) && (
+                <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg">
+                  <Check className="w-3 h-3 text-green-500" />
+                  <span>Loaded from cache • Click "Regenerate" for a fresh outline</span>
+                </div>
+              )}
+              {/* H1 Title */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold flex items-center justify-between">
+                  H1 (Main Title)
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(contentOutline.h1, 'h1')}
+                    className="h-6 px-2"
+                  >
+                    {copiedField === 'h1' ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                </Label>
+                <div className="p-3 bg-purple-50 dark:bg-purple-900/20 rounded-lg border border-purple-200 dark:border-purple-800">
+                  <p className="font-semibold text-purple-900 dark:text-purple-100">{contentOutline.h1}</p>
+                </div>
+              </div>
+
+              {/* Meta Title */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold flex items-center justify-between">
+                  Meta Title (60 chars max)
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(contentOutline.metaTitle, 'metaTitle')}
+                    className="h-6 px-2"
+                  >
+                    {copiedField === 'metaTitle' ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                </Label>
+                <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                  <p className="text-blue-900 dark:text-blue-100">{contentOutline.metaTitle}</p>
+                  <p className="text-xs text-blue-600 dark:text-blue-400 mt-1">
+                    {contentOutline.metaTitle?.length || 0}/60 characters
+                  </p>
+                </div>
+              </div>
+
+              {/* Meta Description */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold flex items-center justify-between">
+                  Meta Description (155 chars max)
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(contentOutline.metaDescription, 'metaDescription')}
+                    className="h-6 px-2"
+                  >
+                    {copiedField === 'metaDescription' ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                </Label>
+                <div className="p-3 bg-green-50 dark:bg-green-900/20 rounded-lg border border-green-200 dark:border-green-800">
+                  <p className="text-green-900 dark:text-green-100">{contentOutline.metaDescription}</p>
+                  <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                    {contentOutline.metaDescription?.length || 0}/155 characters
+                  </p>
+                </div>
+              </div>
+
+              {/* Content Sections */}
+              <div className="space-y-4">
+                <Label className="text-sm font-semibold">Content Sections</Label>
+                {contentOutline.sections?.map((section, idx) => (
+                  <div key={idx} className="p-4 bg-muted/50 rounded-lg border">
+                    <div className="flex items-start justify-between mb-2">
+                      <h4 className="font-semibold text-foreground">
+                        H2: {section.h2}
+                      </h4>
+                      {section.ctaPlacement && (
+                        <Badge variant="outline" className="text-xs bg-orange-50 text-orange-700 border-orange-200">
+                          Add CTA Here
+                        </Badge>
+                      )}
+                    </div>
+                    <p className="text-sm text-muted-foreground mb-2">{section.description}</p>
+                    {section.h3s?.length > 0 && (
+                      <div className="mt-2 pl-4 border-l-2 border-primary/30">
+                        <p className="text-xs font-medium text-muted-foreground mb-1">Subheadings (H3):</p>
+                        <ul className="text-sm space-y-1">
+                          {section.h3s.map((h3, h3Idx) => (
+                            <li key={h3Idx} className="text-foreground">• {h3}</li>
+                          ))}
+                        </ul>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+
+              {/* Schema & Technical SEO */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Schema Markup */}
+                {contentOutline.schema?.length > 0 && (
+                  <div className="p-4 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg border border-yellow-200 dark:border-yellow-800">
+                    <Label className="text-sm font-semibold text-yellow-800 dark:text-yellow-200 mb-2 block">
+                      📋 Recommended Schema Markup
+                    </Label>
+                    <div className="flex flex-wrap gap-2">
+                      {contentOutline.schema.map((schema, idx) => (
+                        <Badge key={idx} variant="outline" className="bg-yellow-100 dark:bg-yellow-900/40 text-yellow-800 dark:text-yellow-200">
+                          {schema}
+                        </Badge>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Word Count */}
+                {contentOutline.wordCount && (
+                  <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
+                    <Label className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 mb-2 block">
+                      📝 Recommended Word Count
+                    </Label>
+                    <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">{contentOutline.wordCount}</p>
+                  </div>
+                )}
+              </div>
+
+              {/* Internal Links */}
+              {contentOutline.internalLinks?.length > 0 && (
+                <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
+                  <Label className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 mb-2 block">
+                    🔗 Internal Linking Suggestions
+                  </Label>
+                  <ul className="text-sm space-y-1">
+                    {contentOutline.internalLinks.map((link, idx) => (
+                      <li key={idx} className="text-cyan-700 dark:text-cyan-300">• {link}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              {/* Additional Tips */}
+              {contentOutline.additionalTips?.length > 0 && (
+                <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
+                  <Label className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-2 block">
+                    💡 Pro Tips
+                  </Label>
+                  <ul className="text-sm space-y-2">
+                    {contentOutline.additionalTips.map((tip, idx) => (
+                      <li key={idx} className="text-emerald-700 dark:text-emerald-300 flex items-start gap-2">
+                        <span className="text-emerald-600">✓</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="py-8 text-center text-muted-foreground">
+              <p>Failed to generate outline. Please try again.</p>
+            </div>
+          )}
+
+          <DialogFooter className="flex-col sm:flex-row gap-2">
+            <Button
+              variant="outline"
+              onClick={() => {
+                setContentOutlineDialog({ open: false, opportunity: null });
+                setContentOutline(null);
+              }}
+            >
+              Close
+            </Button>
+            {contentOutline && (
+              <>
+                <Button
+                  variant="outline"
+                  onClick={() => generateContentOutline(contentOutlineDialog.opportunity, true)}
+                  disabled={isGeneratingOutline}
+                  className="gap-2"
+                >
+                  {isGeneratingOutline ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Regenerating...
+                    </>
+                  ) : (
+                    <>
+                      <Sparkles className="w-4 h-4" />
+                      Regenerate
+                    </>
+                  )}
+                </Button>
+                <Button
+                  onClick={() => {
+                    // Copy entire outline as formatted text
+                    const outlineText = `
+# ${contentOutline.h1}
+
+**Meta Title:** ${contentOutline.metaTitle}
+**Meta Description:** ${contentOutline.metaDescription}
+
+## Content Sections:
+${contentOutline.sections?.map(s => `
+### ${s.h2}
+${s.description}
+${s.h3s?.length ? `\nSubheadings:\n${s.h3s.map(h3 => `- ${h3}`).join('\n')}` : ''}
+${s.ctaPlacement ? '\n[Add CTA Here]' : ''}
+`).join('\n')}
+
+**Schema Markup:** ${contentOutline.schema?.join(', ')}
+**Word Count:** ${contentOutline.wordCount}
+
+**Internal Links:**
+${contentOutline.internalLinks?.map(l => `- ${l}`).join('\n')}
+
+**Tips:**
+${contentOutline.additionalTips?.map(t => `- ${t}`).join('\n')}
+`.trim();
+                    copyToClipboard(outlineText, 'fullOutline');
+                  }}
+                  className="gap-2"
+                >
+                  {copiedField === 'fullOutline' ? (
+                    <>
+                      <Check className="w-4 h-4" />
+                      Copied!
+                    </>
+                  ) : (
+                    <>
+                      <Copy className="w-4 h-4" />
+                      Copy Full Outline
+                    </>
+                  )}
+                </Button>
+              </>
+            )}
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       {/* Mark as Created Dialog */}
       <Dialog open={markAsCreatedDialog.open} onOpenChange={(open) => {

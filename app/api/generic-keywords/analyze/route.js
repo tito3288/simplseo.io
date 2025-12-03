@@ -146,50 +146,111 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
     // 2. Generate AI-powered keyword suggestions
     const aiSuggestions = await generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl);
     
-    // 3. Combine and filter out existing keywords (less aggressive filtering)
+    // 3. Combine and deduplicate keywords (remove duplicates from trending + AI)
     const allSuggestions = [...trendingKeywords, ...aiSuggestions];
-    const filteredSuggestions = allSuggestions.filter(suggestion => {
+    
+    // Deduplicate: keep first occurrence of each keyword
+    const seenKeywords = new Set();
+    const uniqueSuggestions = allSuggestions.filter(suggestion => {
+      const keywordLower = suggestion.keyword.toLowerCase().trim();
+      if (seenKeywords.has(keywordLower)) {
+        return false; // Skip duplicate
+      }
+      seenKeywords.add(keywordLower);
+      return true;
+    });
+    
+    console.log(`🔍 Removed ${allSuggestions.length - uniqueSuggestions.length} duplicate keywords`);
+    
+    // Filter out keywords they already rank for
+    const filteredSuggestions = uniqueSuggestions.filter(suggestion => {
       const suggestionLower = suggestion.keyword.toLowerCase();
+      const suggestionWords = suggestionLower.split(' ').filter(w => w.length > 2);
+      
       return !existingKeywords.some(existing => {
         const existingLower = existing.toLowerCase();
-        // Only filter if it's an exact match or very close match
-        return existingLower === suggestionLower || 
-               (existingLower.length > 10 && suggestionLower.includes(existingLower)) ||
-               (suggestionLower.length > 10 && existingLower.includes(suggestionLower));
+        
+        // Exact match - definitely filter out
+        if (existingLower === suggestionLower) return true;
+        
+        // If the existing keyword is a subset of the suggestion (e.g., "dentist" in "dentist independence")
+        // Only filter if it's a very close match (80%+ word overlap)
+        if (suggestionWords.length >= 2) {
+          const existingWords = existingLower.split(' ').filter(w => w.length > 2);
+          const matchingWords = suggestionWords.filter(w => existingWords.includes(w));
+          const overlapRatio = matchingWords.length / Math.max(suggestionWords.length, existingWords.length);
+          if (overlapRatio >= 0.8) return true;
+        }
+        
+        return false;
       });
     });
     
-    // If all suggestions were filtered out, use some fallback suggestions
+    console.log(`🔍 Filtered ${uniqueSuggestions.length - filteredSuggestions.length} keywords that user already ranks for`);
+    
+    // Parse location for fallback
+    const locationParts = businessLocation.split(',').map(p => p.trim());
+    const city = locationParts[0] || '';
+    const stateAbbrev = getStateAbbreviation(locationParts[1] || '');
+    
+    // If all suggestions were filtered out, use location-based fallback suggestions
     const finalSuggestions = filteredSuggestions.length > 0 ? filteredSuggestions : [
       {
-        keyword: `${businessType} services`,
-        category: 'service_based',
-        priority: 7,
+        keyword: `${businessType} ${city}`,
+        category: 'location_based',
+        priority: 9,
         searchVolume: "High",
         competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} services`, businessType, businessLocation),
+        contentIdea: generateContentIdea(`${businessType} ${city}`, businessType, businessLocation),
         difficulty: "Medium",
-        potential: "High"
+        potential: "High",
+        intent: "Transactional",
+        intentExplanation: "Users searching with location are ready to contact a business",
+        buyerReadiness: "High",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Local keyword with moderate competition",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Best for capturing local search traffic",
+        valueExplanation: `This keyword targets customers actively looking for ${businessType} in ${city}.`
       },
       {
-        keyword: `best ${businessType} near me`,
+        keyword: `best ${businessType} in ${city}`,
         category: 'location_based',
-        priority: 8,
+        priority: 9,
         searchVolume: "High",
         competition: "High",
-        contentIdea: generateContentIdea(`best ${businessType} near me`, businessType, businessLocation),
+        contentIdea: generateContentIdea(`best ${businessType} in ${city}`, businessType, businessLocation),
         difficulty: "High",
-        potential: "High"
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Users comparing options before choosing",
+        buyerReadiness: "High",
+        difficultyScore: 6,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Competitive but valuable local keyword",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Perfect for 'best' comparison searches",
+        valueExplanation: `Captures customers comparing ${businessType} options in ${city}.`
       },
       {
-        keyword: `${businessType} packages`,
+        keyword: `${businessType} services ${city} ${stateAbbrev}`,
         category: 'service_based',
-        priority: 6,
+        priority: 8,
         searchVolume: "Medium",
         competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} packages`, businessType, businessLocation),
+        contentIdea: generateContentIdea(`${businessType} services ${city}`, businessType, businessLocation),
         difficulty: "Medium",
-        potential: "High"
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Users researching services in their area",
+        buyerReadiness: "Medium",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Standard local service keyword",
+        pageType: "Service Page",
+        pageTypeReason: "Ideal for listing all services with local optimization",
+        valueExplanation: `Helps customers discover your ${businessType} services in ${city}.`
       }
     ];
     
@@ -212,7 +273,24 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
         },
         opportunity: "content_creation",
         difficulty: suggestion.difficulty || "Medium",
-        potential: suggestion.potential || "High"
+        potential: suggestion.potential || "High",
+        // New enhanced fields
+        intent: {
+          category: suggestion.intent || "Commercial",
+          explanation: suggestion.intentExplanation || "This keyword indicates potential customer interest.",
+          buyerReadiness: suggestion.buyerReadiness || "Medium"
+        },
+        difficultyAnalysis: {
+          score: suggestion.difficultyScore || 5,
+          label: suggestion.difficultyLabel || suggestion.difficulty || "Medium",
+          explanation: suggestion.difficultyExplanation || "Moderate competition expected."
+        },
+        pageType: {
+          type: suggestion.pageType || "Service Page",
+          reason: suggestion.pageTypeReason || "This page type is recommended for this keyword.",
+          suggestedUrl: `/${suggestion.keyword.toLowerCase().replace(/\s+/g, '-')}`
+        },
+        valueExplanation: suggestion.valueExplanation || `This keyword can help attract customers searching for ${businessType} services in ${businessLocation}.`
       }))
     );
     
@@ -227,40 +305,52 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
 // Generate trending-style keywords without external API
 async function getGoogleTrendsData(businessType, businessLocation) {
   try {
-    const location = businessLocation.split(',')[0].trim();
+    // Parse location - get city and state separately
+    const locationParts = businessLocation.split(',').map(p => p.trim());
+    const city = locationParts[0] || '';
+    const state = locationParts[1] || '';
+    const stateAbbrev = getStateAbbreviation(state);
     
-    // Generate trending-style keywords based on common patterns
+    // Generate trending-style keywords based on common patterns - MUST include location
     const currentYear = new Date().getFullYear();
     const trendingKeywords = [
       {
-        keyword: `${businessType} ${currentYear}`,
-        category: 'trending_search',
-        priority: 8,
-        searchVolume: "High",
-        competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} ${currentYear}`, businessType, businessLocation),
-        difficulty: "Medium",
-        potential: "High"
-      },
-      {
-        keyword: `${businessType} trends`,
-        category: 'trending_search',
-        priority: 7,
-        searchVolume: "Medium",
-        competition: "Low",
-        contentIdea: generateContentIdea(`${businessType} trends`, businessType, businessLocation),
-        difficulty: "Low",
-        potential: "High"
-      },
-      {
-        keyword: `best ${businessType} ${location}`,
+        keyword: `best ${businessType} in ${city}`,
         category: 'trending_search',
         priority: 9,
         searchVolume: "High",
         competition: "High",
-        contentIdea: generateContentIdea(`best ${businessType} ${location}`, businessType, businessLocation),
+        contentIdea: generateContentIdea(`best ${businessType} in ${city}`, businessType, businessLocation),
         difficulty: "High",
-        potential: "High"
+        potential: "Very High",
+        intent: "Commercial",
+        intentExplanation: "Users are comparing options before making a purchase decision",
+        buyerReadiness: "High",
+        difficultyScore: 6,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Competitive local keyword with high buyer intent",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Best for capturing local search traffic",
+        valueExplanation: `This keyword targets customers actively looking for the best ${businessType} in ${city}.`
+      },
+      {
+        keyword: `${businessType} ${city} ${stateAbbrev}`,
+        category: 'location_based',
+        priority: 9,
+        searchVolume: "High",
+        competition: "Medium",
+        contentIdea: generateContentIdea(`${businessType} ${city} ${stateAbbrev}`, businessType, businessLocation),
+        difficulty: "Medium",
+        potential: "Very High",
+        intent: "Transactional",
+        intentExplanation: "Users searching with location are ready to contact a local business",
+        buyerReadiness: "High",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Local keyword with moderate competition",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Optimized for local search intent",
+        valueExplanation: `This keyword captures customers searching for ${businessType} services in your exact location.`
       },
       {
         keyword: `${businessType} near me`,
@@ -270,17 +360,54 @@ async function getGoogleTrendsData(businessType, businessLocation) {
         competition: "High",
         contentIdea: generateContentIdea(`${businessType} near me`, businessType, businessLocation),
         difficulty: "High",
-        potential: "Very High"
+        potential: "Very High",
+        intent: "Transactional",
+        intentExplanation: "Users with 'near me' searches have immediate intent to find a local business",
+        buyerReadiness: "High",
+        difficultyScore: 7,
+        difficultyLabel: "High",
+        difficultyExplanation: "Very competitive but high-value keyword",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Captures 'near me' search traffic with local optimization",
+        valueExplanation: `This high-volume keyword attracts customers looking for immediate ${businessType} services nearby.`
       },
       {
-        keyword: `${businessType} tips`,
-        category: 'trending_search',
-        priority: 6,
-        searchVolume: "Medium",
+        keyword: `affordable ${businessType} ${city}`,
+        category: 'location_based',
+        priority: 8,
+        searchVolume: "Medium-High",
         competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} tips`, businessType, businessLocation),
+        contentIdea: generateContentIdea(`affordable ${businessType} ${city}`, businessType, businessLocation),
         difficulty: "Medium",
-        potential: "High"
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Price-conscious customers comparing options",
+        buyerReadiness: "Medium",
+        difficultyScore: 4,
+        difficultyLabel: "Easy",
+        difficultyExplanation: "Less competitive than 'best' keywords but still valuable",
+        pageType: "Pricing Page",
+        pageTypeReason: "Perfect for showcasing competitive pricing",
+        valueExplanation: `Attracts budget-conscious customers in ${city} looking for value.`
+      },
+      {
+        keyword: `${businessType} services ${city}`,
+        category: 'service_based',
+        priority: 8,
+        searchVolume: "High",
+        competition: "Medium",
+        contentIdea: generateContentIdea(`${businessType} services ${city}`, businessType, businessLocation),
+        difficulty: "Medium",
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Users researching available services in their area",
+        buyerReadiness: "Medium",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Standard local service keyword",
+        pageType: "Service Page",
+        pageTypeReason: "Ideal for listing all services with local optimization",
+        valueExplanation: `This keyword helps customers discover your ${businessType} services in ${city}.`
       }
     ];
     
@@ -292,32 +419,74 @@ async function getGoogleTrendsData(businessType, businessLocation) {
   }
 }
 
+// Helper function to get state abbreviation
+function getStateAbbreviation(state) {
+  const stateMap = {
+    'alabama': 'AL', 'alaska': 'AK', 'arizona': 'AZ', 'arkansas': 'AR', 'california': 'CA',
+    'colorado': 'CO', 'connecticut': 'CT', 'delaware': 'DE', 'florida': 'FL', 'georgia': 'GA',
+    'hawaii': 'HI', 'idaho': 'ID', 'illinois': 'IL', 'indiana': 'IN', 'iowa': 'IA',
+    'kansas': 'KS', 'kentucky': 'KY', 'louisiana': 'LA', 'maine': 'ME', 'maryland': 'MD',
+    'massachusetts': 'MA', 'michigan': 'MI', 'minnesota': 'MN', 'mississippi': 'MS', 'missouri': 'MO',
+    'montana': 'MT', 'nebraska': 'NE', 'nevada': 'NV', 'new hampshire': 'NH', 'new jersey': 'NJ',
+    'new mexico': 'NM', 'new york': 'NY', 'north carolina': 'NC', 'north dakota': 'ND', 'ohio': 'OH',
+    'oklahoma': 'OK', 'oregon': 'OR', 'pennsylvania': 'PA', 'rhode island': 'RI', 'south carolina': 'SC',
+    'south dakota': 'SD', 'tennessee': 'TN', 'texas': 'TX', 'utah': 'UT', 'vermont': 'VT',
+    'virginia': 'VA', 'washington': 'WA', 'west virginia': 'WV', 'wisconsin': 'WI', 'wyoming': 'WY'
+  };
+  
+  if (!state) return '';
+  
+  // If already abbreviated (2 letters), return as-is
+  if (state.length === 2) return state.toUpperCase();
+  
+  // Look up full state name
+  const abbrev = stateMap[state.toLowerCase()];
+  return abbrev || state;
+}
+
 // Generate AI-powered keyword suggestions
 async function generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl) {
   try {
     console.log("🧠 Generating AI keyword suggestions...");
     
-    const location = businessLocation.split(',')[0].trim();
+    // Parse location - get city and state separately
+    const locationParts = businessLocation.split(',').map(p => p.trim());
+    const city = locationParts[0] || '';
+    const state = locationParts[1] || '';
+    const stateAbbrev = getStateAbbreviation(state);
     
-    const prompt = `Generate 15 highly relevant, searchable keywords for a ${businessType} business in ${location}. 
+    const prompt = `Generate 8 highly relevant, searchable keywords for a ${businessType} business in ${city}, ${stateAbbrev}. 
     
-    IMPORTANT: Only suggest keywords that people actually search for in real life. Avoid made-up or overly specific terms.
+    CRITICAL REQUIREMENTS:
+    1. AT LEAST 6 out of 8 keywords MUST include the location "${city}" or "${stateAbbrev}" in them
+    2. Keywords must be ones people actually search for in Google
+    3. Focus on keywords that will bring LOCAL customers to this business
     
-    Focus on keywords that:
-    1. Service-based: Actual services offered (e.g., "mobile ${businessType}", "${businessType} packages")
-    2. Location-based: Local search terms (e.g., "${businessType} ${location}")
-    3. Problem-solving: Common customer pain points (e.g., "affordable ${businessType}", "quick ${businessType}")
-    4. Comparison: Competitive terms (e.g., "best ${businessType} near me", "top ${businessType} services")
-    5. Long-tail: Specific use cases (e.g., "${businessType} for small business", "${businessType} maintenance")
+    Keyword categories to include:
+    1. Location-based (PRIORITY - at least 4 keywords): "${businessType} ${city}", "best ${businessType} ${city}", "${businessType} near ${city}"
+    2. Service + Location: "${businessType} services ${city}", "professional ${businessType} ${city}"
+    3. Problem-solving + Location: "affordable ${businessType} ${city}", "emergency ${businessType} ${city}"
+    4. Comparison + Location: "top rated ${businessType} ${city}", "best ${businessType} in ${city} ${stateAbbrev}"
     
-    Avoid:
-    - Overly specific or niche terms
-    - Keywords that sound artificial
-    - Terms that are too broad or generic
-    - Made-up industry jargon
+    DO NOT INCLUDE:
+    - Generic keywords without location (like just "${businessType} tips" or "${businessType} 2025")
+    - Made-up or artificial terms
+    - Keywords that are too broad (like just "${businessType}")
+    - Any keyword they might already rank for on their homepage
+    
+    For each keyword, include:
+    - intent: "Transactional" | "Commercial" | "Informational" | "Navigational"
+    - intentExplanation: Brief explanation of why this intent
+    - buyerReadiness: "High" | "Medium" | "Low"
+    - difficultyScore: 1-10 (1=easy, 10=hard)
+    - difficultyLabel: "Easy" | "Medium" | "Hard"
+    - difficultyExplanation: Brief explanation
+    - pageType: "Service Page" | "Local Landing Page" | "Blog Article" | "Pricing Page" | "Comparison Page" | "FAQ Page"
+    - pageTypeReason: Why this page type is recommended
+    - valueExplanation: 1-2 sentences on why this keyword matters for attracting local customers
     
     Return ONLY a valid JSON array with this exact format:
-    [{"keyword": "mobile ${businessType} services", "category": "service_based", "priority": 9, "contentIdea": "Create a dedicated page showcasing mobile services with pricing and booking", "difficulty": "Medium", "potential": "High"}]`;
+    [{"keyword": "${businessType} ${city} ${stateAbbrev}", "category": "location_based", "priority": 9, "contentIdea": "Create a local landing page targeting ${city} customers", "difficulty": "Medium", "potential": "High", "intent": "Transactional", "intentExplanation": "Users searching with location are ready to buy", "buyerReadiness": "High", "difficultyScore": 5, "difficultyLabel": "Medium", "difficultyExplanation": "Local keyword with moderate competition", "pageType": "Local Landing Page", "pageTypeReason": "Best for capturing local search traffic", "valueExplanation": "This keyword targets customers actively looking for ${businessType} in ${city}."}]`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -328,7 +497,7 @@ async function generateAIKeywordSuggestions(businessType, businessLocation, webs
       body: JSON.stringify({
         model: 'gpt-3.5-turbo',
         messages: [{ role: 'user', content: prompt }],
-        max_tokens: 1200,
+        max_tokens: 2500,
         temperature: 0.5
       })
     });
@@ -353,31 +522,96 @@ async function generateAIKeywordSuggestions(businessType, businessLocation, webs
     
   } catch (error) {
     console.error("❌ AI keyword generation error:", error);
-    // Return fallback suggestions if AI fails
+    // Return fallback suggestions with LOCATION if AI fails
+    const locationParts = businessLocation.split(',').map(p => p.trim());
+    const city = locationParts[0] || '';
+    const stateAbbrev = getStateAbbreviation(locationParts[1] || '');
+    
     return [
       {
-        keyword: `${businessType} consultation`,
-        category: 'service_based',
-        priority: 7,
-        contentIdea: `Create a consultation page for ${businessType} services with booking form`,
+        keyword: `${businessType} ${city}`,
+        category: 'location_based',
+        priority: 9,
+        contentIdea: `Create a local landing page for ${businessType} in ${city}`,
         difficulty: "Medium",
-        potential: "High"
+        potential: "High",
+        intent: "Transactional",
+        intentExplanation: "Users searching with location are ready to contact a business",
+        buyerReadiness: "High",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Local keyword with moderate competition",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Best for capturing local search traffic",
+        valueExplanation: `This keyword targets customers actively looking for ${businessType} in ${city}.`
       },
       {
-        keyword: `${businessType} pricing`,
+        keyword: `best ${businessType} in ${city}`,
+        category: 'location_based',
+        priority: 9,
+        contentIdea: `Create a page showcasing why you're the best ${businessType} in ${city}`,
+        difficulty: "Medium",
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Users comparing options before choosing",
+        buyerReadiness: "High",
+        difficultyScore: 6,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Competitive but valuable local keyword",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Perfect for 'best' comparison searches",
+        valueExplanation: `Captures customers comparing ${businessType} options in ${city}.`
+      },
+      {
+        keyword: `${businessType} services ${city} ${stateAbbrev}`,
         category: 'service_based',
         priority: 8,
-        contentIdea: `Develop a pricing page with transparent ${businessType} service costs`,
-        difficulty: "Low",
-        potential: "High"
+        contentIdea: `Create a comprehensive services page for ${city} customers`,
+        difficulty: "Medium",
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Users researching services in their area",
+        buyerReadiness: "Medium",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Standard local service keyword",
+        pageType: "Service Page",
+        pageTypeReason: "Ideal for listing all services with local optimization",
+        valueExplanation: `Helps customers discover your ${businessType} services in ${city}.`
       },
       {
-        keyword: `${businessType} portfolio`,
-        category: 'service_based',
-        priority: 6,
-        contentIdea: `Create a portfolio page showcasing ${businessType} work examples`,
+        keyword: `affordable ${businessType} ${city}`,
+        category: 'problem_solving',
+        priority: 7,
+        contentIdea: `Create a pricing/value page showing your affordable ${businessType} options`,
+        difficulty: "Easy",
+        potential: "High",
+        intent: "Commercial",
+        intentExplanation: "Price-conscious customers looking for value",
+        buyerReadiness: "Medium",
+        difficultyScore: 4,
+        difficultyLabel: "Easy",
+        difficultyExplanation: "Less competitive than 'best' keywords",
+        pageType: "Pricing Page",
+        pageTypeReason: "Perfect for showcasing competitive pricing",
+        valueExplanation: `Attracts budget-conscious customers in ${city}.`
+      },
+      {
+        keyword: `${businessType} near ${city}`,
+        category: 'location_based',
+        priority: 8,
+        contentIdea: `Create a page targeting nearby areas around ${city}`,
         difficulty: "Medium",
-        potential: "Medium"
+        potential: "High",
+        intent: "Transactional",
+        intentExplanation: "Users looking for nearby services",
+        buyerReadiness: "High",
+        difficultyScore: 5,
+        difficultyLabel: "Medium",
+        difficultyExplanation: "Good for capturing 'near' search traffic",
+        pageType: "Local Landing Page",
+        pageTypeReason: "Captures broader geographic searches",
+        valueExplanation: `Expands your reach to customers searching near ${city}.`
       }
     ];
   }
