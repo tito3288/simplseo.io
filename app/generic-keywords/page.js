@@ -1188,7 +1188,7 @@ export default function GenericKeywordsPage() {
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Sparkles className="w-5 h-5 text-purple-600" />
-              Content Outline for "{contentOutlineDialog.opportunity?.keyword}"
+              Content Outline for &quot;{contentOutlineDialog.opportunity?.keyword}&quot;
             </DialogTitle>
             <DialogDescription>
               Use this AI-generated outline to create a <span className="font-bold">New Page</span> on your website that is SEO-optimized.
@@ -1207,7 +1207,7 @@ export default function GenericKeywordsPage() {
               {outlineCache.has(contentOutlineDialog.opportunity?.keyword?.toLowerCase()) && (
                 <div className="flex items-center gap-2 text-xs text-muted-foreground bg-muted/50 px-3 py-2 rounded-lg">
                   <Check className="w-3 h-3 text-green-500" />
-                  <span>Loaded from cache • Click "Regenerate" for a fresh outline</span>
+                  <span>Loaded from cache • Click &quot;Regenerate&quot; for a fresh outline</span>
                 </div>
               )}
               {/* H1 Title */}
