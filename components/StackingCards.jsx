@@ -10,25 +10,27 @@ const stackingCards = [
     titleSubtitle: "(So You Know What to Write)",
     description: "Found a keyword opportunity but not sure what to write? We'll generate a complete content outline for you. Just add your expertise and hit publish. We do the SEO thinking, you do the writing.",
     lightColor: "hsl(260, 30%, 94%)",
-    darkColor: "hsl(260, 25%, 35%)"
+    darkColor: "hsl(260, 25%, 35%)",
+    image: "/6.png",
   },
 
   {
     icon: MessageSquare,
     title: "Your Personal SEO Mentor",
     titleSubtitle: "(Trained Specifically for You)",
-    description: "Ask your SEO mentor anything in plain English. It's trained on YOUR website, so it already understands your business, your pages, and the keywords you care about. No more wasting hours trying to decode SEO jargon on your own. Those days are officially behind you. Every answer is personalized. It explains things simply, helps you write stronger content, and gives you ideas that actually work for your business. Think of it as your own SEO professional available 24/7.",
-
+    description: "Ask your SEO mentor anything in plain English. It’s trained on YOUR website content, so it knows your business and the keywords you care about. No more decoding SEO jargon. Think of it as your own SEO professional available 24/7.",
     lightColor: "hsl(145, 40%, 92%)",
     darkColor: "hsl(160, 30%, 32%)", // Soft sage
+    image: "/2.png",
   },
   {
     icon: Target,
     title: "Track Your Progress",
     titleSubtitle: "(Real Results, Not Just Data)",
-    description: "See your real-time rankings with accurate data straight from Google. Create a page from our suggestions? We'll email you the moment it starts ranking. Plus, see side-by-side comparisons showing how your keywords improved after you implemented our suggestions. Watch your CTR go up, clicks increase, and rankings climb. We'll even tell you exactly what's working and what's not.",
+    description: "See your rankings in real time with accurate data from Google. We notify you the moment a new page starts ranking and show side-by-side progress so you can see what’s improving. Watch clicks rise, rankings climb, and know exactly what’s working and what’s not.",
     lightColor: "hsl(200, 40%, 92%)",
     darkColor: "hsl(210, 30%, 35%)", // Soft steel blue
+    image: "/5.png",
   },
   {
     icon: Search,
@@ -37,6 +39,7 @@ const stackingCards = [
     description: "We'll show you keywords people are searching for that lead to your site even if you don't have a page for them yet. It's like finding money in your couch cushions, but for SEO.",
     lightColor: "hsl(320, 30%, 94%)",
     darkColor: "hsl(330, 25%, 35%)", // Soft dusty rose
+    image: "/1.png",
   },
   {
     icon: TrendingUp,
@@ -45,6 +48,7 @@ const stackingCards = [
     description: "Your page shows up in Google but nobody clicks? We'll tell you exactly why and how to fix it. Usually it's the title we'll help you write better ones that people actually want to click.",
     lightColor: "hsl(45, 50%, 92%)",
     darkColor: "hsl(40, 35%, 32%)", // Soft warm beige
+    image: "/4.png",
   },
 
 
@@ -97,7 +101,7 @@ const StackingCards = () => {
                   {card.titleSubtitle && (
                     <>
                       <br />
-                      <span className="text-2xl md:text-3xl lg:text-4xl">{card.titleSubtitle}</span>
+                      <span className="text-lg md:text-3xl lg:text-4xl">{card.titleSubtitle}</span>
                     </>
                   )}
                 </h3>
@@ -106,9 +110,17 @@ const StackingCards = () => {
                 </p>
               </div>
               <div className="flex-1 flex items-center justify-center">
-                <div className={`w-full max-w-md aspect-video rounded-2xl shadow-inner flex items-center justify-center ${isDarkMode ? 'bg-white/10' : 'bg-background/50'}`}>
-                  <card.icon className={`w-20 h-20 ${isDarkMode ? 'text-white/30' : 'text-foreground/20'}`} />
-                </div>
+                {card.image ? (
+                  <img 
+                    src={card.image} 
+                    alt={card.title}
+                    className="w-full max-w-sm rounded-2xl shadow-lg object-cover"
+                  />
+                ) : (
+                  <div className={`w-full max-w-md aspect-video rounded-2xl shadow-inner flex items-center justify-center ${isDarkMode ? 'bg-white/10' : 'bg-background/50'}`}>
+                    <card.icon className={`w-20 h-20 ${isDarkMode ? 'text-white/30' : 'text-foreground/20'}`} />
+                  </div>
+                )}
               </div>
             </div>
           </div>
