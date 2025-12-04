@@ -15,7 +15,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { toast } from "sonner";
-import { ArrowRight, Loader2, Sun, Moon } from "lucide-react";
+import { ArrowRight, Loader2, Sun, Moon, ArrowLeft } from "lucide-react";
+import Link from "next/link";
 import { auth, db } from "../lib/firebaseConfig";
 import { doc, getDoc } from "firebase/firestore";
 import { signOut } from "firebase/auth";
@@ -223,6 +224,15 @@ const Auth = () => {
       {/* Main Content */}
       <div className="relative z-10 min-h-screen flex flex-col items-center justify-center p-4">
         <div className="w-full max-w-md">
+        {/* Back to Home Link */}
+        <Link 
+          href="/home" 
+          className="inline-flex items-center gap-2 text-muted-foreground hover:text-foreground transition-colors mb-6"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Home
+        </Link>
+        
         <div className="text-center mb-8">
           <div>
             <img

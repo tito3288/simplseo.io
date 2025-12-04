@@ -615,36 +615,64 @@ const OnboardingWizard = () => {
                   <h2 className="text-xl font-semibold">Privacy Policy & Terms</h2>
                 </div>
                 
-                {/* Scrollable Privacy Policy */}
-                <div className="border rounded-lg p-4 max-h-[300px] overflow-y-auto bg-muted/50">
+                {/* Privacy Policy Summary */}
+                <div className="border rounded-lg p-4 max-h-[350px] overflow-y-auto bg-muted/50">
                   <div className="space-y-3 text-sm">
-                    <h3 className="font-semibold text-base">Data Collection for Training Purposes</h3>
-                    <p>
-                      We collect anonymized data to improve our SEO services and train our AI models. 
-                      This includes:
-                    </p>
+                    <h3 className="font-semibold text-base">What We Collect & How We Use Your Data</h3>
+                    
+                    <p className="font-medium mt-3">Account Information:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Meta title and description generation patterns</li>
-                      <li>Successful SEO strategies (anonymized)</li>
-                      <li>Conversation summaries (not full conversations)</li>
+                      <li>Email address and authentication data via Google OAuth</li>
+                      <li>Business name, website URL, and business type</li>
+                      <li>Business location information</li>
                     </ul>
-                    <p className="font-semibold mt-4">Privacy & Security:</p>
+                    
+                    <p className="font-medium mt-3">Google Search Console Data:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>User IDs are hashed using SHA-256</li>
-                      <li>Full URLs are anonymized (only page paths stored)</li>
-                      <li>Business names are not stored in training data</li>
-                      <li>Full conversations are not stored - only summaries</li>
-                      <li>All data collection is server-side only</li>
+                      <li>Keywords, pages, impressions, clicks, CTR, and rankings</li>
+                      <li>Used to provide SEO analysis and recommendations</li>
+                      <li>Read-only access - we cannot modify your GSC data</li>
                     </ul>
-                    <p className="mt-4">
-                      By continuing, you agree to our data collection practices for training and 
-                      service improvement purposes.
-                    </p>
+                    
+                    <p className="font-medium mt-3">AI & Training Data:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Your data is used to train our AI assistant for personalized advice</li>
+                      <li>Data sent to OpenAI for processing AI responses</li>
+                      <li>Anonymized training data (hashed user IDs, no full conversations)</li>
+                    </ul>
+                    
+                    <p className="font-medium mt-3">Privacy & Security:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>User IDs are hashed using SHA-256 encryption</li>
+                      <li>Data encrypted in transit (TLS) and at rest</li>
+                      <li>We do NOT sell your data to third parties</li>
+                      <li>You can delete your account and data at any time</li>
+                    </ul>
+                    
+                    <div className="mt-4 p-3 bg-primary/10 rounded-md border border-primary/20">
+                      <p className="font-semibold text-foreground">Important:</p>
+                      <p className="mt-1">
+                        By continuing, you consent to all data collection and processing described in our 
+                        Privacy Policy. This consent is required to use SimplSEO.
+                      </p>
+                    </div>
                   </div>
                 </div>
                 
+                {/* Link to full policy */}
+                <div className="text-center">
+                  <a 
+                    href="/privacy" 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    className="text-primary hover:underline text-sm font-medium"
+                  >
+                    Read Full Privacy Policy →
+                  </a>
+                </div>
+                
                 {/* Checkbox */}
-                <div className="flex items-start space-x-2 pt-2">
+                <div className="flex items-start space-x-2 pt-2 border-t pt-4">
                   <Checkbox
                     id="privacyPolicy"
                     checked={data.privacyPolicyAccepted || false}
@@ -656,7 +684,9 @@ const OnboardingWizard = () => {
                     htmlFor="privacyPolicy" 
                     className="text-sm cursor-pointer leading-5"
                   >
-                    I have read and agree to the Privacy Policy and data collection terms
+                    <span className="font-medium">I have read, understood, and agree to the </span>
+                    <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>
+                    <span className="font-medium"> and consent to the collection and processing of my data as described therein.</span>
                   </label>
                 </div>
               </div>
