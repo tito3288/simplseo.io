@@ -9,8 +9,6 @@ const stackingCards = [
     title: "AI Content Outlines",
     titleSubtitle: "(So You Know What to Write)",
     description: "Found a keyword opportunity but not sure what to write? We'll generate a complete content outline for you. Just add your expertise and hit publish. We do the SEO thinking, you do the writing.",
-    lightColor: "hsl(320, 30%, 94%)",
-    darkColor: "hsl(330, 25%, 35%)", // Soft dusty rose
     lightColor: "hsl(260, 30%, 94%)",
     darkColor: "hsl(260, 25%, 35%)"
   },

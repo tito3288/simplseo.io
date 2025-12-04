@@ -41,7 +41,7 @@ export default function PrivacyPolicyPage() {
           <section className="space-y-4">
             <h2 className="text-2xl font-semibold text-foreground border-b border-border pb-2">1. Introduction and Acceptance</h2>
             <p className="text-foreground/90 leading-relaxed">
-              This Privacy Policy ("Policy") governs the collection, use, storage, processing, and disclosure of personal information by SimplSEO ("we," "us," "our," or the "Company") through our web application, website, and related services (collectively, the "Service"). By accessing or using our Service, you ("User," "you," or "your") acknowledge that you have read, understood, and agree to be bound by this Policy in its entirety.
+              This Privacy Policy (&quot;Policy&quot;) governs the collection, use, storage, processing, and disclosure of personal information by SimplSEO (&quot;we,&quot; &quot;us,&quot; &quot;our,&quot; or the &quot;Company&quot;) through our web application, website, and related services (collectively, the &quot;Service&quot;). By accessing or using our Service, you (&quot;User,&quot; &quot;you,&quot; or &quot;your&quot;) acknowledge that you have read, understood, and agree to be bound by this Policy in its entirety.
             </p>
             <p className="text-foreground/90 leading-relaxed font-semibold">
               IMPORTANT: You must explicitly agree to this Privacy Policy during the onboarding process before you can access or use our Service. Your continued use of the Service constitutes ongoing acceptance of this Policy and any updates thereto.
@@ -56,11 +56,11 @@ export default function PrivacyPolicyPage() {
             <h2 className="text-2xl font-semibold text-foreground border-b border-border pb-2">2. Definitions</h2>
             <p className="text-foreground/90 leading-relaxed">For the purposes of this Policy, the following definitions shall apply:</p>
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
-              <li><strong>"Personal Information"</strong> means any information that identifies, relates to, describes, is reasonably capable of being associated with, or could reasonably be linked, directly or indirectly, with a particular individual or household.</li>
-              <li><strong>"Processing"</strong> means any operation or set of operations performed on Personal Information, including collection, recording, organization, structuring, storage, adaptation, alteration, retrieval, consultation, use, disclosure, dissemination, alignment, combination, restriction, erasure, or destruction.</li>
-              <li><strong>"Google Search Console Data"</strong> means search performance data, including but not limited to keywords, search queries, page URLs, click-through rates, impressions, and average position rankings obtained through Google's Search Console API.</li>
-              <li><strong>"AI-Generated Content"</strong> means any content, suggestions, recommendations, or outputs produced by our artificial intelligence systems based on your data.</li>
-              <li><strong>"Training Data"</strong> means anonymized and aggregated data derived from user interactions used to improve our AI models and services.</li>
+              <li><strong>&quot;Personal Information&quot;</strong> means any information that identifies, relates to, describes, is reasonably capable of being associated with, or could reasonably be linked, directly or indirectly, with a particular individual or household.</li>
+              <li><strong>&quot;Processing&quot;</strong> means any operation or set of operations performed on Personal Information, including collection, recording, organization, structuring, storage, adaptation, alteration, retrieval, consultation, use, disclosure, dissemination, alignment, combination, restriction, erasure, or destruction.</li>
+              <li><strong>&quot;Google Search Console Data&quot;</strong> means search performance data, including but not limited to keywords, search queries, page URLs, click-through rates, impressions, and average position rankings obtained through Google&apos;s Search Console API.</li>
+              <li><strong>&quot;AI-Generated Content&quot;</strong> means any content, suggestions, recommendations, or outputs produced by our artificial intelligence systems based on your data.</li>
+              <li><strong>&quot;Training Data&quot;</strong> means anonymized and aggregated data derived from user interactions used to improve our AI models and services.</li>
             </ul>
           </section>
 
@@ -82,7 +82,7 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
               <li><strong>Business Name:</strong> The name of your business or organization.</li>
               <li><strong>Website URL:</strong> The primary URL of the website you wish to analyze and optimize.</li>
-              <li><strong>Business Type/Industry:</strong> The category or industry classification of your business (e.g., "Restaurant," "Law Firm," "E-commerce").</li>
+              <li><strong>Business Type/Industry:</strong> The category or industry classification of your business (e.g., &quot;Restaurant,&quot; &quot;Law Firm,&quot; &quot;E-commerce&quot;).</li>
               <li><strong>Business Location:</strong> Geographic location information including city, state/province, and country.</li>
               <li><strong>Google Search Console Property:</strong> The specific GSC property you authorize us to access.</li>
               <li><strong>User First Name:</strong> Your first name for personalization of communications and the AI assistant.</li>
@@ -109,7 +109,7 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
               <li><strong>Focus Keywords:</strong> Keywords you select or designate for optimization tracking.</li>
               <li><strong>Implemented SEO Tips:</strong> Records of which SEO recommendations you mark as implemented, including timestamps.</li>
-              <li><strong>Content Opportunities:</strong> Keywords and page opportunities you mark as "created" for tracking purposes.</li>
+              <li><strong>Content Opportunities:</strong> Keywords and page opportunities you mark as &quot;created&quot; for tracking purposes.</li>
               <li><strong>Chat Conversations:</strong> Messages you send to our AI SEO assistant, including questions, requests, and feedback.</li>
               <li><strong>Intent Mismatch Analyses:</strong> Results of AI analyses comparing your page content with user search intent.</li>
               <li><strong>Meta Title/Description Preferences:</strong> AI-generated meta titles and descriptions you accept or modify.</li>
@@ -121,7 +121,7 @@ export default function PrivacyPolicyPage() {
               <li><strong>Device Information:</strong> Browser type, operating system, and device identifiers.</li>
               <li><strong>Usage Data:</strong> Pages visited, features used, time spent on pages, and navigation patterns.</li>
               <li><strong>Log Data:</strong> Server logs including IP addresses, access times, and referring URLs.</li>
-              <li><strong>Local Storage Data:</strong> Information stored in your browser's local storage for session management and user preferences.</li>
+              <li><strong>Local Storage Data:</strong> Information stored in your browser&apos;s local storage for session management and user preferences.</li>
             </ul>
           </section>
 
@@ -140,7 +140,7 @@ export default function PrivacyPolicyPage() {
 
             <h3 className="text-xl font-medium text-foreground mt-6">4.2 Service Improvement</h3>
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
-              <li><strong>AI Model Training:</strong> Using anonymized and aggregated data to improve our AI models' accuracy and relevance.</li>
+              <li><strong>AI Model Training:</strong> Using anonymized and aggregated data to improve our AI models&apos; accuracy and relevance.</li>
               <li><strong>Feature Development:</strong> Analyzing usage patterns to develop new features and improve existing functionality.</li>
               <li><strong>Quality Assurance:</strong> Testing and debugging to ensure Service reliability and security.</li>
             </ul>
@@ -179,7 +179,7 @@ export default function PrivacyPolicyPage() {
             <h3 className="text-xl font-medium text-foreground mt-6">5.3 Data Retention</h3>
             <p className="text-foreground/90 leading-relaxed">We retain your data according to the following policies:</p>
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
-              <li><strong>Active Account Data:</strong> Retained for the duration of your account's existence.</li>
+              <li><strong>Active Account Data:</strong> Retained for the duration of your account&apos;s existence.</li>
               <li><strong>GSC Performance Data:</strong> Cached data is refreshed regularly; historical snapshots may be retained for trend analysis.</li>
               <li><strong>Training Data:</strong> Anonymized training data may be retained indefinitely to improve our AI models.</li>
               <li><strong>Conversation Summaries:</strong> Summaries (not full conversations) may be retained for AI training purposes.</li>
@@ -196,7 +196,7 @@ export default function PrivacyPolicyPage() {
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
               <li><strong>Google (Firebase, Google Cloud):</strong> Authentication, database hosting, and cloud infrastructure.</li>
               <li><strong>Google Search Console API:</strong> To fetch your search performance data with your authorization.</li>
-              <li><strong>OpenAI:</strong> AI language model provider for generating SEO recommendations and powering our AI assistant. Your data may be processed by OpenAI's systems to generate responses.</li>
+              <li><strong>OpenAI:</strong> AI language model provider for generating SEO recommendations and powering our AI assistant. Your data may be processed by OpenAI&apos;s systems to generate responses.</li>
               <li><strong>Vercel:</strong> Application hosting and deployment.</li>
               <li><strong>SendGrid/Email Services:</strong> For sending notification emails (e.g., when your pages start ranking).</li>
             </ul>
@@ -226,7 +226,7 @@ export default function PrivacyPolicyPage() {
             <h3 className="text-xl font-medium text-foreground mt-6">7.1 How We Use AI</h3>
             <p className="text-foreground/90 leading-relaxed">Our Service uses artificial intelligence and machine learning in the following ways:</p>
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
-              <li><strong>Personalized AI Assistant:</strong> Our chatbot is trained on your website's data to provide relevant, business-specific SEO advice.</li>
+              <li><strong>Personalized AI Assistant:</strong> Our chatbot is trained on your website&apos;s data to provide relevant, business-specific SEO advice.</li>
               <li><strong>Content Analysis:</strong> AI analyzes your page content to detect intent mismatches with search queries.</li>
               <li><strong>Meta Content Generation:</strong> AI generates suggested meta titles and descriptions optimized for your target keywords.</li>
               <li><strong>Keyword Classification:</strong> AI identifies generic vs. branded keywords and categorizes opportunities.</li>
@@ -245,7 +245,7 @@ export default function PrivacyPolicyPage() {
 
             <h3 className="text-xl font-medium text-foreground mt-6">7.3 Third-Party AI Processing</h3>
             <p className="text-foreground/90 leading-relaxed">
-              Our AI features are powered by OpenAI's language models. When you use AI features, your data (including business context, page content, and queries) may be sent to OpenAI for processing. OpenAI's data usage is governed by their privacy policy and API terms of service. We do not send your GSC authentication credentials or tokens to OpenAI.
+              Our AI features are powered by OpenAI&apos;s language models. When you use AI features, your data (including business context, page content, and queries) may be sent to OpenAI for processing. OpenAI&apos;s data usage is governed by their privacy policy and API terms of service. We do not send your GSC authentication credentials or tokens to OpenAI.
             </p>
           </section>
 
@@ -318,9 +318,9 @@ export default function PrivacyPolicyPage() {
             </p>
           </section>
 
-          {/* Children's Privacy */}
+          {/* Children&apos;s Privacy */}
           <section className="space-y-4">
-            <h2 className="text-2xl font-semibold text-foreground border-b border-border pb-2">11. Children's Privacy</h2>
+            <h2 className="text-2xl font-semibold text-foreground border-b border-border pb-2">11. Children&apos;s Privacy</h2>
             <p className="text-foreground/90 leading-relaxed">
               Our Service is not intended for individuals under the age of 18. We do not knowingly collect Personal Information from children. If you believe we have collected information from a child, please contact us immediately, and we will take steps to delete such information.
             </p>
@@ -384,4 +384,3 @@ export default function PrivacyPolicyPage() {
     </div>
   );
 }
-
