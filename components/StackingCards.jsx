@@ -84,10 +84,19 @@ const StackingCards = () => {
               key={card.title}
               className="sticky mb-8 last:mb-0"
               style={{
-                top: `${150 + index * 24}px`,
+                '--mobile-top': `${100 + index * 16}px`,
+                '--desktop-top': `${150 + index * 24}px`,
+                top: 'var(--mobile-top)',
                 zIndex: index + 1,
               }}
             >
+              <style jsx>{`
+                @media (min-width: 768px) {
+                  div {
+                    top: var(--desktop-top) !important;
+                  }
+                }
+              `}</style>
               <div
                 className="rounded-[2rem] p-8 md:p-12 lg:p-16 shadow-lg transition-all duration-300 min-h-[400px] md:min-h-[450px] flex flex-col md:flex-row items-center gap-8"
                 style={{ backgroundColor: isDarkMode ? card.darkColor : card.lightColor }}

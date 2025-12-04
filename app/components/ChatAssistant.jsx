@@ -832,7 +832,7 @@ const ChatAssistant = ({
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={handleKeyDown}
             placeholder="Ask me anything about SEO..."
-            className="min-h-[40px] max-h-[100px] resize-none text-sm px-4 py-2"
+            className="min-h-[40px] max-h-[100px] resize-none text-base md:text-sm px-4 py-2"
             disabled={isThinking}
           />
 
