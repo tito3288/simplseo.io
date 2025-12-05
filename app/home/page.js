@@ -10,6 +10,8 @@ import Pricing from "@/components/Pricing";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
 import Features from "@/components/Features";
+import AIBubble from "@/components/AIBubble";
+import ChaosVisualizer from "@/components/ChaosVisualizer";
 export default function HomePage() {
   const { isDarkMode, toggleTheme } = useTheme();
 
@@ -34,10 +36,22 @@ export default function HomePage() {
       <div className="relative z-10">
         <Navbar />
         <Hero />
+        
+        {/* AI Bubble Animation Section */}
+        {/* <section className="py-20 px-4">
+          <AIBubble />
+        </section> */}
+        
+
+        
         <Features />
         <StackingCards />
         <HowItWorks />
         {/* <Pricing /> */}
+        {/* Chaos Visualizer - Keywords Animation */}
+        <section className="w-full h-screen">
+          <ChaosVisualizer />
+        </section>
         <CTA />
         <Footer />
       </div>

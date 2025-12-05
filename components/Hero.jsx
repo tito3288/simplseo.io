@@ -134,7 +134,7 @@ const Hero = () => {
           </h1>
           
           <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 animate-fade-up" style={{ animationDelay: "0.1s" }}>
-            Your personal AI-powered SEO assistant that analyzes, optimizes, and tracks your website's performance so you can focus on what matters. (like running your business, not wondering what CTR and SERP mean).
+          Search Engine Optimization (SEO) just means helping people find your website on Google. Think of it like putting a bright, clear sign on your storefront instead of hoping customers wander in. When your pages are optimized, Google understands what you offer and shows you to the right people that are looking for the products or services you offer.
           </p>
           <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up" style={{ animationDelay: "0.2s" }}>
             <button
