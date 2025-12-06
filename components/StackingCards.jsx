@@ -2,6 +2,30 @@
 
 import { Search, TrendingUp, FileText, MessageSquare, Sparkles, Target } from "lucide-react";
 import { useTheme } from "@/app/contexts/ThemeContext";
+import { KeywordTooltip, CTRTooltip } from "./KeywordTooltip";
+
+// Helper to render description with keyword tooltips
+const renderDescription = (text) => {
+  // Split by "keyword" or "keywords" (case insensitive) and wrap matches
+  const parts = text.split(/(keywords?)/gi);
+  return parts.map((part, index) => {
+    if (part.toLowerCase() === "keyword" || part.toLowerCase() === "keywords") {
+      return <KeywordTooltip key={index}>{part}</KeywordTooltip>;
+    }
+    return part;
+  });
+};
+
+// Helper to render title with keyword tooltips
+const renderTitle = (text) => {
+  const parts = text.split(/(Keywords?)/gi);
+  return parts.map((part, index) => {
+    if (part.toLowerCase() === "keyword" || part.toLowerCase() === "keywords") {
+      return <KeywordTooltip key={index}>{part}</KeywordTooltip>;
+    }
+    return part;
+  });
+};
 
 const stackingCards = [
   {
@@ -18,7 +42,7 @@ const stackingCards = [
     icon: MessageSquare,
     title: "Your Personal SEO Mentor",
     titleSubtitle: "(Trained Specifically for You)",
-    description: "Ask your SEO mentor anything in plain English. It’s trained on YOUR website content, so it knows your business and the keywords you care about. No more decoding SEO jargon. Think of it as your own SEO professional available 24/7.",
+    description: "Ask your SEO mentor anything in plain English. It's trained on YOUR website content, so it knows your business and the keywords you care about. No more decoding SEO jargon. Think of it as your own SEO professional available 24/7.",
     lightColor: "hsl(145, 40%, 92%)",
     darkColor: "hsl(160, 30%, 32%)", // Soft sage
     image: "/2.png",
@@ -27,7 +51,7 @@ const stackingCards = [
     icon: Target,
     title: "Track Your Progress",
     titleSubtitle: "(Real Results, Not Just Data)",
-    description: "See your rankings in real time with accurate data from Google. We notify you the moment a new page starts ranking and show side-by-side progress so you can see what’s improving. Watch clicks rise, rankings climb, and know exactly what’s working and what’s not.",
+    description: "See your rankings in real time with accurate data from Google. We notify you the moment a new page starts ranking and show side-by-side progress so you can see what's improving. Watch clicks rise, rankings climb, and know exactly what's working and what's not.",
     lightColor: "hsl(200, 40%, 92%)",
     darkColor: "hsl(210, 30%, 35%)", // Soft steel blue
     image: "/5.png",
@@ -40,26 +64,18 @@ const stackingCards = [
     lightColor: "hsl(320, 30%, 94%)",
     darkColor: "hsl(330, 25%, 35%)", // Soft dusty rose
     image: "/1.png",
+    skipTitleKeyword: true, // Don't underline "Keywords" in title - it's self-explanatory here
   },
   {
     icon: TrendingUp,
     title: "Fix Pages That Get Views But No Clicks",
     titleSubtitle: "(The CTR Problem)",
+    hasCTRTooltip: true, // Use CTR tooltip in subtitle
     description: "Your page shows up in Google but nobody clicks? We'll tell you exactly why and how to fix it. Usually it's the title we'll help you write better ones that people actually want to click.",
     lightColor: "hsl(45, 50%, 92%)",
     darkColor: "hsl(40, 35%, 32%)", // Soft warm beige
     image: "/4.png",
   },
-
-
-  // {
-  //   icon: Target,
-  //   title: "Track Your Rankings",
-  //   titleSubtitle: "(Without the Headache)",
-  //   description: "See your real-time rankings with accurate data staright from Google. We break it down in plain English so you always know what's working and what is not.",
-  //   lightColor: "hsl(15, 40%, 94%)",
-  //   darkColor: "hsl(20, 30%, 35%)", // Soft terracotta
-  // },
 ];
 
 const StackingCards = () => {
@@ -106,16 +122,22 @@ const StackingCards = () => {
                   <card.icon className={`w-8 h-8 ${isDarkMode ? 'text-white' : 'text-foreground'}`} />
                 </div>
                 <h3 className={`text-3xl md:text-4xl lg:text-5xl font-bold mb-4 ${isDarkMode ? 'text-white' : 'text-foreground'}`}>
-                  {card.title}
+                  {card.skipTitleKeyword ? card.title : renderTitle(card.title)}
                   {card.titleSubtitle && (
                     <>
                       <br />
-                      <span className="text-lg md:text-3xl lg:text-4xl">{card.titleSubtitle}</span>
+                      <span className="text-lg md:text-3xl lg:text-4xl">
+                        {card.hasCTRTooltip ? (
+                          <>{"(The "}<CTRTooltip>CTR</CTRTooltip>{" Problem)"}</>
+                        ) : (
+                          card.titleSubtitle
+                        )}
+                      </span>
                     </>
                   )}
                 </h3>
                 <p className={`text-lg md:text-xl max-w-xl ${isDarkMode ? 'text-white/80' : 'text-foreground/70'}`}>
-                  {card.description}
+                  {renderDescription(card.description)}
                 </p>
               </div>
               <div className="flex-1 flex items-center justify-center">

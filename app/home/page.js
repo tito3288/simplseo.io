@@ -12,10 +12,12 @@ import Footer from "@/components/Footer";
 import Features from "@/components/Features";
 import AIBubble from "@/components/AIBubble";
 import ChaosVisualizer from "@/components/ChaosVisualizer";
+import { KeywordModalProvider } from "@/components/KeywordTooltip";
 export default function HomePage() {
   const { isDarkMode, toggleTheme } = useTheme();
 
   return (
+    <KeywordModalProvider>
     <div className="min-h-screen bg-background relative">
       {/* Static Background Orbs - Large and Spread Out */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
@@ -85,6 +87,7 @@ export default function HomePage() {
         </button>
       </div>
     </div>
+    </KeywordModalProvider>
   );
 }
 

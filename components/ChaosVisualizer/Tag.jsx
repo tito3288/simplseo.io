@@ -13,7 +13,7 @@ export const Tag = ({
 }) => {
   return (
     <div
-      className={`absolute flex items-center gap-2 px-5 py-3 rounded-full border backdrop-blur-xl ${colorClass} ${isOrganized ? 'shadow-md shadow-black/10' : 'shadow-lg shadow-black/20'}`}
+      className={`absolute pointer-events-none flex items-center gap-2 px-5 py-3 rounded-full border backdrop-blur-xl ${colorClass} ${isOrganized ? 'shadow-md shadow-black/10' : 'shadow-lg shadow-black/20'}`}
       style={{
         transform: `translate(${x}px, ${y}px) rotate(${rotation}deg)`,
         opacity: opacity,

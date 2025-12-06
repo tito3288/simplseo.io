@@ -128,7 +128,10 @@ const CTA = () => {
             Ready to rank higher?
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-            Join thousands of businesses using SimplSEO to grow their organic traffic. Start today!
+          Stop paying Google for ads. The moment you stop, the traffic stops.
+          With SEO, you build trust that brings customers in long after the work is done. <br></br>     
+          It takes time, but the long-term payoff makes it all worth it. <br></br><br></br>
+            Join thousands of businesses using SimplSEO to grow their organic traffic!
           </p>
           <button
             ref={buttonRef}

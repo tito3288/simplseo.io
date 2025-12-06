@@ -290,7 +290,11 @@ export const ChaosVisualizer = () => {
   return (
     <div className="relative w-full h-full bg-transparent overflow-hidden rounded-2xl">
       {/* Keywords container - behind title when organized */}
-      <div ref={containerRef} className="absolute inset-0 w-full h-full" style={{ zIndex: isOrganizedPhase ? 10 : 30 }}>
+      <div 
+        ref={containerRef} 
+        className="absolute inset-0 w-full h-full pointer-events-none" 
+        style={{ zIndex: isOrganizedPhase ? 10 : 30, touchAction: 'pan-y' }}
+      >
         {tags.map((tag, i) => (
           <Tag
             key={tag.id}
@@ -307,8 +311,8 @@ export const ChaosVisualizer = () => {
 
       {/* Center Title - Dynamic based on phase, in front when organized */}
       <div 
-        className="absolute inset-0 flex items-center justify-center pointer-events-none"
-        style={{ zIndex: isOrganizedPhase ? 30 : 10 }}
+        className="absolute inset-0 flex items-center justify-center"
+        style={{ zIndex: isOrganizedPhase ? 30 : 10, pointerEvents: 'none' }}
       >
         <AnimatePresence mode="wait">
           <motion.h2 
@@ -320,7 +324,7 @@ export const ChaosVisualizer = () => {
             transition={{ duration: 0.5, ease: "easeInOut" }}
             className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground text-center px-4"
           >
-            {titleText}
+            {isOrganizedPhase ? "Into Clarity" : "Turn Keyword Chaos"}
           </motion.h2>
         </AnimatePresence>
       </div>

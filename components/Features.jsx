@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState, createContext, useContext } from "react";
+import { KeywordTooltip } from "./KeywordTooltip";
 
 // Context to share scroll progress across all text elements
 const ScrollContext = createContext(0);
@@ -11,7 +12,7 @@ const lines = [
   "SimplSEO is built for clarity.",
   "We show you only the things that actually move your rankings:",
   "which pages need attention",
-  "which keywords are improving",
+  "which keywords are improving", // Note: "keywords" here will be handled specially
   "what's working and what's not",
   "simple actions you can take today",
   "No fluff.",
@@ -42,6 +43,14 @@ const ScrollRevealText = ({ lineIndex, children }) => {
         const wordProgress = (globalWordIndex + 1) / totalWords;
         const isRevealed = progress >= wordProgress;
         
+        // Check if this word is "keywords" to wrap with KeywordTooltip
+        const isKeyword = word.toLowerCase() === "keywords";
+        const wordContent = isKeyword ? (
+          <KeywordTooltip>{word}</KeywordTooltip>
+        ) : (
+          word
+        );
+        
         return (
           <span
             key={wordIndex}
@@ -50,7 +59,7 @@ const ScrollRevealText = ({ lineIndex, children }) => {
               opacity: isRevealed ? 1 : 0,
             }}
           >
-            {word}{wordIndex < words.length - 1 ? " " : ""}
+            {wordContent}{wordIndex < words.length - 1 ? " " : ""}
           </span>
         );
       })}
