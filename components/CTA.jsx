@@ -122,8 +122,9 @@ const CTA = () => {
           transform: scale(0.99) !important;
         }
       `}} />
-      <section className="py-32 px-4">
-        <div className="max-w-4xl mx-auto text-center">
+      <section className="pt-0 pb-20">
+        <div className="section-secondary py-20 px-6 md:px-12 lg:px-20">
+          <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6">
             Ready to rank higher?
           </h2>
@@ -150,6 +151,7 @@ const CTA = () => {
               style={{ opacity: buttonState === "complete" ? 1 : 0 }}
             />
           </button>
+          </div>
         </div>
       </section>
     </>

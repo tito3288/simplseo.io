@@ -27,6 +27,9 @@ export const ChaosVisualizer = () => {
   const startTimeRef = useRef(0);
   const phaseStartTimeRef = useRef(0);
   
+  // Cache container dimensions to avoid getBoundingClientRect during scroll (fixes mobile glitching)
+  const containerDimensionsRef = useRef({ width: 0, height: 0 });
+  
   // Tag dimensions for bounds checking
   const TAG_WIDTH = 250;   // Max estimated tag width
   const TAG_HEIGHT = 50;   // Tag height
@@ -39,6 +42,9 @@ export const ChaosVisualizer = () => {
     if (!container) return;
     
     const { width, height } = container.getBoundingClientRect();
+    
+    // Cache dimensions to avoid reading during scroll (fixes mobile glitching)
+    containerDimensionsRef.current = { width, height };
     
     // Safe bounds
     const minX = PADDING;
@@ -108,7 +114,14 @@ export const ChaosVisualizer = () => {
       return;
     }
 
-    const { width, height } = container.getBoundingClientRect();
+    // Use cached dimensions instead of getBoundingClientRect (fixes mobile scroll glitching)
+    const { width, height } = containerDimensionsRef.current;
+    
+    // Skip if dimensions not yet cached
+    if (width === 0 || height === 0) {
+      requestRef.current = requestAnimationFrame(animate);
+      return;
+    }
 
     const currentPhaseDuration = 
       phase === AnimationPhase.CHAOS ? DURATION_CHAOS :
@@ -171,16 +184,19 @@ export const ChaosVisualizer = () => {
     const minY = PADDING;
     const maxY = height - TAG_HEIGHT - PADDING;
 
-    // Get title bounds for collision
+    // Get title bounds for collision (using offsetWidth/Height to avoid getBoundingClientRect during scroll)
     let titleBounds = null;
-    if (titleRef.current && containerRef.current) {
-      const titleRect = titleRef.current.getBoundingClientRect();
-      const containerRect = containerRef.current.getBoundingClientRect();
+    if (titleRef.current) {
+      const titleWidth = titleRef.current.offsetWidth;
+      const titleHeight = titleRef.current.offsetHeight;
+      // Title is centered via flexbox, so calculate bounds from center
+      const centerX = width / 2;
+      const centerY = height / 2;
       titleBounds = {
-        left: titleRect.left - containerRect.left - TITLE_PADDING,
-        right: titleRect.right - containerRect.left + TITLE_PADDING,
-        top: titleRect.top - containerRect.top - TITLE_PADDING,
-        bottom: titleRect.bottom - containerRect.top + TITLE_PADDING,
+        left: centerX - titleWidth / 2 - TITLE_PADDING,
+        right: centerX + titleWidth / 2 + TITLE_PADDING,
+        top: centerY - titleHeight / 2 - TITLE_PADDING,
+        bottom: centerY + titleHeight / 2 + TITLE_PADDING,
       };
     }
 

@@ -654,7 +654,7 @@ const OnboardingWizard = () => {
                       <p className="mt-1">
                         By continuing, you consent to all data collection and processing described in our 
                         Privacy Policy. This consent is required to use SimplSEO.
-                      </p>
+                    </p>
                     </div>
                   </div>
                 </div>
