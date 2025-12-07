@@ -138,41 +138,35 @@ export default function GenericKeywordsPage() {
       return;
     }
 
+    // Helper function to extract and normalize pathname only (not full URL)
+    const normalizeUrlPath = (url) => {
+      try {
+        const u = new URL(url);
+        // Return just the pathname, normalized (lowercase, no trailing slash)
+        return u.pathname.toLowerCase().replace(/\/$/, '') || '/';
+      } catch {
+        return url.toLowerCase().replace(/\/$/, '');
+      }
+    };
+
     const stories = createdOpportunities
       .filter(opp => {
-        // Check if the page URL exists in GSC data
+        // Check if the page URL exists in GSC data (exact pathname match only)
         return gscKeywords.some(kw => {
-          // Normalize URLs for comparison (remove trailing slashes, etc.)
-          const normalizeUrl = (url) => {
-            try {
-              const u = new URL(url);
-              return u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
-            } catch {
-              return url.replace(/\/$/, '');
-            }
-          };
+          const oppPath = normalizeUrlPath(opp.pageUrl);
+          const kwPath = normalizeUrlPath(kw.page);
           
-          const oppUrl = normalizeUrl(opp.pageUrl);
-          const kwUrl = normalizeUrl(kw.page);
-          
-          return oppUrl === kwUrl || kwUrl.includes(oppUrl) || oppUrl.includes(kwUrl);
+          // Use EXACT path matching only - no includes() which causes false positives
+          return oppPath === kwPath;
         });
       })
       .map(opp => {
-        // Find matching GSC keyword data
-        const normalizeUrl = (url) => {
-          try {
-            const u = new URL(url);
-            return u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
-          } catch {
-            return url.replace(/\/$/, '');
-          }
-        };
-        
+        // Find matching GSC keyword data (exact pathname match only)
         const matchingKw = gscKeywords.find(kw => {
-          const oppUrl = normalizeUrl(opp.pageUrl);
-          const kwUrl = normalizeUrl(kw.page);
-          return oppUrl === kwUrl || kwUrl.includes(oppUrl) || oppUrl.includes(kwUrl);
+          const oppPath = normalizeUrlPath(opp.pageUrl);
+          const kwPath = normalizeUrlPath(kw.page);
+          // Use EXACT path matching only
+          return oppPath === kwPath;
         });
 
         if (matchingKw) {
@@ -1210,6 +1204,27 @@ export default function GenericKeywordsPage() {
                   <span>Loaded from cache • Click &quot;Regenerate&quot; for a fresh outline</span>
                 </div>
               )}
+
+              {/* Focus Keyword */}
+              <div className="space-y-2">
+                <Label className="text-sm font-semibold flex items-center justify-between">
+                  🎯 Focus Keyword
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => copyToClipboard(contentOutlineDialog.opportunity?.keyword || '', 'focusKeyword')}
+                    className="h-6 px-2"
+                  >
+                    {copiedField === 'focusKeyword' ? <Check className="w-3 h-3 text-green-600" /> : <Copy className="w-3 h-3" />}
+                  </Button>
+                </Label>
+                <div className="p-4 bg-gradient-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20 rounded-lg border-2 border-amber-300 dark:border-amber-700">
+                  <p className="font-bold text-lg text-amber-900 dark:text-amber-100">
+                    {contentOutlineDialog.opportunity?.keyword}
+                  </p>
+                </div>
+              </div>
+
               {/* H1 Title */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold flex items-center justify-between">
@@ -1359,6 +1374,23 @@ export default function GenericKeywordsPage() {
                   </ul>
                 </div>
               )}
+
+              {/* SEO Mentor Tip */}
+              <div className="p-4 bg-gradient-to-r from-violet-50 to-purple-50 dark:from-violet-900/20 dark:to-purple-900/20 rounded-lg border border-violet-200 dark:border-violet-800 mt-2">
+                <div className="flex items-start gap-3">
+                  <div className="p-2 bg-violet-100 dark:bg-violet-900/40 rounded-lg">
+                    <Sparkles className="w-4 h-4 text-violet-600 dark:text-violet-400" />
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 mb-1">
+                      💡 Next Step: Use SEO Mentor
+                    </p>
+                    <p className="text-sm text-violet-700 dark:text-violet-300">
+                      Click <span className="font-semibold">&quot;Copy Full Outline&quot;</span> below, then paste it into the <span className="font-semibold">SEO Mentor</span> to get AI-powered help writing your content!
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
           ) : (
             <div className="py-8 text-center text-muted-foreground">
@@ -1398,12 +1430,29 @@ export default function GenericKeywordsPage() {
                 </Button>
                 <Button
                   onClick={() => {
-                    // Copy entire outline as formatted text
+                    // Copy entire outline as formatted text optimized for SEO Mentor
+                    const opportunity = contentOutlineDialog.opportunity;
+                    const intentInfo = opportunity?.intent;
+                    
                     const outlineText = `
+I need to create a new page for my website. Please help me write SEO-optimized content following this content brief. Make sure to naturally incorporate the focus keyword throughout the content, match the search intent, and follow the structure provided.
+
+---
+
+## SEO Content Brief
+
+**Focus Keyword:** ${opportunity?.keyword || 'N/A'}
+${intentInfo ? `**Search Intent:** ${intentInfo.category}${intentInfo.buyerReadiness ? ` (${intentInfo.buyerReadiness} Buyer Readiness)` : ''}` : ''}
+${data?.businessName ? `**Business:** ${data.businessName}${data?.businessLocation ? ` | ${data.businessLocation}` : ''}` : ''}
+
+---
+
 # ${contentOutline.h1}
 
 **Meta Title:** ${contentOutline.metaTitle}
 **Meta Description:** ${contentOutline.metaDescription}
+
+**Target Word Count:** ${contentOutline.wordCount}
 
 ## Content Sections:
 ${contentOutline.sections?.map(s => `
@@ -1413,14 +1462,8 @@ ${s.h3s?.length ? `\nSubheadings:\n${s.h3s.map(h3 => `- ${h3}`).join('\n')}` : '
 ${s.ctaPlacement ? '\n[Add CTA Here]' : ''}
 `).join('\n')}
 
-**Schema Markup:** ${contentOutline.schema?.join(', ')}
-**Word Count:** ${contentOutline.wordCount}
-
-**Internal Links:**
+**Internal Links to Include:**
 ${contentOutline.internalLinks?.map(l => `- ${l}`).join('\n')}
-
-**Tips:**
-${contentOutline.additionalTips?.map(t => `- ${t}`).join('\n')}
 `.trim();
                     copyToClipboard(outlineText, 'fullOutline');
                   }}
@@ -1512,7 +1555,13 @@ ${contentOutline.additionalTips?.map(t => `- ${t}`).join('\n')}
                   // Validate URL belongs to user's website domain
                   if (data?.websiteUrl) {
                     try {
-                      const userUrl = new URL(data.websiteUrl);
+                      // Ensure websiteUrl has a protocol (might be stored without https://)
+                      let websiteUrlWithProtocol = data.websiteUrl;
+                      if (!websiteUrlWithProtocol.startsWith('http://') && !websiteUrlWithProtocol.startsWith('https://')) {
+                        websiteUrlWithProtocol = 'https://' + websiteUrlWithProtocol;
+                      }
+                      
+                      const userUrl = new URL(websiteUrlWithProtocol);
                       const userDomain = userUrl.hostname.replace(/^www\./, '');
                       const inputDomain = url.hostname.replace(/^www\./, '');
                       

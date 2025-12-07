@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "../../../lib/firebaseAdmin";
+import { db, auth } from "../../../lib/firebaseAdmin";
 import nodemailer from "nodemailer";
 
 // Server-side GSC token management
@@ -177,25 +177,25 @@ async function fetchGSCKeywords(siteUrl, token) {
   }
 }
 
-// Normalize URL for comparison
-function normalizeUrl(url) {
+// Normalize URL to extract pathname only (not full URL with domain)
+// This prevents false positives where any URL would match the homepage
+function normalizeUrlPath(url) {
   try {
     const u = new URL(url);
-    return u.pathname === "/" ? u.origin : u.origin + u.pathname.replace(/\/$/, "");
+    // Return just the pathname, normalized (lowercase, no trailing slash)
+    return u.pathname.toLowerCase().replace(/\/$/, "") || "/";
   } catch {
-    return url.replace(/\/$/, "");
+    return url.toLowerCase().replace(/\/$/, "");
   }
 }
 
-// Check if URLs match
+// Check if URLs match - EXACT pathname matching only
+// No includes() which causes false positives (e.g., every URL contains the homepage domain)
 function urlsMatch(url1, url2) {
-  const normalized1 = normalizeUrl(url1);
-  const normalized2 = normalizeUrl(url2);
-  return (
-    normalized1 === normalized2 ||
-    normalized2.includes(normalized1) ||
-    normalized1.includes(normalized2)
-  );
+  const path1 = normalizeUrlPath(url1);
+  const path2 = normalizeUrlPath(url2);
+  // Use EXACT matching only
+  return path1 === path2;
 }
 
 // Send success notification email
@@ -298,10 +298,15 @@ export async function GET(req) {
           continue;
         }
 
-        // Get user's email from users collection
-        const userDocRef = db.collection("users").doc(userId);
-        const userData = await userDocRef.get();
-        const userEmail = userData.exists ? userData.data().email : null;
+        // Get user's email from Firebase Authentication (not Firestore)
+        let userEmail = null;
+        try {
+          const userRecord = await auth.getUser(userId);
+          userEmail = userRecord.email;
+        } catch (authError) {
+          console.log(`⚠️ Could not get auth user for ${userId}:`, authError.message);
+          continue;
+        }
 
         if (!userEmail) {
           console.log(`⚠️ No email found for user ${userId}`);
