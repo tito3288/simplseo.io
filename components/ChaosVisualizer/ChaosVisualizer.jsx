@@ -30,6 +30,10 @@ export const ChaosVisualizer = () => {
   // Cache container dimensions to avoid getBoundingClientRect during scroll (fixes mobile glitching)
   const containerDimensionsRef = useRef({ width: 0, height: 0 });
   
+  // Pause animation during scroll to prevent glitching (especially on mobile)
+  const isScrollingRef = useRef(false);
+  const scrollTimeoutRef = useRef(null);
+  
   // Tag dimensions for bounds checking
   const TAG_WIDTH = 250;   // Max estimated tag width
   const TAG_HEIGHT = 50;   // Tag height
@@ -105,6 +109,12 @@ export const ChaosVisualizer = () => {
   };
 
   const animate = useCallback((time) => {
+    // Skip animation frame if scrolling (prevents glitching on mobile)
+    if (isScrollingRef.current) {
+      requestRef.current = requestAnimationFrame(animate);
+      return;
+    }
+    
     if (!startTimeRef.current) startTimeRef.current = time;
     if (!phaseStartTimeRef.current) phaseStartTimeRef.current = time;
 
@@ -298,6 +308,36 @@ export const ChaosVisualizer = () => {
       if (requestRef.current) cancelAnimationFrame(requestRef.current);
     };
   }, [animate]);
+
+  // Pause animation during scroll to prevent glitching (mobile only)
+  useEffect(() => {
+    // Only apply scroll pause on mobile/touch devices
+    const isMobile = window.innerWidth < 768 || 'ontouchstart' in window;
+    if (!isMobile) return;
+    
+    const handleScroll = () => {
+      isScrollingRef.current = true;
+      
+      // Clear any existing timeout
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+      
+      // Resume animation 150ms after scroll stops
+      scrollTimeoutRef.current = setTimeout(() => {
+        isScrollingRef.current = false;
+      }, 150);
+    };
+
+    window.addEventListener('scroll', handleScroll, { passive: true });
+    
+    return () => {
+      window.removeEventListener('scroll', handleScroll);
+      if (scrollTimeoutRef.current) {
+        clearTimeout(scrollTimeoutRef.current);
+      }
+    };
+  }, []);
 
   // Determine title text and z-index based on phase
   const isOrganizedPhase = phase === AnimationPhase.ORGANIZED || phase === AnimationPhase.ALIGNING;

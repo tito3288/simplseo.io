@@ -366,20 +366,27 @@ const SeoRecommendationPanel = ({
         className="w-full space-y-2"
       >
         <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border p-4 font-medium hover:bg-muted/50 data-[state=open]:bg-muted/50">
-          <div className="flex items-center gap-2">
-            <div
-              className={`h-2 w-2 rounded-full ${
-                isImplemented ? "bg-green-500" : "bg-yellow-500"
-              }`}
-            />
-            <a
-              href={pageUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline text-primary hover:text-primary/80 truncate"
-            >
-              {title.replace(/^Fix:\s*/, "")}
-            </a>
+          <div className="flex flex-col items-start gap-1">
+            <div className="flex items-center gap-2">
+              <div
+                className={`h-2 w-2 rounded-full ${
+                  isImplemented ? "bg-green-500" : "bg-yellow-500"
+                }`}
+              />
+              <a
+                href={pageUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="underline text-primary hover:text-primary/80 truncate"
+              >
+                {title.replace(/^Fix:\s*/, "")}
+              </a>
+            </div>
+            {focusKeyword && (
+              <div className="text-xs text-muted-foreground pl-4">
+                Focus Keyword: <span className="font-medium text-foreground">{focusKeyword}</span>
+              </div>
+            )}
           </div>
           <div className="text-muted-foreground">
             {isOpen ? "Hide details" : "Show details"}
