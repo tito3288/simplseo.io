@@ -6,6 +6,76 @@ const fetch = require("node-fetch");
 admin.initializeApp();
 const db = admin.firestore();
 
+// 🔐 Helper function to refresh GSC access token using refresh token
+async function refreshAccessToken(refreshToken) {
+  try {
+    console.log("🔄 Refreshing access token using refresh token...");
+    
+    const response = await fetch("https://simplseo-io.vercel.app/api/gsc/refresh-token", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ refreshToken }),
+    });
+
+    if (!response.ok) {
+      const errorText = await response.text();
+      console.error(`❌ Token refresh failed: ${response.status} - ${errorText}`);
+      return null;
+    }
+
+    const data = await response.json();
+    console.log("✅ Access token refreshed successfully");
+    return data.access_token;
+  } catch (error) {
+    console.error("❌ Error refreshing access token:", error.message);
+    return null;
+  }
+}
+
+// 🔐 Helper function to get a valid access token for a user
+async function getValidAccessToken(userId) {
+  try {
+    const userDoc = await db.collection("users").doc(userId).get();
+    const userData = userDoc.data();
+
+    if (!userData) {
+      console.log(`❌ No user data found for ${userId}`);
+      return { token: null, siteUrl: null };
+    }
+
+    const siteUrl = userData.gscSiteUrl;
+    const refreshToken = userData.gscRefreshToken;
+
+    if (!refreshToken || !siteUrl) {
+      console.log(`❌ No GSC refresh token or site URL for user ${userId}`);
+      return { token: null, siteUrl: null };
+    }
+
+    // Always refresh the token to ensure it's valid
+    // (Access tokens expire in 1 hour, cron jobs run every 24 hours)
+    const freshToken = await refreshAccessToken(refreshToken);
+
+    if (!freshToken) {
+      console.log(`❌ Failed to refresh token for user ${userId}`);
+      return { token: null, siteUrl: siteUrl };
+    }
+
+    // Update the stored access token for future use
+    await db.collection("users").doc(userId).set({
+      gscAccessToken: freshToken,
+      gscConnectedAt: new Date().toISOString(),
+    }, { merge: true });
+
+    console.log(`✅ Got fresh access token for user ${userId}`);
+    return { token: freshToken, siteUrl: siteUrl };
+  } catch (error) {
+    console.error(`❌ Error getting valid access token for ${userId}:`, error.message);
+    return { token: null, siteUrl: null };
+  }
+}
+
 // 🔧 Update all documents missing postStats
 exports.updateAllMissingPostStats = functions.https.onRequest(async (req, res) => {
   try {
@@ -45,18 +115,14 @@ exports.updateAllMissingPostStats = functions.https.onRequest(async (req, res) =
 
       console.log(`🔧 Processing ${doc.id} (${daysSince.toFixed(1)} days old)`);
 
-      // Get GSC data from user document
-      const userDoc = await db.collection("users").doc(userId).get();
-      const userData = userDoc.data();
+      // 🔐 Get a fresh access token using the refresh token
+      const { token, siteUrl } = await getValidAccessToken(userId);
       
-      if (!userData?.gscAccessToken || !userData?.gscSiteUrl) {
-        console.log(`❌ No GSC data for user ${userId}`);
+      if (!token || !siteUrl) {
+        console.log(`❌ No valid GSC token for user ${userId}`);
         results.push({ id: doc.id, status: "no_gsc_data" });
         continue;
       }
-
-      const token = userData.gscAccessToken;
-      const siteUrl = userData.gscSiteUrl;
 
       // Update document with GSC data
       await doc.ref.set({
@@ -136,19 +202,15 @@ exports.updateDocumentWithGscData = functions.https.onRequest(async (req, res) =
     const data = doc.data();
     const { userId } = data;
 
-    // Get GSC data from user document
-    console.log(`🔍 Getting GSC data for user: ${userId}`);
-    const userDoc = await db.collection("users").doc(userId).get();
-    const userData = userDoc.data();
+    // 🔐 Get a fresh access token using the refresh token
+    console.log(`🔐 Getting fresh access token for user: ${userId}`);
+    const { token, siteUrl } = await getValidAccessToken(userId);
     
-    if (!userData?.gscAccessToken || !userData?.gscSiteUrl) {
-      return res.status(400).json({ error: "No GSC data found in user document" });
+    if (!token || !siteUrl) {
+      return res.status(400).json({ error: "No valid GSC token found for user" });
     }
 
-    const token = userData.gscAccessToken;
-    const siteUrl = userData.gscSiteUrl;
-
-    console.log(`✅ Found GSC data: token=${!!token}, siteUrl=${siteUrl}`);
+    console.log(`✅ Got fresh GSC token for siteUrl=${siteUrl}`);
 
     // Update document with GSC data
     await doc.ref.set({
@@ -409,37 +471,22 @@ exports.checkSeoTipProgress = pubsub
       
       processedCount++;
       
-      // Try to get GSC data from the document first
-      let token = data.gscToken;
-      let siteUrl = data.siteUrl;
-
-      // If not in document, try to get from user's stored GSC data
-      if (!token || !siteUrl) {
-        console.log(`🔍 No GSC data in document, trying to get from user storage`);
-        try {
-          const userDoc = await db.collection("users").doc(userId).get();
-          const userData = userDoc.data();
-          if (userData?.gscAccessToken && userData?.gscSiteUrl) {
-            token = userData.gscAccessToken;
-            siteUrl = userData.gscSiteUrl;
-            console.log(`✅ Found GSC data in user document`);
-            
-            // Update document with GSC data for future use
-            await doc.ref.set({
-              gscToken: token,
-              siteUrl: siteUrl
-            }, { merge: true });
-          }
-        } catch (error) {
-          console.log(`❌ Error getting user GSC data: ${error.message}`);
-        }
-      }
+      // 🔐 Get a fresh access token using the refresh token
+      // This ensures we always have a valid token, even when running at midnight
+      console.log(`🔐 Getting fresh access token for user ${userId}`);
+      const { token, siteUrl } = await getValidAccessToken(userId);
 
       if (!token || !siteUrl) {
-        console.log(`❌ Skipping ${doc.id} - no GSC token or site URL available`);
+        console.log(`❌ Skipping ${doc.id} - no valid GSC token or site URL available`);
         skippedCount++;
         continue;
       }
+
+      // Update document with fresh GSC data for reference
+      await doc.ref.set({
+        gscToken: token,
+        siteUrl: siteUrl
+      }, { merge: true });
 
       try {
         console.log(`🌐 Fetching postStats for ${pageUrl} from API`);

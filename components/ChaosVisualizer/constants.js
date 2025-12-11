@@ -8,9 +8,9 @@ export const AnimationPhase = {
 
 export const KEYWORDS = [
   "dentist chicago", "roof repair Austin", "plumber near me", 
-   "SEO expert NY", "vegan cafe Ohio", "yoga studio Denver", "web design Miami", 
+   "SEO expert NY", "cafe South Bend", "tour guide Denver", "web design Miami", 
   "dog walker SF", "HVAC repair Dallas", "bakery Brooklyn",
-  "electrician Houston", "personal trainer LA"
+  "mechanic Houston", "personal trainer LA"
 ];
 
 export const COLORS = [

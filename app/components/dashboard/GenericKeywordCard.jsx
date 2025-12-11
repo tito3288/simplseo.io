@@ -144,9 +144,9 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
     return (
       <Card className="border-purple-400 dark:border-red-800">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-          <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />
-            Generic Keyword Opportunities
+          <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+            <Target className="w-5 h-5 text-purple-700 dark:text-purple-500 flex-shrink-0" />
+            <span>Generic Keyword Opportunities</span>
             <Badge className="bg-red-100 text-red-700">High Priority</Badge>
           </CardTitle>
           <CardDescription>
@@ -167,9 +167,9 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
     return (
       <Card className="border-red-200 dark:border-red-800">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-            <Target className="w-5 h-5" />
-            AI Generic Keyword Opportunities
+          <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+            <Target className="w-5 h-5 flex-shrink-0" />
+            <span>AI Generic Keyword Opportunities</span>
             <Badge className="bg-red-100 text-red-700">High Priority</Badge>
           </CardTitle>
           <CardDescription>
@@ -200,9 +200,9 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
     return (
       <Card className="border-purple-400 dark:border-purple-500">
         <CardHeader>
-          <CardTitle className="flex items-center gap-2 text-lg">
-          <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />
-            AI Generic Keyword Opportunities
+          <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+            <Target className="w-5 h-5 text-purple-700 dark:text-purple-500 flex-shrink-0" />
+            <span>AI Generic Keyword Opportunities</span>
             <Badge className="bg-red-100 text-red-700">High Priority</Badge>
           </CardTitle>
           <CardDescription>
@@ -229,9 +229,9 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
   return (
     <Card className="border-purple-400 dark:border-purple-500">
       <CardHeader>
-        <CardTitle className="flex items-center gap-2 text-lg">
-          <Target className="w-5 h-5 text-purple-700 dark:text-purple-500" />
-          AI Generic Keyword Opportunities
+        <CardTitle className="flex flex-wrap items-center gap-2 text-lg">
+          <Target className="w-5 h-5 text-purple-700 dark:text-purple-500 flex-shrink-0" />
+          <span>AI Generic Keyword Opportunities</span>
           <Badge className="bg-red-100 text-red-700">High Priority</Badge>
         </CardTitle>
         <CardDescription>
@@ -250,12 +250,12 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
         <div className="space-y-3">
           {opportunities.slice(0, 5).map((opportunity, index) => (
             <div key={index} className="p-3 border rounded-lg hover:bg-muted/50 transition-colors">
-              <div className="flex items-start justify-between mb-2">
-                <div className="flex items-center gap-2">
-                  {getOpportunityIcon(opportunity.category)}
-                  <span className="font-medium text-sm">{opportunity.keyword}</span>
+              <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-2 mb-2">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="flex-shrink-0">{getOpportunityIcon(opportunity.category)}</span>
+                  <span className="font-medium text-sm truncate">{opportunity.keyword}</span>
                 </div>
-                <div className="flex gap-1">
+                <div className="flex flex-wrap gap-1 flex-shrink-0">
                   <Badge className={`text-xs ${getPriorityColor(opportunity.priority)}`}>
                     Priority {opportunity.priority}
                   </Badge>
@@ -271,13 +271,13 @@ export default function GenericKeywordCard({ gscKeywords = [] }) {
                 </p>
               )}
               
-              <div className="flex items-center gap-2 mt-2 text-xs text-muted-foreground">
+              <div className="flex flex-wrap items-center gap-x-2 gap-y-1 mt-2 text-xs text-muted-foreground">
                 <Badge className={`text-xs ${getVolumeColor(opportunity.searchVolume)}`}>
                   {opportunity.searchVolume} Volume
                 </Badge>
-                <span>•</span>
+                <span className="hidden sm:inline">•</span>
                 <span>Type: {opportunity.category}</span>
-                <span>•</span>
+                <span className="hidden sm:inline">•</span>
                 <span>Difficulty: {opportunity.difficulty}</span>
               </div>
             </div>

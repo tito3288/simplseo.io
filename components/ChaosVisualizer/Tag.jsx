@@ -6,21 +6,33 @@ export const Tag = ({
   text, 
   x, 
   y, 
-  rotation, 
   colorClass, 
   isOrganized, 
-  opacity 
+  opacity,
+  floatClass = '',
+  stateClass = '',
+  floatDuration = 8,
+  floatDelay = 0,
+  index = 0,
 }) => {
   return (
     <div
-      className={`absolute pointer-events-none flex items-center gap-2 px-5 py-3 rounded-full border backdrop-blur-xl ${colorClass} ${isOrganized ? 'shadow-md shadow-black/10' : 'shadow-lg shadow-black/20'}`}
+      className={`absolute pointer-events-none flex items-center gap-2 px-5 py-3 rounded-full border backdrop-blur-xl ${colorClass} ${floatClass} ${stateClass} ${isOrganized ? 'shadow-md shadow-black/10' : 'shadow-lg shadow-black/20'}`}
       style={{
-        transform: `translate(${x}px, ${y}px) rotate(${rotation}deg)`,
+        left: x,
+        top: y,
         opacity: opacity,
-        willChange: 'transform, opacity',
+        willChange: 'transform, opacity, left, top',
         whiteSpace: 'nowrap',
         zIndex: isOrganized ? 10 : 20,
-        transition: 'box-shadow 0.3s ease, opacity 0.8s ease-in-out',
+        // CSS custom property for varied animation durations
+        '--float-duration': `${floatDuration}s`,
+        animationDelay: `${floatDelay}s`,
+        // Smooth transition for position changes AND opacity (with staggered delay for fade-in)
+        // Include delay directly in transition to avoid shorthand/longhand conflict
+        transition: stateClass 
+          ? 'left 1.2s cubic-bezier(0.34, 1.56, 0.64, 1), top 1.2s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.8s ease, box-shadow 0.3s ease' 
+          : `opacity 0.6s ease-in ${!stateClass && opacity === 1 ? index * 0.05 : 0}s, box-shadow 0.3s ease`,
       }}
     >
       <span className="text-base font-medium tracking-wide">{text}</span>
@@ -34,4 +46,3 @@ export const Tag = ({
 };
 
 export default Tag;
-

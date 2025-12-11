@@ -2831,9 +2831,9 @@ export default function Dashboard() {
           )}
         >
           <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2">
+            <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
+              <div className="space-y-1">
+                <CardTitle className="flex flex-wrap items-center gap-2">
                   Extra Opportunities
                   <span className="text-xs bg-red-100 text-red-700 px-2 py-1 rounded-full font-medium">
                     High Priority
@@ -2843,7 +2843,7 @@ export default function Dashboard() {
                   Discover new keywords and content ideas to expand your reach and attract new customers.
                 </CardDescription>
               </div>
-              <Button asChild variant="outline" size="sm">
+              <Button asChild variant="outline" size="sm" className="self-start sm:flex-shrink-0">
                 <Link href="/generic-keywords">See More</Link>
               </Button>
             </div>

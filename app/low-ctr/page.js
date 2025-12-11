@@ -836,6 +836,7 @@ export default function LowCtrPage() {
 
       {isGscConnected && (
         <>
+      {/* Focus keywords view button - hidden for now
       <div className="mb-6 flex flex-wrap items-center gap-3">
         <div className="flex flex-wrap items-center gap-2">
           <Button
@@ -855,6 +856,7 @@ export default function LowCtrPage() {
           </span>
         )}
       </div>
+      */}
 
       {viewMode === "focus" ? (
         <>

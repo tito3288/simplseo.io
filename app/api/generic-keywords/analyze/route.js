@@ -31,20 +31,19 @@ export async function POST(req) {
         if (cachedDoc.exists) {
           const cachedData = cachedDoc.data();
           const cacheAge = Date.now() - cachedData.timestamp;
-          const maxAge = 7 * 24 * 60 * 60 * 1000; // 7 days in milliseconds
           
-          if (cacheAge < maxAge) {
-            return NextResponse.json({
-              success: true,
-              opportunities: cachedData.opportunities,
-              cannibalizationAnalysis: cachedData.cannibalizationAnalysis,
-              hubAndSpokeStrategy: cachedData.hubAndSpokeStrategy,
-              fromCache: true,
-              cacheAge: Math.round(cacheAge / (60 * 60 * 1000)) // hours
-            });
-          } else {
-            console.log("⏰ Cache expired, generating new data");
-          }
+          // Keywords never expire - return cached data if it exists
+          // This creates stability and forces users to work through their suggestions
+          // The data flywheel will improve recommendations over time based on success stories
+          console.log("✅ Returning cached keywords (never expires)");
+          return NextResponse.json({
+            success: true,
+            opportunities: cachedData.opportunities,
+            cannibalizationAnalysis: cachedData.cannibalizationAnalysis,
+            hubAndSpokeStrategy: cachedData.hubAndSpokeStrategy,
+            fromCache: true,
+            cacheAge: Math.round(cacheAge / (60 * 60 * 1000)) // hours
+          });
         } else {
           console.log("📝 No cache found, generating new data");
         }

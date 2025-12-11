@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw } from "lucide-react";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
@@ -63,6 +63,10 @@ export default function GenericKeywordsPage() {
   
   // Cache for content outlines (persists during session)
   const [outlineCache, setOutlineCache] = useState(new Map());
+  
+  // Skipped keywords state
+  const [skippedKeywords, setSkippedKeywords] = useState([]);
+  const [showSkipped, setShowSkipped] = useState(false);
 
   // Helper function to get display name for page types
   const getPageTypeDisplayName = (pageType) => {
@@ -84,6 +88,7 @@ export default function GenericKeywordsPage() {
       // Use the same approach as dashboard - get GSC data from the dashboard's context
       fetchGenericOpportunitiesFromDashboard();
       fetchCreatedOpportunities();
+      fetchSkippedKeywords();
     }
   }, [user?.id, data?.businessType]);
 
@@ -100,6 +105,74 @@ export default function GenericKeywordsPage() {
       }
     } catch (error) {
       console.error("Error fetching created opportunities:", error);
+    }
+  };
+
+  // Fetch skipped keywords
+  const fetchSkippedKeywords = async () => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch(`/api/content-opportunities/skip?userId=${encodeURIComponent(user.id)}`);
+      const result = await response.json();
+      
+      if (result.success) {
+        setSkippedKeywords(result.skippedKeywords || []);
+      }
+    } catch (error) {
+      console.error("Error fetching skipped keywords:", error);
+    }
+  };
+
+  // Skip a keyword
+  const handleSkipKeyword = async (keyword) => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch("/api/content-opportunities/skip", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, keyword }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success("Keyword skipped", {
+          description: "You can restore it anytime from the Skipped section.",
+        });
+        await fetchSkippedKeywords();
+      } else {
+        toast.error("Failed to skip keyword");
+      }
+    } catch (error) {
+      console.error("Error skipping keyword:", error);
+      toast.error("Failed to skip keyword");
+    }
+  };
+
+  // Restore a skipped keyword
+  const handleRestoreKeyword = async (keyword) => {
+    if (!user?.id) return;
+    
+    try {
+      const response = await fetch("/api/content-opportunities/skip", {
+        method: "DELETE",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id, keyword }),
+      });
+      
+      const result = await response.json();
+      
+      if (result.success) {
+        toast.success("Keyword restored");
+        await fetchSkippedKeywords();
+      } else {
+        toast.error("Failed to restore keyword");
+      }
+    } catch (error) {
+      console.error("Error restoring keyword:", error);
+      toast.error("Failed to restore keyword");
     }
   };
 
@@ -492,8 +565,18 @@ export default function GenericKeywordsPage() {
     [sortedOpportunities]
   );
 
+  // Set of skipped keyword names for quick lookup
+  const skippedKeywordSet = useMemo(() => {
+    return new Set(skippedKeywords.map(sk => sk.keyword.toLowerCase()));
+  }, [skippedKeywords]);
+
   const filteredOpportunities = useMemo(() => {
     return sortedOpportunities.filter((opp) => {
+      // Filter out skipped keywords
+      if (skippedKeywordSet.has(opp.keyword.toLowerCase())) {
+        return false;
+      }
+
       if (categoryFilter !== "all" && opp.category !== categoryFilter) {
         return false;
       }
@@ -508,7 +591,7 @@ export default function GenericKeywordsPage() {
 
       return true;
     });
-  }, [sortedOpportunities, categoryFilter, priorityFilter]);
+  }, [sortedOpportunities, categoryFilter, priorityFilter, skippedKeywordSet]);
 
   const groupedOpportunities = useMemo(() => {
     return filteredOpportunities.reduce((acc, opportunity) => {
@@ -810,6 +893,19 @@ export default function GenericKeywordsPage() {
                 <span>Created</span>
               </div>
             )}
+
+            {/* Skip Button - Only show if not already created */}
+            {!createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase()) && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => handleSkipKeyword(opportunity.keyword)}
+                className="gap-2 text-muted-foreground hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20"
+              >
+                <X className="w-4 h-4" />
+                Skip
+              </Button>
+            )}
           </div>
         </div>
       </CardContent>
@@ -972,6 +1068,147 @@ export default function GenericKeywordsPage() {
               ))}
             </div>
           </CardContent>
+        </Card>
+      )}
+
+      {/* Your Created Pages Section - Shows pages waiting to rank */}
+      {(() => {
+        // Filter out pages that are already in Success Stories
+        const successStoryUrls = new Set(successStories.map(s => s.pageUrl.toLowerCase()));
+        const pendingPages = createdOpportunities.filter(
+          opp => !successStoryUrls.has(opp.pageUrl.toLowerCase())
+        );
+        
+        if (pendingPages.length === 0) return null;
+        
+        return (
+          <Card className="mb-6 border-blue-200 bg-blue-50 dark:border-blue-900/20 dark:bg-blue-900/10">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2 text-blue-800 dark:text-blue-200">
+                <Clock className="w-5 h-5" />
+                Your Created Pages - Waiting to Rank
+              </CardTitle>
+              <CardDescription className="text-blue-700 dark:text-blue-300">
+                Pages you&apos;ve created that are waiting to appear in Google Search Console. This can take a few days to a few weeks.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="space-y-4">
+                {pendingPages.map((page, index) => {
+                  const createdAt = new Date(page.createdAt);
+                  const now = new Date();
+                  const daysSinceCreated = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
+                  
+                  return (
+                    <div
+                      key={page.id || index}
+                      className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-blue-200 dark:border-blue-800"
+                    >
+                      <div className="flex items-start justify-between">
+                        <div className="flex-1">
+                          <div className="flex items-center gap-2 mb-2">
+                            <h4 className="font-semibold text-blue-800 dark:text-blue-200">
+                              {page.keyword}
+                            </h4>
+                            <Badge variant="outline" className="bg-blue-100 dark:bg-blue-900/30 text-blue-800 dark:text-blue-200">
+                              Waiting
+                            </Badge>
+                          </div>
+                          <a
+                            href={page.pageUrl}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="text-sm text-blue-700 dark:text-blue-300 hover:underline flex items-center gap-1 mb-2"
+                          >
+                            {page.pageUrl}
+                            <ExternalLink className="w-3 h-3" />
+                          </a>
+                          <div className="flex flex-wrap items-center gap-4 text-sm text-blue-700 dark:text-blue-300">
+                            <span className="text-xs text-blue-600 dark:text-blue-400">
+                              Created {daysSinceCreated} {daysSinceCreated === 1 ? 'day' : 'days'} ago
+                            </span>
+                            {daysSinceCreated < 7 && (
+                              <span className="text-xs text-blue-500 dark:text-blue-400">
+                                • Usually takes 1-2 weeks to appear in GSC
+                              </span>
+                            )}
+                            {daysSinceCreated >= 7 && daysSinceCreated < 14 && (
+                              <span className="text-xs text-yellow-600 dark:text-yellow-400">
+                                • Should appear soon - Google is indexing
+                              </span>
+                            )}
+                            {daysSinceCreated >= 14 && (
+                              <span className="text-xs text-orange-600 dark:text-orange-400">
+                                • Check if page is indexed in Google
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </CardContent>
+          </Card>
+        );
+      })()}
+
+      {/* Skipped Keywords Section */}
+      {skippedKeywords.length > 0 && (
+        <Card className="mb-6 border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
+          <CardHeader>
+            <div className="flex items-center justify-between">
+              <div>
+                <CardTitle className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                  <X className="w-5 h-5" />
+                  Skipped Keywords ({skippedKeywords.length})
+                </CardTitle>
+                <CardDescription className="text-gray-600 dark:text-gray-400">
+                  Keywords you&apos;ve chosen to skip. You can restore them anytime.
+                </CardDescription>
+              </div>
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => setShowSkipped(!showSkipped)}
+                className="text-gray-600 dark:text-gray-400"
+              >
+                {showSkipped ? "Hide" : "Show"}
+                <ChevronDown className={cn("w-4 h-4 ml-1 transition-transform", showSkipped && "rotate-180")} />
+              </Button>
+            </div>
+          </CardHeader>
+          {showSkipped && (
+            <CardContent>
+              <div className="space-y-2">
+                {skippedKeywords.map((skipped, index) => (
+                  <div
+                    key={skipped.id || index}
+                    className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-700 dark:text-gray-300">
+                        {skipped.keyword}
+                      </p>
+                      <p className="text-xs text-gray-500 dark:text-gray-400">
+                        Skipped {new Date(skipped.skippedAt).toLocaleDateString()}
+                      </p>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => handleRestoreKeyword(skipped.keyword)}
+                      className="gap-2"
+                    >
+                      <RotateCcw className="w-4 h-4" />
+                      Restore
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          )}
         </Card>
       )}
 

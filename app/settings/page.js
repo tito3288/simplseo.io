@@ -1015,22 +1015,23 @@ export default function Settings() {
 
         {/* Horizontal Tab Navigation */}
         <div className="bg-background border-b border-border">
-          <div className="px-6">
-            <nav className="flex space-x-1">
+          <div className="px-4 sm:px-6">
+            <nav className="flex overflow-x-auto scrollbar-hide -mb-px" style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}>
               {tabs.map((tab) => {
                 const Icon = tab.icon;
                 return (
                   <button
                     key={tab.id}
                     onClick={() => setActiveTab(tab.id)}
-                    className={`flex items-center gap-2 px-4 py-3 text-sm font-medium transition-colors border-b-2 ${
+                    className={`flex items-center gap-2 px-3 sm:px-4 py-3 text-sm font-medium transition-colors border-b-2 whitespace-nowrap flex-shrink-0 ${
                       activeTab === tab.id
                         ? "text-foreground border-green-600 bg-green-50 dark:bg-green-950/20"
                         : "text-muted-foreground border-transparent hover:text-foreground hover:border-muted-foreground"
                     }`}
                   >
-                    <Icon className="w-4 h-4" />
-                    <span>{tab.label}</span>
+                    <Icon className="w-4 h-4 flex-shrink-0" />
+                    <span className="hidden sm:inline">{tab.label}</span>
+                    <span className="sm:hidden">{tab.label.split(' ')[0]}</span>
                   </button>
                 );
               })}
@@ -1772,30 +1773,30 @@ export default function Settings() {
                 <CardContent className="space-y-6">
                   <div className="grid grid-cols-1 gap-6">
                     {/* Google Search Console */}
-                    <div className="flex items-center justify-between p-6 border rounded-lg">
-                      <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center">
-                          <Search className="w-6 h-6 text-blue-600" />
+                    <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 p-4 sm:p-6 border rounded-lg">
+                      <div className="flex items-center gap-3 sm:gap-4">
+                        <div className="w-10 h-10 sm:w-12 sm:h-12 bg-blue-100 dark:bg-blue-900/20 rounded-lg flex items-center justify-center flex-shrink-0">
+                          <Search className="w-5 h-5 sm:w-6 sm:h-6 text-blue-600" />
                         </div>
-                        <div>
-                          <div className="font-semibold text-lg">Google Search Console</div>
+                        <div className="min-w-0">
+                          <div className="font-semibold text-base sm:text-lg">Google Search Console</div>
                           <div className="text-sm text-muted-foreground">
                             {formData.gscConnected ? (
-                              <>
-                                Connected
+                              <div className="flex flex-col sm:flex-row sm:items-center gap-1 sm:gap-2">
+                                <span>Connected</span>
                                 {formData.gscProperty && (
-                                  <span className="ml-2 text-green-600">
+                                  <span className="text-green-600 truncate text-xs sm:text-sm">
                                     • Property: {formData.gscProperty}
                                   </span>
                                 )}
-                              </>
+                              </div>
                             ) : (
                               "Not connected"
                             )}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center gap-2">
+                      <div className="flex items-center gap-2 self-end sm:self-center">
                         {formData.gscConnected ? (
                           <>
                             <CheckCircle className="w-5 h-5 text-green-600" />
@@ -1977,23 +1978,23 @@ export default function Settings() {
                   */}
 
                   {/* Danger Zone */}
-                  <div className="space-y-6">
+                  <div className="space-y-4 sm:space-y-6">
                     <h3 className="text-lg font-semibold text-red-600">Danger Zone</h3>
                     <div className="p-4 border border-red-200 dark:border-red-800 rounded-lg bg-red-50 dark:bg-red-950/20">
-                      <div className="flex items-center justify-between">
-                        <div className="space-y-1">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="space-y-2">
                           <div className="font-medium text-red-600">Delete Account</div>
                           <div className="text-sm text-muted-foreground">
                             Permanently delete your account and all associated data. This action cannot be undone.
                           </div>
-                          <div className="text-xs text-red-500 mt-1">
+                          <div className="text-xs text-red-500">
                             <strong>This will delete:</strong> All SEO progress, implementation history, GSC data, 
                             recommendations, settings, and account information.
                           </div>
                         </div>
                         <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
                           <DialogTrigger asChild>
-                            <Button variant="destructive">
+                            <Button variant="destructive" className="w-full sm:w-auto flex-shrink-0">
                               <Trash2 className="w-4 h-4 mr-2" />
                               Delete Account
                             </Button>

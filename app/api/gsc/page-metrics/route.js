@@ -35,7 +35,31 @@ export async function POST(req) {
     }
   );
 
+  // ✅ FIX: Check if GSC request was successful before parsing
+  if (!gscRes.ok) {
+    const errorText = await gscRes.text();
+    console.error(`❌ GSC API error: ${gscRes.status} - ${errorText}`);
+    
+    // Return an error response instead of zeros
+    // This allows the cron job to skip instead of saving bad data
+    return Response.json({
+      error: true,
+      status: gscRes.status,
+      message: `GSC API failed: ${gscRes.status}`,
+    }, { status: gscRes.status, headers });
+  }
+
   const json = await gscRes.json();
+
+  // Check if the response indicates an error (e.g., invalid token)
+  if (json.error) {
+    console.error(`❌ GSC API returned error:`, json.error);
+    return Response.json({
+      error: true,
+      status: json.error.code || 400,
+      message: json.error.message || "GSC API error",
+    }, { status: json.error.code || 400, headers });
+  }
 
   const matchingRow = json.rows?.find((row) => row.keys[0] === pageUrl);
 
@@ -45,14 +69,17 @@ export async function POST(req) {
       clicks: matchingRow.clicks,
       ctr: matchingRow.ctr,
       position: matchingRow.position,
-    }, { headers }); // Add CORS headers
+    }, { headers });
   } else {
+    // No data for this page - this is legitimate (page has no impressions)
+    // Return zeros but mark it as valid data
     return Response.json({
       impressions: 0,
       clicks: 0,
       ctr: 0,
       position: 0,
-    }, { headers }); // Add CORS headers
+      noData: true, // Flag to indicate this is valid "no data" vs an error
+    }, { headers });
   }
 }
 
