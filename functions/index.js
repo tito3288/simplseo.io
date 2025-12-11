@@ -425,10 +425,11 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// ⏰ Daily cron job to check SEO progress after 7 days
+// ⏰ Weekly cron job to check SEO progress after 7 days
+// Runs every Monday at 1:00 AM ET - updates postStats weekly after initial 7-day wait
 // ✅ FIXED: Added safeguards to prevent overwriting good data with 0s
 exports.checkSeoTipProgress = pubsub
-  .schedule("every 24 hours")
+  .schedule("every monday 01:00")
   .timeZone("America/New_York")
   .onRun(async (context) => {
     const snapshot = await db
