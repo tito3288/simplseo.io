@@ -149,8 +149,9 @@ const Hero = () => {
             <span>What is SEO?</span>
             <span className="text-xs seo-arrow-bounce">→</span>
           </button>
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-foreground mb-4 animate-fade-up">
-            SEO made simple
+          <h1 className="font-bold tracking-tight text-foreground mb-4 animate-fade-up">
+            <span className="block text-5xl md:text-7xl lg:text-8xl">SEO made simple</span>
+            <span className="block text-3xl md:text-5xl lg:text-6x mt-2">for small businesses</span>
           </h1>
 
           <h2 className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 animate-fade-up" style={{ animationDelay: "0.1s" }}>

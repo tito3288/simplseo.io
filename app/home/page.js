@@ -14,12 +14,15 @@ import FAQ from "@/components/FAQ";
 import AIBubble from "@/components/AIBubble";
 import ChaosVisualizer from "@/components/ChaosVisualizer";
 import { KeywordModalProvider } from "@/components/KeywordTooltip";
+import SeoSchemas from "./_components/SeoSchemas";
 export default function HomePage() {
   const { isDarkMode, toggleTheme } = useTheme();
 
   return (
-    <KeywordModalProvider>
-    <div className="min-h-screen bg-background relative">
+    <>
+      <SeoSchemas />
+      <KeywordModalProvider>
+      <div className="min-h-screen bg-background relative">
       {/* Static Background Orbs - Large and Spread Out */}
       <div className="fixed inset-0 overflow-hidden pointer-events-none z-0">
         {/* Top left - Teal */}
@@ -89,6 +92,7 @@ export default function HomePage() {
       </div>
     </div>
     </KeywordModalProvider>
+    </>
   );
 }
 

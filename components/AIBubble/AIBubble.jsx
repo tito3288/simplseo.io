@@ -143,14 +143,7 @@ const AIBubble = () => {
           <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 via-teal-500/10 to-primary/20 rounded-3xl blur-2xl opacity-60" />
           
           {/* Main card */}
-          <div className="relative bg-background/80 backdrop-blur-xl border border-border/50 rounded-2xl p-6 sm:p-8 min-h-[120px] shadow-xl">
-            {/* Gradient border accent */}
-            <div className="absolute inset-0 rounded-2xl p-[1px] bg-gradient-to-br from-primary/30 via-transparent to-primary/10 pointer-events-none" style={{
-              mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
-              maskComposite: 'xor',
-              WebkitMaskComposite: 'xor',
-            }} />
-            
+          <div className="relative bg-background/80 backdrop-blur-xl rounded-2xl p-6 sm:p-8 min-h-[120px] shadow-xl">
             {/* Sparkles decoration */}
             <div className="absolute inset-0 overflow-visible pointer-events-none">
               <SparkleGroup isActive={stage === AnimationStage.FINAL} />
