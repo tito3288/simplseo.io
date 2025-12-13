@@ -85,7 +85,7 @@ const StackingCards = () => {
   return (
     <section id="stacking-cards" className="relative">
       {/* Section header */}
-      <div className="text-center pt-20 pb-16 px-4">
+      <div className="text-center pb-16 px-4">
         <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6">
         What SimplSEO helps you fix
         </h2>

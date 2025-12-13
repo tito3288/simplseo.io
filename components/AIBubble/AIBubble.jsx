@@ -2,65 +2,63 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Sparkles } from 'lucide-react';
+import { Sparkles, Bot } from 'lucide-react';
 import TypingDots from './TypingDots';
 import { SparkleGroup } from './Sparkles';
-import { SEO_RECOMMENDATIONS, AI_LOADING_TEXT } from './constants';
+import { SEO_RECOMMENDATIONS, AI_LOADING_TEXTS } from './constants';
 
-// Animation stages as constants instead of enum
+// Animation stages
 const AnimationStage = {
   HIDDEN: 0,
   TYPING: 1,
-  PRE_TEXT: 2,    // "Keyword opportunity found..."
-  REFINING: 3,   // Transition/Blur
-  FINAL: 4,      // Actual recommendation
-  EXIT: 5        // Fade out
+  PRE_TEXT: 2,
+  REFINING: 3,
+  FINAL: 4,
+  EXIT: 5
 };
 
 const AIBubble = () => {
   const [stage, setStage] = useState(AnimationStage.HIDDEN);
   const [recIndex, setRecIndex] = useState(0);
+  const [loadingTextIndex, setLoadingTextIndex] = useState(0);
 
   useEffect(() => {
     const timeouts = [];
 
     const runSequence = () => {
-      // Clear any existing timeouts
       timeouts.forEach(t => clearTimeout(t));
       timeouts.length = 0;
 
-      // 1. Start Hidden -> Typing
       setStage(AnimationStage.TYPING);
 
-      // 2. Typing -> Pre-text ("Keyword opportunity found...")
+      // Typing dots - 2.5 seconds
       timeouts.push(setTimeout(() => {
         setStage(AnimationStage.PRE_TEXT);
-      }, 1500));
+      }, 2500));
 
-      // 3. Pre-text -> Refining (Brief transition state)
+      // Loading text - show for 3 seconds
       timeouts.push(setTimeout(() => {
         setStage(AnimationStage.REFINING);
-      }, 3500));
+      }, 5500));
 
-      // 4. Refining -> Final (Show actual recommendation + Sparkles)
+      // Blur transition - 0.5 seconds
       timeouts.push(setTimeout(() => {
         setStage(AnimationStage.FINAL);
-      }, 4000));
+      }, 6000));
 
-      // 5. Final -> Exit (Fade out to prepare next loop)
+      // Show recommendation - 7 seconds to read
       timeouts.push(setTimeout(() => {
         setStage(AnimationStage.EXIT);
-      }, 8000));
+      }, 13000));
 
-      // 6. Exit -> Reset Loop (Increment index)
+      // Exit transition - 1 second, then loop
       timeouts.push(setTimeout(() => {
         setRecIndex((prev) => (prev + 1) % SEO_RECOMMENDATIONS.length);
-        // Recursively call to loop
+        setLoadingTextIndex((prev) => (prev + 1) % AI_LOADING_TEXTS.length);
         runSequence();
-      }, 8800));
+      }, 14000));
     };
 
-    // Start the first loop
     runSequence();
 
     return () => {
@@ -68,7 +66,6 @@ const AIBubble = () => {
     };
   }, []);
 
-  // Determine what content to show based on stage
   const renderContent = () => {
     if (stage === AnimationStage.TYPING) {
       return (
@@ -77,7 +74,7 @@ const AIBubble = () => {
           initial={{ opacity: 0 }}
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
-          className="flex items-center"
+          className="flex items-center justify-center py-2"
         >
           <TypingDots />
         </motion.div>
@@ -95,10 +92,10 @@ const AIBubble = () => {
             filter: stage === AnimationStage.REFINING ? 'blur(8px)' : 'blur(0px)' 
           }}
           exit={{ opacity: 0, y: -10 }}
-          className="text-zinc-500 font-medium text-sm sm:text-base flex items-center gap-2"
+          className="text-muted-foreground font-medium text-sm sm:text-base flex items-center gap-2"
         >
-          <Sparkles className="w-4 h-4 text-emerald-500" />
-          {AI_LOADING_TEXT}
+          <Sparkles className="w-4 h-4 text-primary" />
+          {AI_LOADING_TEXTS[loadingTextIndex]}
         </motion.div>
       );
     }
@@ -109,15 +106,15 @@ const AIBubble = () => {
           key="final-text"
           initial={{ opacity: 0, scale: 0.95, filter: 'blur(8px)' }}
           animate={{ opacity: 1, scale: 1, filter: 'blur(0px)' }}
-          className="flex flex-col gap-1"
+          className="flex flex-col gap-2"
         >
-          <div className="flex items-center gap-2 mb-1">
-             <div className="w-5 h-5 rounded-full bg-gradient-to-tr from-teal-500 to-emerald-500 flex items-center justify-center text-[10px] text-white font-bold">
-               AI
-             </div>
-             <span className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">SEO Mentor</span>
+          <div className="flex items-center gap-2">
+            <div className="w-7 h-7 rounded-xl bg-gradient-to-br from-primary to-primary/70 flex items-center justify-center shadow-lg shadow-primary/20">
+              <Bot className="w-4 h-4 text-white" />
+            </div>
+            <span className="text-xs font-semibold text-primary uppercase tracking-wider">SEO Mentor</span>
           </div>
-          <p className="text-zinc-800 font-medium text-sm sm:text-lg leading-snug">
+          <p className="text-foreground font-medium text-sm sm:text-lg leading-relaxed">
             {SEO_RECOMMENDATIONS[recIndex]}
           </p>
         </motion.div>
@@ -128,46 +125,63 @@ const AIBubble = () => {
   };
 
   return (
-    <div className="relative w-full max-w-md mx-auto px-6">
-      <AnimatePresence mode="wait">
-        {stage !== AnimationStage.EXIT && (
-          <motion.div
-            key="bubble-container"
-            initial={{ opacity: 0, y: 20, scale: 0.9 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: -20, scale: 0.95 }}
-            transition={{ duration: 0.5, type: "spring", stiffness: 200, damping: 20 }}
-            className="relative bg-white/90 backdrop-blur-xl border border-white/20 shadow-[0_8px_30px_rgb(0,0,0,0.04)] rounded-3xl p-6 sm:p-8 flex items-center min-h-[120px]"
-            style={{
-              boxShadow: "0 20px 40px -10px rgba(0,0,0,0.05), 0 0 1px 0 rgba(0,0,0,0.1), inset 0 0 0 1px rgba(255,255,255,0.8)"
-            }}
-          >
-             {/* Sparkles Decoration Container - Renders outside the clip */}
+    <div className="relative w-full max-w-lg mx-auto px-6">
+      {/* Fixed height container to prevent layout shift */}
+      <div className="min-h-[180px] flex items-center justify-center">
+        <motion.div
+          key="bubble-container"
+          initial={{ opacity: 0, y: 20, scale: 0.9 }}
+          animate={{ 
+            opacity: stage === AnimationStage.EXIT ? 0 : 1, 
+            y: stage === AnimationStage.EXIT ? -10 : 0, 
+            scale: stage === AnimationStage.EXIT ? 0.95 : 1 
+          }}
+          transition={{ duration: 0.5, type: "spring", stiffness: 200, damping: 20 }}
+          className="relative w-full"
+        >
+          {/* Gradient glow behind the card */}
+          <div className="absolute -inset-4 bg-gradient-to-r from-primary/20 via-teal-500/10 to-primary/20 rounded-3xl blur-2xl opacity-60" />
+          
+          {/* Main card */}
+          <div className="relative bg-background/80 backdrop-blur-xl border border-border/50 rounded-2xl p-6 sm:p-8 min-h-[120px] shadow-xl">
+            {/* Gradient border accent */}
+            <div className="absolute inset-0 rounded-2xl p-[1px] bg-gradient-to-br from-primary/30 via-transparent to-primary/10 pointer-events-none" style={{
+              mask: 'linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0)',
+              maskComposite: 'xor',
+              WebkitMaskComposite: 'xor',
+            }} />
+            
+            {/* Sparkles decoration */}
             <div className="absolute inset-0 overflow-visible pointer-events-none">
               <SparkleGroup isActive={stage === AnimationStage.FINAL} />
             </div>
-            {/* Content Area */}
-            <div className="w-full relative z-10">
+            
+            {/* Content */}
+            <div className="relative z-10">
               <AnimatePresence mode="wait">
                 {renderContent()}
               </AnimatePresence>
             </div>
             
-            {/* Subtle Gradient Hint */}
-            <div className="absolute inset-0 bg-gradient-to-tr from-teal-50/50 via-transparent to-emerald-50/30 rounded-3xl pointer-events-none" />
-          </motion.div>
-        )}
-      </AnimatePresence>
-      {/* Helper text for the demo */}
+            {/* Subtle inner gradient */}
+            <div className="absolute inset-0 bg-gradient-to-br from-primary/5 via-transparent to-transparent rounded-2xl pointer-events-none" />
+          </div>
+        </motion.div>
+      </div>
+      
+      {/* Status text */}
       <motion.div 
         animate={{ opacity: stage === AnimationStage.EXIT ? 0 : 1 }}
-        className="text-center mt-12 text-zinc-300 text-sm font-medium tracking-wide"
+        transition={{ duration: 0.5 }}
+        className="text-center mt-6"
       >
-        Analysing site performance...
+        {/* <span className="inline-flex items-center gap-2 text-muted-foreground text-sm font-medium">
+          <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
+          Analysing 
+        </span> */}
       </motion.div>
     </div>
   );
 };
 
 export default AIBubble;
-

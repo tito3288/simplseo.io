@@ -10,7 +10,7 @@ const Sparkle = ({ delay = 0, top, left, size = 16 }) => {
       viewBox="0 0 24 24"
       fill="none"
       xmlns="http://www.w3.org/2000/svg"
-      className="absolute text-amber-400 pointer-events-none z-10"
+      className="absolute text-primary pointer-events-none z-10"
       style={{ top, left }}
       initial={{ scale: 0, opacity: 0, rotate: 0 }}
       animate={{ 
@@ -47,4 +47,3 @@ export const SparkleGroup = ({ isActive }) => {
 };
 
 export default Sparkle;
-

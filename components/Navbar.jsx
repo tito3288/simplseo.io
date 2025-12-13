@@ -73,6 +73,18 @@ const Navbar = () => {
         >
           How it works
         </button>
+        <button 
+          onClick={() => {
+            const el = document.getElementById('faq');
+            if (el) {
+              const y = el.getBoundingClientRect().top + window.pageYOffset - 100;
+              window.scrollTo({ top: y, behavior: 'smooth' });
+            }
+          }}
+          className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted"
+        >
+          FAQ
+        </button>
       </div>
       <Button 
         className="ml-2 rounded-full px-6" 

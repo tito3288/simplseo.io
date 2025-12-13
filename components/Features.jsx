@@ -116,7 +116,7 @@ const Features = () => {
   
   return (
     <ScrollContext.Provider value={progress}>
-      <section ref={sectionRef} id="features" className=" min-h-[100vh] py-16 px-4">
+      <section ref={sectionRef} id="features" className="pt-16 pb-1 px-4">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-10">
           SEO tools are confusing. SimplSEO isn’t.

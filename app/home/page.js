@@ -10,6 +10,7 @@ import Pricing from "@/components/Pricing";
 import CTA from "@/components/CTA";
 import Footer from "@/components/Footer";
 import Features from "@/components/Features";
+import FAQ from "@/components/FAQ";
 import AIBubble from "@/components/AIBubble";
 import ChaosVisualizer from "@/components/ChaosVisualizer";
 import { KeywordModalProvider } from "@/components/KeywordTooltip";
@@ -38,22 +39,22 @@ export default function HomePage() {
       <div className="relative z-10">
         <Navbar />
         <Hero />
-        
-        {/* AI Bubble Animation Section */}
-        {/* <section className="py-20 px-4">
-          <AIBubble />
-        </section> */}
-        
 
-        
         <Features />
+
+        {/* AI Bubble Animation Section */}
+        <section className="py-30 px-4">
+          <AIBubble />
+        </section>
+
         <StackingCards />
         <HowItWorks />
         {/* <Pricing /> */}
         {/* Chaos Visualizer - Keywords Animation */}
-        <section className="w-full h-screen">
+        {/* <section className="w-full h-screen">
           <ChaosVisualizer />
-        </section>
+        </section> */}
+        <FAQ />
         <CTA />
         <Footer />
       </div>
