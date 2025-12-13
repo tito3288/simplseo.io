@@ -434,15 +434,15 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         </div>
 
         {/* ✅ NEW: Continuous Update Message */}
-        <div className="mt-6 rounded-lg border border-primary/20 bg-primary/10 p-3">
+        <div className="mt-6 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
           <div className="flex items-center gap-2 mb-2">
-            <span className="text-primary">🔄</span>
-            <h4 className="text-sm font-medium text-primary">
+            <span className="text-blue-600 dark:text-blue-400">🔄</span>
+            <h4 className="text-sm font-medium text-blue-700 dark:text-blue-300">
               Continuous Progress Tracking
             </h4>
           </div>
           <p className="text-xs text-muted-foreground">
-          Your SEO tracking doesn't stop after the first week! We monitor your performance daily and provide fresh insights every 7 days, so you can stay on top of your progress. Check back regularly to see the latest progress!
+          Your SEO tracking doesn't stop after the first week! We monitor your performance daily and provide fresh insights <strong className="text-blue-600 dark:text-blue-400">every 7 days</strong>, so you can stay on top of your progress. Check back regularly to see the latest progress!
           </p>
         </div>
       </CardContent>

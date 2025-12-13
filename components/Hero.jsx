@@ -1,13 +1,14 @@
 "use client";
 
 import { Button } from "@/components/ui/button";
-import { ArrowRight } from "lucide-react";
+import { ArrowRight, X } from "lucide-react";
 import { useState, useEffect, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 
 const Hero = () => {
   const router = useRouter();
   const [buttonState, setButtonState] = useState("hidden"); // "hidden" | "bouncing" | "expanding" | "complete"
+  const [showSeoPopup, setShowSeoPopup] = useState(false);
   const buttonRef = useRef(null);
   const timersRef = useRef([]);
   
@@ -115,6 +116,17 @@ const Hero = () => {
           85% { transform: scale(1.1); }
           100% { transform: scale(1); }
         }
+        @keyframes arrow-nudge {
+          0%, 85% { transform: translateX(0); }
+          90% { transform: translateX(4px); }
+          95% { transform: translateX(0); }
+          97% { transform: translateX(3px); }
+          100% { transform: translateX(0); }
+        }
+        .seo-arrow-bounce {
+          display: inline-block;
+          animation: arrow-nudge 8s ease-in-out infinite;
+        }
         .hero-button {
           transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
         }
@@ -129,42 +141,105 @@ const Hero = () => {
       `}} />
       <section className="min-h-[100vh] flex flex-col items-center justify-center px-4 pt-32 pb-10">
         <div className="max-w-4xl mx-auto text-center">
-          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-foreground mb-8 animate-fade-up">
+        <button
+            onClick={() => setShowSeoPopup(true)}
+            className="group inline-flex items-center gap-1 text-sm md:text-base text-primary hover:text-primary/80 bg-primary/10 hover:bg-primary/20 px-3 py-1.5 rounded-full font-medium transition-colors mb-8 animate-fade-up"
+            style={{ animationDelay: "0.05s" }}
+          >
+            <span>What is SEO?</span>
+            <span className="text-xs seo-arrow-bounce">→</span>
+          </button>
+          <h1 className="text-5xl md:text-7xl lg:text-8xl font-bold tracking-tight text-foreground mb-4 animate-fade-up">
             SEO made simple
           </h1>
-          
-          <p className="text-lg md:text-xl text-muted-foreground max-w-2xl mx-auto mb-12 animate-fade-up" style={{ animationDelay: "0.1s" }}>
-          Search Engine Optimization (SEO) just means helping people find your website on Google. Think of it like putting a bright, clear sign on your storefront instead of hoping customers wander in. When your pages are optimized, Google understands what you offer and shows you to the right people that are looking for your products or services.
-          </p>
-          <div className="flex flex-col sm:flex-row items-center justify-center gap-4 animate-fade-up" style={{ animationDelay: "0.2s" }}>
-            <button
-              ref={buttonRef}
-              className="hero-button relative overflow-hidden font-semibold text-white bg-primary flex items-center justify-center gap-2"
-              style={getButtonStyles()}
-              onClick={() => router.push('/auth')}
-            >
-              <span 
-                className="whitespace-nowrap transition-opacity duration-300"
-                style={{ opacity: buttonState === "complete" ? 1 : 0 }}
+
+          <h2 className="text-xl md:text-2xl text-muted-foreground max-w-2xl mx-auto mb-12 animate-fade-up" style={{ animationDelay: "0.1s" }}>
+          Understand why customers aren't finding your business on Google and know exactly what to fix.
+          </h2>
+          <div className="flex flex-col items-center gap-3 animate-fade-up" style={{ animationDelay: "0.2s" }}>
+            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
+              <button
+                ref={buttonRef}
+                className="hero-button relative overflow-hidden font-semibold text-white bg-primary flex items-center justify-center gap-2"
+                style={getButtonStyles()}
+                onClick={() => router.push('/auth')}
               >
-                Try Our Demo
-              </span>
-              <ArrowRight 
-                className="w-4 h-4 transition-opacity duration-300"
-                style={{ opacity: buttonState === "complete" ? 1 : 0 }}
-              />
-            </button>
-            <Button 
-              variant="outline" 
-              size="lg" 
-              className="rounded-full px-8 py-6 text-base font-semibold"
-              onClick={() => document.getElementById('stacking-cards')?.scrollIntoView({ behavior: 'smooth' })}
-            >
-              See how it works
-            </Button>
+                <span 
+                  className="whitespace-nowrap transition-opacity duration-300"
+                  style={{ opacity: buttonState === "complete" ? 1 : 0 }}
+                >
+                  Try Free Access
+                </span>
+                <ArrowRight 
+                  className="w-4 h-4 transition-opacity duration-300"
+                  style={{ opacity: buttonState === "complete" ? 1 : 0 }}
+                />
+              </button>
+              <Button 
+                variant="outline" 
+                size="lg" 
+                className="rounded-full px-8 py-6 text-base font-semibold"
+                onClick={() => document.getElementById('stacking-cards')?.scrollIntoView({ behavior: 'smooth' })}
+              >
+                See how it works
+              </Button>
+            </div>
+            <p className="text-sm text-muted-foreground">No credit card required</p>
           </div>
         </div>
       </section>
+
+      {/* SEO Explanation Popup */}
+      {showSeoPopup && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm p-4"
+          onClick={() => setShowSeoPopup(false)}
+        >
+          <div 
+            className="relative w-full max-w-lg rounded-2xl border border-border bg-background p-6 md:p-8 shadow-2xl animate-fade-up"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <button
+              onClick={() => setShowSeoPopup(false)}
+              className="absolute top-4 right-4 text-muted-foreground hover:text-foreground transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+            
+            <div className="mb-4">
+              <span className="text-3xl mb-2 block">🔍</span>
+              <h3 className="text-2xl font-bold text-foreground">What is SEO?</h3>
+            </div>
+            
+            <div className="space-y-4 text-muted-foreground">
+              <p>
+                <strong className="text-foreground">SEO (Search Engine Optimization)</strong> is simply helping people find your website on Google.
+              </p>
+              
+              <p>
+                Think of it like putting a <strong className="text-foreground">bright, clear sign</strong> on your storefront instead of hoping customers wander in.
+              </p>
+              
+              <p>
+                When your pages are optimized, Google understands what you offer and shows you to the <strong className="text-foreground">right people</strong>, the ones actively searching for your products or services.
+              </p>
+              
+              {/* <div className="mt-6 p-4 rounded-lg bg-primary/10 border border-primary/20">
+                <p className="text-sm text-primary font-medium">
+                  💡 SimplSEO makes this easy by showing you exactly what to fix — no technical knowledge required.
+                </p>
+              </div> */}
+            </div>
+            
+            <button
+              onClick={() => setShowSeoPopup(false)}
+              className="mt-6 w-full py-3 rounded-full bg-primary text-white font-semibold hover:bg-primary/90 transition-colors"
+            >
+              Got it!
+            </button>
+          </div>
+        </div>
+      )}
     </>
   );
 };

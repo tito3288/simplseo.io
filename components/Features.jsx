@@ -8,12 +8,12 @@ const ScrollContext = createContext(0);
 
 // All lines of text with their word counts
 const lines = [
-  "Most SEO tools drown you in dashboards, charts, and 100+ metrics you'll never use. They're built for analysts not business owners.",
-  "SimplSEO is built for clarity.",
-  "We show you only the things that actually move your rankings:",
+  "Most SEO tools are built for analysts, not business owners. They bury you in charts and numbers you don’t need.",
+  "SimplSEO shows you only what matters:",
+  "",
   "which pages need attention",
   "which keywords are improving", // Note: "keywords" here will be handled specially
-  "what's working and what's not",
+  "what’s working (and what isn’t)",
   "simple actions you can take today",
   "No fluff.",
   "No confusing data.",
@@ -119,7 +119,7 @@ const Features = () => {
       <section ref={sectionRef} id="features" className=" min-h-[100vh] py-16 px-4">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-10">
-            How is SimplSEO Different?
+          SEO tools are confusing. SimplSEO isn’t.
           </h2>
           
           <div className="space-y-6 text-lg">

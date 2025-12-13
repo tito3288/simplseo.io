@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy } from "lucide-react";
+import { Copy, ChevronDown } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -76,6 +76,7 @@ const SeoRecommendationPanel = ({
   const [currentMetaDescription, setCurrentMetaDescription] = useState(null);
   const [loadingMetaTags, setLoadingMetaTags] = useState(false);
   const fetchedPageUrlRef = useRef(null);
+  const [metaTagsExpanded, setMetaTagsExpanded] = useState(false); // For collapsing meta tags when implemented
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -416,220 +417,40 @@ const SeoRecommendationPanel = ({
           )}
 
           <div className="space-y-4">
-            <div>
-              <Label className="mb-2 flex items-center gap-2">
-                <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                {keywordSource === "ai-generated" ? "Step 1: Optimize Meta Tags" : "Optimize Meta Tags"}
-              </Label>
-              {keywordSource === "ai-generated" && (
-                <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
-                  <p className="text-xs text-blue-900 dark:text-blue-100">
-                    <strong>💡 What you&apos;re changing:</strong> The <strong>Meta Title</strong> is the clickable headline shown in Google search results, and the <strong>Meta Description</strong> is the short text snippet that appears below the title.
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                    <strong>📍 Where to find them:</strong> These are typically found in your website&apos;s SEO settings, page editor, or plugin settings (like Yoast SEO, Rank Math, or All in One SEO). Look for fields labeled &quot;SEO Title&quot; or &quot;Meta Title&quot; and &quot;Meta Description&quot; when editing your page.
-                  </p>
-                </div>
-              )}
-              <div className="space-y-4">
-                {/* Meta Title Comparison Card */}
-                <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-                  <Label className="text-sm font-medium">Meta Title</Label>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
-                      {loadingMetaTags ? (
-                        <p className="text-xs text-muted-foreground italic">Loading...</p>
-                      ) : currentMetaTitle ? (
-                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100">
-                          {currentMetaTitle}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground italic">Not found</p>
-                      )}
-                    </div>
-                    <div className={`flex items-center justify-center py-1 ${isImplemented ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
-                      {isImplemented ? '✓ Implemented' : '↓ Replace with ↓'}
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
-                      <div className="flex items-center justify-between gap-2">
-                        <Textarea
-                          value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
-                          readOnly
-                          className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
-                          className="flex-shrink-0"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Meta Description Comparison Card */}
-                <div className="rounded-lg border border-border bg-card p-4 space-y-3">
-                  <Label className="text-sm font-medium">Meta Description</Label>
-                  <div className="space-y-2">
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
-                      {loadingMetaTags ? (
-                        <p className="text-xs text-muted-foreground italic">Loading...</p>
-                      ) : currentMetaDescription ? (
-                        <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100 max-h-32 overflow-y-auto">
-                          {currentMetaDescription}
-                        </div>
-                      ) : (
-                        <p className="text-xs text-muted-foreground italic">Not found</p>
-                      )}
-                    </div>
-                    <div className={`flex items-center justify-center py-1 ${isImplemented ? 'text-green-600 font-medium' : 'text-muted-foreground'}`}>
-                      {isImplemented ? '✓ Implemented' : '↓ Replace with ↓'}
-                    </div>
-                    <div>
-                      <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
-                      <div className="flex items-center justify-between gap-2">
-                        <Textarea
-                          value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
-                          readOnly
-                          className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
-                        />
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          onClick={() =>
-                            copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
-                          }
-                          className="flex-shrink-0"
-                        >
-                          <Copy className="h-4 w-4" />
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* H1 Replacement Section for AI-generated keywords */}
-            {keywordSource === "ai-generated" && focusKeyword && (
-              <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
-                <Label className="mb-3 block font-semibold flex items-center gap-2">
-                  <span className="w-2 h-2 rounded-full bg-green-500"></span>
-                  Step 2: Update Page Content
-                </Label>
-                <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
-                  <p className="text-xs text-blue-900 dark:text-blue-100">
-                    <strong>💡 What you&apos;re changing:</strong> The H1 (Heading 1) is the main title that appears at the top of your page content. It&apos;s the largest heading on the page and tells both users and search engines what the page is about.
-                  </p>
-                  <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
-                    <strong>📍 Where to find it:</strong> In your page editor (WordPress, Wix, Squarespace, etc.), look for the main title field at the top of your content editor. It&apos;s usually the first thing you see when editing a page. Replace the current H1 with the suggested one below.
-                  </p>
-                </div>
-                {loadingH1 ? (
-                  <p className="text-sm text-muted-foreground">Loading current H1...</p>
-                ) : currentH1 ? (
-                  <div className="space-y-3">
-                    <div className="rounded-md border bg-background p-3 space-y-2">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground font-medium">Current H1: <span className="text-muted-foreground/70 font-normal">(H1 is the header/title in your page)</span></span>
-                        <div className="mt-1 p-2 bg-muted/50 rounded border border-muted">
-                          <span className="font-medium text-foreground">{currentH1}</span>
-                        </div>
-                      </div>
-                      <div className="flex items-center justify-center text-muted-foreground">
-                        ↓
-                      </div>
-                      <div className="text-sm">
-                        <span className="text-muted-foreground font-medium">Replace with:</span>
-                        <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
-                          <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
-                      className="w-full"
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy H1 Replacement
-                    </Button>
-                  </div>
-                ) : (
-                  <div className="space-y-3">
-                    <div className="rounded-md border bg-background p-3">
-                      <div className="text-sm">
-                        <span className="text-muted-foreground font-medium">Suggested H1:</span>
-                        <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
-                          <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
-                        </div>
-                      </div>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
-                      className="w-full"
-                    >
-                      <Copy className="h-4 w-4 mr-2" />
-                      Copy H1 Replacement
-                    </Button>
-                  </div>
-                )}
-                <p className="text-xs text-muted-foreground mt-3">
-                  💡 <strong>Why:</strong> This keyword isn&apos;t ranking yet. Adding it to your H1 helps Google understand what this page is about.
-                </p>
-              </div>
-            )}
-
-            <div className="flex items-center space-x-2">
-              {!isImplemented ? (
-                <>
-                  <Checkbox
-                    id="implemented"
-                    checked={isImplemented}
-                    onCheckedChange={onCheckboxChange}
-                  />
-                  <Label htmlFor="implemented">
-                    I&apos;ve updated this on my site
-                  </Label>
-                </>
-              ) : (
-                <div className="flex items-center gap-2 text-green-600 font-medium">
-                  You’ve marked this as implemented.
-                </div>
-              )}
-            </div>
-
+            {/* Show "Waiting for Results" FIRST when implemented */}
             {isImplemented && daysSinceImplementation !== null && (
-              <div className="space-y-4 mt-3 w-full">
+              <div className="space-y-4 w-full">
                 {/* 7-Day Progress */}
                 <div>
                   <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                    <span>Waiting for Results (7 Days)</span>
+                    <span>{daysSinceImplementation >= 7 ? '✓ Results Ready!' : 'Waiting for Results (7 Days)'}</span>
                     <span>{daysSinceImplementation}/7 days</span>
                   </div>
                   <div className="h-2 w-full rounded bg-muted/60">
                     <div
-                      className="h-2 rounded bg-primary transition-all duration-500"
+                      className={`h-2 rounded transition-all duration-500 ${daysSinceImplementation >= 7 ? 'bg-green-500' : 'bg-primary'}`}
                       style={{
                         width: `${(daysSinceImplementation / 7) * 100}%`,
                       }}
                     />
                   </div>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Your changes are being tracked! Google recommends waiting 7
-                    days to let your SEO changes take effect. We&apos;ll track
-                    performance and show results in the SEO Progress section
-                    once enough data is available.
-                  </p>
+                  {daysSinceImplementation >= 7 ? (
+                    <div className="mt-2 p-2 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
+                      <p className="text-sm text-green-700 dark:text-green-300 font-medium">
+                        🎉 7 days have passed! Your SEO progress is now available.
+                      </p>
+                      <p className="text-xs text-green-600 dark:text-green-400 mt-1">
+                        Check the <strong>SEO Progress</strong> section below to see how your changes are performing.
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Your changes are being tracked! Google recommends waiting 7
+                      days to let your SEO changes take effect. We&apos;ll track
+                      performance and show results in the SEO Progress section
+                      once enough data is available.
+                    </p>
+                  )}
                 </div>
 
                 {/* 30-Day Progress */}
@@ -655,39 +476,409 @@ const SeoRecommendationPanel = ({
                   </div>
                 )}
 
-                {/* ✅ NEW: Continuous Progress Info */}
-                <div className="mt-3 rounded border border-primary/20 bg-primary/10 p-2 text-xs text-primary">
-                  <span className="font-medium">💡 Tip:</span> After 7 days, your progress will appear in the SEO Progress section below. 
-                  The system continues monitoring your performance daily, so check back regularly for ongoing updates!
+                {/* Continuous Progress Info - only show before 7 days */}
+                {daysSinceImplementation < 7 && (
+                  <div className="rounded border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-2 text-xs text-blue-700 dark:text-blue-300">
+                    <span className="font-medium">💡 Tip:</span> After 7 days, your progress will appear in the SEO Progress section below. 
+                    The system continues monitoring your performance daily, so check back regularly for ongoing updates!
+                  </div>
+                )}
+
+                {showRefreshButton && (
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button variant="outline" onClick={handleRefreshSuggestions}>
+                        🔁 Try New Suggestions
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent>
+                      No clicks after 30 days. Click to get fresh AI title and
+                      description.
+                    </TooltipContent>
+                  </Tooltip>
+                )}
+              </div>
+            )}
+
+            {/* Meta Tags Section - Collapsible when implemented */}
+            {isImplemented ? (
+              <Collapsible open={metaTagsExpanded} onOpenChange={setMetaTagsExpanded}>
+                <CollapsibleTrigger className="flex w-full items-center justify-between rounded-lg border border-green-200 dark:border-green-800 bg-green-50 dark:bg-green-900/20 p-3 text-sm font-medium hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors">
+                  <div className="flex items-center gap-2">
+                    <span className="text-green-700 dark:text-green-300">View Implemented Meta Tags</span>
+                  </div>
+                  <ChevronDown className={`h-4 w-4 text-green-600 dark:text-green-400 transition-transform ${metaTagsExpanded ? 'rotate-180' : ''}`} />
+                </CollapsibleTrigger>
+                <CollapsibleContent className="mt-3 space-y-4">
+                  <div>
+                    <Label className="mb-2 flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      {keywordSource === "ai-generated" ? "Step 1: Optimize Meta Tags" : "Optimize Meta Tags"}
+                    </Label>
+                    {keywordSource === "ai-generated" && (
+                      <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
+                        <p className="text-xs text-blue-900 dark:text-blue-100">
+                          <strong>💡 What you&apos;re changing:</strong> The <strong>Meta Title</strong> is the clickable headline shown in Google search results, and the <strong>Meta Description</strong> is the short text snippet that appears below the title.
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                          <strong>📍 Where to find them:</strong> These are typically found in your website&apos;s SEO settings, page editor, or plugin settings (like Yoast SEO, Rank Math, or All in One SEO). Look for fields labeled &quot;SEO Title&quot; or &quot;Meta Title&quot; and &quot;Meta Description&quot; when editing your page.
+                        </p>
+                      </div>
+                    )}
+                    <div className="space-y-4">
+                      {/* Meta Title Comparison Card */}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                        <Label className="text-sm font-medium">Meta Title</Label>
+                        <div className="space-y-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
+                            {loadingMetaTags ? (
+                              <p className="text-xs text-muted-foreground italic">Loading...</p>
+                            ) : currentMetaTitle ? (
+                              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100">
+                                {currentMetaTitle}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground italic">Not found</p>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-center py-1 text-green-600 font-medium">
+                            ✓ Implemented
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
+                            <div className="flex items-center justify-between gap-2">
+                              <Textarea
+                                value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
+                                readOnly
+                                className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
+                                className="flex-shrink-0"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+
+                      {/* Meta Description Comparison Card */}
+                      <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                        <Label className="text-sm font-medium">Meta Description</Label>
+                        <div className="space-y-2">
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
+                            {loadingMetaTags ? (
+                              <p className="text-xs text-muted-foreground italic">Loading...</p>
+                            ) : currentMetaDescription ? (
+                              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100 max-h-32 overflow-y-auto">
+                                {currentMetaDescription}
+                              </div>
+                            ) : (
+                              <p className="text-xs text-muted-foreground italic">Not found</p>
+                            )}
+                          </div>
+                          <div className="flex items-center justify-center py-1 text-green-600 font-medium">
+                            ✓ Implemented
+                          </div>
+                          <div>
+                            <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
+                            <div className="flex items-center justify-between gap-2">
+                              <Textarea
+                                value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
+                                readOnly
+                                className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                              />
+                              <Button
+                                variant="ghost"
+                                size="sm"
+                                onClick={() =>
+                                  copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
+                                }
+                                className="flex-shrink-0"
+                              >
+                                <Copy className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* H1 Replacement Section for AI-generated keywords (inside collapsible when implemented) */}
+                  {keywordSource === "ai-generated" && focusKeyword && (
+                    <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                      <Label className="mb-3 block font-semibold flex items-center gap-2">
+                        <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                        Step 2: Update Page Content
+                      </Label>
+                      <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
+                        <p className="text-xs text-blue-900 dark:text-blue-100">
+                          <strong>💡 What you&apos;re changing:</strong> The H1 (Heading 1) is the main title that appears at the top of your page content. It&apos;s the largest heading on the page and tells both users and search engines what the page is about.
+                        </p>
+                        <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                          <strong>📍 Where to find it:</strong> In your page editor (WordPress, Wix, Squarespace, etc.), look for the main title field at the top of your content editor. It&apos;s usually the first thing you see when editing a page. Replace the current H1 with the suggested one below.
+                        </p>
+                      </div>
+                      {loadingH1 ? (
+                        <p className="text-sm text-muted-foreground">Loading current H1...</p>
+                      ) : currentH1 ? (
+                        <div className="space-y-3">
+                          <div className="rounded-md border bg-background p-3 space-y-2">
+                            <div className="text-sm">
+                              <span className="text-muted-foreground font-medium">Current H1: <span className="text-muted-foreground/70 font-normal">(H1 is the header/title in your page)</span></span>
+                              <div className="mt-1 p-2 bg-muted/50 rounded border border-muted">
+                                <span className="font-medium text-foreground">{currentH1}</span>
+                              </div>
+                            </div>
+                            <div className="flex items-center justify-center text-muted-foreground">
+                              ↓
+                            </div>
+                            <div className="text-sm">
+                              <span className="text-muted-foreground font-medium">Replace with:</span>
+                              <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
+                                <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
+                            className="w-full"
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy H1 Replacement
+                          </Button>
+                        </div>
+                      ) : (
+                        <div className="space-y-3">
+                          <div className="rounded-md border bg-background p-3">
+                            <div className="text-sm">
+                              <span className="text-muted-foreground font-medium">Suggested H1:</span>
+                              <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
+                                <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
+                              </div>
+                            </div>
+                          </div>
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
+                            className="w-full"
+                          >
+                            <Copy className="h-4 w-4 mr-2" />
+                            Copy H1 Replacement
+                          </Button>
+                        </div>
+                      )}
+                      <p className="text-xs text-muted-foreground mt-3">
+                        💡 <strong>Why:</strong> This keyword isn&apos;t ranking yet. Adding it to your H1 helps Google understand what this page is about.
+                      </p>
+                    </div>
+                  )}
+                </CollapsibleContent>
+              </Collapsible>
+            ) : (
+              /* Not implemented - show everything normally */
+              <>
+                <div>
+                  <Label className="mb-2 flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                    {keywordSource === "ai-generated" ? "Step 1: Optimize Meta Tags" : "Optimize Meta Tags"}
+                  </Label>
+                  {keywordSource === "ai-generated" && (
+                    <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
+                      <p className="text-xs text-blue-900 dark:text-blue-100">
+                        <strong>💡 What you&apos;re changing:</strong> The <strong>Meta Title</strong> is the clickable headline shown in Google search results, and the <strong>Meta Description</strong> is the short text snippet that appears below the title.
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                        <strong>📍 Where to find them:</strong> These are typically found in your website&apos;s SEO settings, page editor, or plugin settings (like Yoast SEO, Rank Math, or All in One SEO). Look for fields labeled &quot;SEO Title&quot; or &quot;Meta Title&quot; and &quot;Meta Description&quot; when editing your page.
+                      </p>
+                    </div>
+                  )}
+                  <div className="space-y-4">
+                    {/* Meta Title Comparison Card */}
+                    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                      <Label className="text-sm font-medium">Meta Title</Label>
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
+                          {loadingMetaTags ? (
+                            <p className="text-xs text-muted-foreground italic">Loading...</p>
+                          ) : currentMetaTitle ? (
+                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100">
+                              {currentMetaTitle}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">Not found</p>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center py-1 text-muted-foreground">
+                          ↓ Replace with ↓
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Textarea
+                              value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
+                              readOnly
+                              className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
+                              className="flex-shrink-0"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+
+                    {/* Meta Description Comparison Card */}
+                    <div className="rounded-lg border border-border bg-card p-4 space-y-3">
+                      <Label className="text-sm font-medium">Meta Description</Label>
+                      <div className="space-y-2">
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-1 block">Current</Label>
+                          {loadingMetaTags ? (
+                            <p className="text-xs text-muted-foreground italic">Loading...</p>
+                          ) : currentMetaDescription ? (
+                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100 max-h-32 overflow-y-auto">
+                              {currentMetaDescription}
+                            </div>
+                          ) : (
+                            <p className="text-xs text-muted-foreground italic">Not found</p>
+                          )}
+                        </div>
+                        <div className="flex items-center justify-center py-1 text-muted-foreground">
+                          ↓ Replace with ↓
+                        </div>
+                        <div>
+                          <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
+                          <div className="flex items-center justify-between gap-2">
+                            <Textarea
+                              value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
+                              readOnly
+                              className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
+                              }
+                              className="flex-shrink-0"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
                 </div>
-              </div>
+
+                {/* H1 Replacement Section for AI-generated keywords */}
+                {keywordSource === "ai-generated" && focusKeyword && (
+                  <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                    <Label className="mb-3 block font-semibold flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-green-500"></span>
+                      Step 2: Update Page Content
+                    </Label>
+                    <div className="mb-3 rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3">
+                      <p className="text-xs text-blue-900 dark:text-blue-100">
+                        <strong>💡 What you&apos;re changing:</strong> The H1 (Heading 1) is the main title that appears at the top of your page content. It&apos;s the largest heading on the page and tells both users and search engines what the page is about.
+                      </p>
+                      <p className="text-xs text-blue-700 dark:text-blue-300 mt-2">
+                        <strong>📍 Where to find it:</strong> In your page editor (WordPress, Wix, Squarespace, etc.), look for the main title field at the top of your content editor. It&apos;s usually the first thing you see when editing a page. Replace the current H1 with the suggested one below.
+                      </p>
+                    </div>
+                    {loadingH1 ? (
+                      <p className="text-sm text-muted-foreground">Loading current H1...</p>
+                    ) : currentH1 ? (
+                      <div className="space-y-3">
+                        <div className="rounded-md border bg-background p-3 space-y-2">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground font-medium">Current H1: <span className="text-muted-foreground/70 font-normal">(H1 is the header/title in your page)</span></span>
+                            <div className="mt-1 p-2 bg-muted/50 rounded border border-muted">
+                              <span className="font-medium text-foreground">{currentH1}</span>
+                            </div>
+                          </div>
+                          <div className="flex items-center justify-center text-muted-foreground">
+                            ↓
+                          </div>
+                          <div className="text-sm">
+                            <span className="text-muted-foreground font-medium">Replace with:</span>
+                            <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
+                              <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
+                          className="w-full"
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy H1 Replacement
+                        </Button>
+                      </div>
+                    ) : (
+                      <div className="space-y-3">
+                        <div className="rounded-md border bg-background p-3">
+                          <div className="text-sm">
+                            <span className="text-muted-foreground font-medium">Suggested H1:</span>
+                            <div className="mt-1 p-2 bg-primary/10 rounded border border-primary/30">
+                              <span className="font-semibold text-primary">{capitalizeWords(focusKeyword)}</span>
+                            </div>
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => copyToClipboard(capitalizeWords(focusKeyword), "h1")}
+                          className="w-full"
+                        >
+                          <Copy className="h-4 w-4 mr-2" />
+                          Copy H1 Replacement
+                        </Button>
+                      </div>
+                    )}
+                    <p className="text-xs text-muted-foreground mt-3">
+                      💡 <strong>Why:</strong> This keyword isn&apos;t ranking yet. Adding it to your H1 helps Google understand what this page is about.
+                    </p>
+                  </div>
+                )}
+
+                <div className="flex items-center space-x-2">
+                  <Checkbox
+                    id="implemented"
+                    checked={isImplemented}
+                    onCheckedChange={onCheckboxChange}
+                  />
+                  <Label htmlFor="implemented">
+                    I&apos;ve updated this on my site
+                  </Label>
+                </div>
+              </>
             )}
 
-            {showRefreshButton && (
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <Button variant="outline" onClick={handleRefreshSuggestions}>
-                    🔁 Try New Suggestions
-                  </Button>
-                </TooltipTrigger>
-                <TooltipContent>
-                  No clicks after 30 days. Click to get fresh AI title and
-                  description.
-                </TooltipContent>
-              </Tooltip>
-            )}
-
-            {/* {delta && (
-              <div className="text-sm text-muted-foreground mt-2">
-                <strong>📈 Performance Change (vs. before):</strong>
-                <ul className="list-disc pl-4">
-                  <li>Impressions: {delta.impressions}</li>
-                  <li>Clicks: {delta.clicks}</li>
-                  <li>CTR: {delta.ctr}</li>
-                  <li>Position: {delta.position}</li>
-                </ul>
+            {/* Show implemented message (for implemented state) */}
+            {isImplemented && (
+              <div className="flex items-center gap-2 text-green-600 font-medium">
+                ✓ You've marked this as implemented.
               </div>
-            )} */}
+            )}
           </div>
         </CollapsibleContent>
       </Collapsible>

@@ -126,13 +126,11 @@ const CTA = () => {
         <div className="section-secondary py-20 px-6 md:px-12 lg:px-20">
           <div className="max-w-4xl mx-auto text-center">
           <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6">
-            Ready to rank higher?
+          Ready to understand your SEO?
           </h2>
           <p className="text-lg text-muted-foreground max-w-2xl mx-auto mb-10">
-          Stop paying Google for ads. The moment you stop, the traffic stops.
-          With SEO, you build trust that brings customers in long after the work is done. <br></br>     
-          It takes time, but the long-term payoff makes it all worth it. <br></br><br></br>
-            Join thousands of businesses using SimplSEO to grow their organic traffic!
+          SimplSEO is <strong className="text-foreground">completely free</strong> during early access.
+          No credit card. No hidden fees. Just <strong className="text-foreground">your feedback</strong> so we can build the best SEO tool for business owners. Not analysts.
           </p>
           <button
             ref={buttonRef}
@@ -144,7 +142,7 @@ const CTA = () => {
               className="whitespace-nowrap transition-opacity duration-300"
               style={{ opacity: buttonState === "complete" ? 1 : 0 }}
             >
-              Try Our Demo
+              Try Free Access
             </span>
             <ArrowRight 
               className="w-4 h-4 transition-opacity duration-300"

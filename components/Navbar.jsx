@@ -79,7 +79,7 @@ const Navbar = () => {
         size="sm"
         onClick={() => router.push('/auth')}
       >
-        Try Demo
+        Try Free Access
       </Button>
     </nav>
     </>

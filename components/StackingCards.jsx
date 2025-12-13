@@ -29,15 +29,15 @@ const renderTitle = (text) => {
 
 const stackingCards = [
   {
-    icon: Sparkles,
-    title: "AI Content Outlines",
-    titleSubtitle: "(So You Know What to Write)",
-    description: "Found a keyword opportunity but not sure what to write? We'll generate a complete content outline for you. Just add your expertise and hit publish. We do the SEO thinking, you do the writing.",
-    lightColor: "hsl(260, 30%, 94%)",
-    darkColor: "hsl(260, 25%, 35%)",
-    image: "/6.png",
+    icon: TrendingUp,
+    title: "Fix Pages That Get Views But No Clicks",
+    titleSubtitle: "(The CTR Problem)",
+    hasCTRTooltip: true, // Use CTR tooltip in subtitle
+    description: "Your page shows up in Google but nobody clicks? We'll tell you exactly why and how to fix it. Usually it's the title we'll help you write better ones that people actually want to click.",
+    lightColor: "hsl(45, 50%, 92%)",
+    darkColor: "hsl(40, 35%, 32%)", // Soft warm beige
+    image: "/4.png",
   },
-
   {
     icon: MessageSquare,
     title: "Your Personal SEO Mentor",
@@ -47,6 +47,17 @@ const stackingCards = [
     darkColor: "hsl(160, 30%, 32%)", // Soft sage
     image: "/2.png",
   },
+  {
+    icon: Sparkles,
+    title: "AI Content Outlines",
+    titleSubtitle: "(So You Know What to Write)",
+    description: "Found a keyword opportunity but not sure what to write? We'll generate a complete content outline for you. Just add your expertise and hit publish. We do the SEO thinking, you do the writing.",
+    lightColor: "hsl(260, 30%, 94%)",
+    darkColor: "hsl(260, 25%, 35%)",
+    image: "/6.png",
+  },
+
+
   {
     icon: Target,
     title: "Track Your Progress",
@@ -66,16 +77,7 @@ const stackingCards = [
     image: "/1.png",
     skipTitleKeyword: true, // Don't underline "Keywords" in title - it's self-explanatory here
   },
-  {
-    icon: TrendingUp,
-    title: "Fix Pages That Get Views But No Clicks",
-    titleSubtitle: "(The CTR Problem)",
-    hasCTRTooltip: true, // Use CTR tooltip in subtitle
-    description: "Your page shows up in Google but nobody clicks? We'll tell you exactly why and how to fix it. Usually it's the title we'll help you write better ones that people actually want to click.",
-    lightColor: "hsl(45, 50%, 92%)",
-    darkColor: "hsl(40, 35%, 32%)", // Soft warm beige
-    image: "/4.png",
-  },
+
 ];
 
 const StackingCards = () => {
@@ -85,7 +87,7 @@ const StackingCards = () => {
       {/* Section header */}
       <div className="text-center pt-20 pb-16 px-4">
         <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6">
-          Everything you need
+        What SimplSEO helps you fix
         </h2>
         {/* <p className="text-lg text-muted-foreground max-w-2xl mx-auto">
           Powerful SEO tools designed to help businesses of all sizes grow their organic traffic.
