@@ -17,6 +17,20 @@ import { Button } from "@/components/ui/button";
 import { useRouter } from "next/navigation";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
+import { getFocusKeywords } from "../lib/firestoreHelpers";
+
+// Normalize URL for comparison (remove trailing slashes, ensure consistent format)
+const normalizeUrlForComparison = (url) => {
+  if (!url) return null;
+  try {
+    const u = new URL(url);
+    // Remove trailing slash except for root
+    const normalized = u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+    return normalized.toLowerCase();
+  } catch {
+    return url?.toLowerCase()?.replace(/\/$/, '') || null;
+  }
+};
 
 export default function EasyWinsPage() {
   const { user, isLoading } = useAuth();
@@ -26,6 +40,7 @@ export default function EasyWinsPage() {
   const [loading, setLoading] = useState(true);
   const shouldShowLoader = useMinimumLoading(loading, 3000);
   const [error, setError] = useState(null);
+  const [focusKeywordsByPage, setFocusKeywordsByPage] = useState(new Map());
 
   useEffect(() => {
     const fetchEasyWinKeywords = async () => {
@@ -37,6 +52,19 @@ export default function EasyWinsPage() {
       try {
         setLoading(true);
         setError(null);
+
+        // Fetch saved focus keywords first
+        const savedFocusKeywords = await getFocusKeywords(user.id);
+        const keywordMap = new Map();
+        savedFocusKeywords.forEach(({ keyword, pageUrl }) => {
+          if (keyword && pageUrl) {
+            const normalizedUrl = normalizeUrlForComparison(pageUrl);
+            if (normalizedUrl) {
+              keywordMap.set(normalizedUrl, keyword);
+            }
+          }
+        });
+        setFocusKeywordsByPage(keywordMap);
 
         const tokenManager = createGSCTokenManager(user.id);
         
@@ -112,6 +140,10 @@ export default function EasyWinsPage() {
         if (easyWins.length > 0) {
           const aiResults = await Promise.all(
             easyWins.map(async (kw) => {
+              // Look up saved focus keyword for this page
+              const normalizedPageUrl = normalizeUrlForComparison(kw.page);
+              const savedFocusKeyword = keywordMap.get(normalizedPageUrl);
+              
               const res = await fetch("/api/seo-assistant/meta-title", {
                 method: "POST",
                 headers: { "Content-Type": "application/json" },
@@ -124,6 +156,8 @@ export default function EasyWinsPage() {
                     targetKeyword: kw.keyword,
                     goal: "improve ranking to page 1",
                   },
+                  // Pass saved focus keyword if available, otherwise use the easy-win keyword
+                  focusKeywords: savedFocusKeyword ? [savedFocusKeyword] : [kw.keyword],
                 }),
               });
 

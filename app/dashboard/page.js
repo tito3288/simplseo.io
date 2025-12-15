@@ -631,6 +631,19 @@ export default function Dashboard() {
 
   const generateMetaDescription = useCallback(async (pageUrl) => {
     try {
+      // Look up the saved focus keyword for this page
+      const normalizedUrl = normalizeUrlForComparison(pageUrl);
+      let focusKeywordForPage = null;
+      for (const [pageKey, keyword] of focusKeywordByPage.entries()) {
+        if (pageKey && pageKey !== "__unknown__") {
+          const normalizedPageKey = normalizeUrlForComparison(pageKey);
+          if (normalizedPageKey === normalizedUrl) {
+            focusKeywordForPage = keyword;
+            break;
+          }
+        }
+      }
+
       const cacheParams = {
         pageUrl,
         businessName: data?.businessName,
@@ -649,6 +662,8 @@ export default function Dashboard() {
             onboarding: data,
             context: { lowCtrPages, aiTips }, // same context as titles
             userId: user?.id,
+            // Pass saved focus keyword if available
+            ...(focusKeywordForPage ? { focusKeywords: [focusKeywordForPage] } : {}),
           }),
         },
         CACHE_DURATIONS.META_DESCRIPTION,
@@ -663,10 +678,23 @@ export default function Dashboard() {
       console.error("❌ Failed to fetch AI meta description", err);
       return "Meta description could not be generated.";
     }
-  }, [data, lowCtrPages, aiTips, user?.id]);
+  }, [data, lowCtrPages, aiTips, user?.id, focusKeywordByPage]);
 
   const generateMetaTitle = useCallback(async (pageUrl) => {
     try {
+      // Look up the saved focus keyword for this page
+      const normalizedUrl = normalizeUrlForComparison(pageUrl);
+      let focusKeywordForPage = null;
+      for (const [pageKey, keyword] of focusKeywordByPage.entries()) {
+        if (pageKey && pageKey !== "__unknown__") {
+          const normalizedPageKey = normalizeUrlForComparison(pageKey);
+          if (normalizedPageKey === normalizedUrl) {
+            focusKeywordForPage = keyword;
+            break;
+          }
+        }
+      }
+
       const cacheParams = {
         pageUrl,
         businessName: data?.businessName,
@@ -685,6 +713,8 @@ export default function Dashboard() {
             onboarding: data,
             context: { lowCtrPages, aiTips }, // feel free to expand this later
             userId: user?.id,
+            // Pass saved focus keyword if available
+            ...(focusKeywordForPage ? { focusKeywords: [focusKeywordForPage] } : {}),
           }),
         },
         CACHE_DURATIONS.META_TITLE,
@@ -696,7 +726,7 @@ export default function Dashboard() {
       console.error("❌ Failed to fetch AI meta title", err);
       return "Suggested Meta Title";
     }
-  }, [data, lowCtrPages, aiTips, user?.id]);
+  }, [data, lowCtrPages, aiTips, user?.id, focusKeywordByPage]);
 
   useEffect(() => {
     const fetchTitlesAndDescriptions = async () => {

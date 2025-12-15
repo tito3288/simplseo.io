@@ -165,6 +165,33 @@ export function clearExpiredCaches() {
 }
 
 /**
+ * Clear all meta title and description caches
+ * Used when editing suggestions to ensure fresh data is fetched
+ */
+export function clearAllMetaCaches() {
+  if (typeof window === 'undefined') return;
+
+  try {
+    const keys = Object.keys(localStorage);
+    let cleared = 0;
+
+    keys.forEach(key => {
+      if (key.startsWith(CACHE_PREFIX)) {
+        // Clear all API caches to ensure fresh meta data is fetched
+        localStorage.removeItem(key);
+        cleared++;
+      }
+    });
+
+    if (cleared > 0) {
+      console.log(`🧹 Cleared ${cleared} cache entries after edit`);
+    }
+  } catch (error) {
+    console.warn('Error clearing meta caches:', error);
+  }
+}
+
+/**
  * Wrapper function to fetch with caching
  */
 export async function fetchWithCache(
