@@ -490,8 +490,8 @@ exports.checkSeoTipProgress = pubsub
           shouldUpdate = true;
           console.log(`✅ ${doc.id} is due for update (legacy: ${daysSince.toFixed(1)} days old)`);
         } else {
-          console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
-          skippedCount++;
+        console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
+        skippedCount++;
           continue;
         }
       }

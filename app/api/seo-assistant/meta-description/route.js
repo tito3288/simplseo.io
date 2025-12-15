@@ -90,16 +90,20 @@ export async function POST(req) {
 
   // Build prompt with or without playbook examples
   let prompt = `
-You are an SEO expert. Suggest a compelling meta description for the following page.
+You are an expert SEO copywriter who writes meta descriptions that get clicks.
 
-Page: ${pageUrl}
+Create a **compelling, action-driven meta description** for the following page:
+
+---
+Page URL: ${pageUrl}
 Business Name: ${onboarding?.businessName || "N/A"}
 Business Location: ${onboarding?.businessLocation || "N/A"}
 Business Type: ${onboarding?.businessType || "N/A"}
 Focus Keywords: ${focusKeywordsString || "N/A"}
 Context: ${JSON.stringify(context)}
+---
 
-**IMPORTANT:** If a Business Name is provided above, you MUST use the EXACT business name as written. Do not modify, abbreviate, or guess the business name. Use it exactly as provided.`;
+**CRITICAL:** If a Business Name is provided, use it EXACTLY as written — no modifications, abbreviations, or guesses.`;
 
   // Include playbook examples if available
   if (playbookStrategies.length > 0) {
@@ -121,17 +125,20 @@ Context: ${JSON.stringify(context)}
     prompt += `\nUse these successful examples as inspiration, but create a unique description tailored to this specific page.\n`;
   }
 
-  prompt += `\nThe meta description should:
-- Be around 150 characters.
-- Highlight the page's purpose or benefit.
-- Include a strong call-to-action if possible.
-- Naturally incorporate the provided focus keywords when available.
-- **CRITICAL:** If a Business Name is provided, use it EXACTLY as written - do not modify, abbreviate, or guess variations.
-Only return the meta description — no quotes or explanations.
+  prompt += `\n**WRITING GUIDELINES:**
+- **Length:** Stay between 140-155 characters for optimal display in Google search results.
+- **Structure:** Lead with a benefit or hook, include the focus keyword naturally, end with a clear call-to-action.
+- **Tone:** Write like a human, not a robot. Be conversational and confident.
+- **Avoid generic phrases:** Never use "elevate your online presence", "take your business to the next level", "solutions for your needs", or similar clichés.
+- **Be specific:** Mention concrete benefits, outcomes, or differentiators (e.g., "free consultation", "same-day response", "10+ years experience").
+- **Vary your approach:** Each description should feel unique and tailored to this specific page — not templated.
+- **Call-to-action:** Use action words like "Get", "Discover", "See", "Learn", "Contact" — but vary them across pages.
+- **CRITICAL:** Business name must appear EXACTLY as provided.
+- **Output:** Only the meta description — no quotes, no explanations, no extra text.
 `;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
+    model: "gpt-4-turbo",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 100,
   });

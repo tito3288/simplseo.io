@@ -106,9 +106,9 @@ export async function POST(req) {
 
   // Build prompt with or without playbook examples
   let prompt = `
-You are an SEO expert.
+You are an expert SEO copywriter who writes meta titles that get clicks.
 
-Suggest a **short, clear, keyword-optimized meta title** for the following page:
+Create a **compelling, click-worthy meta title** for the following page:
 
 ---
 Page URL: ${pageUrl}
@@ -119,7 +119,10 @@ Focus Keywords: ${focusKeywordsString || "N/A"}
 Context (Impressions, CTR, etc): ${JSON.stringify(context)}
 ---
 
-**IMPORTANT:** If a Business Name is provided above, you MUST use the EXACT business name as written. Do not modify, abbreviate, or guess the business name. Use it exactly as provided.`;
+**CRITICAL RULES:**
+- If a Business Name is provided, use it EXACTLY as written — no modifications, abbreviations, or guesses.
+- Lead with the focus keyword or a compelling hook, then add the brand name at the end.
+- Make every word earn its place — no filler words.`;
 
   // Include playbook examples if available
   if (playbookStrategies.length > 0) {
@@ -141,19 +144,20 @@ Context (Impressions, CTR, etc): ${JSON.stringify(context)}
     prompt += `\nUse these successful examples as inspiration, but create a unique title tailored to this specific page.\n`;
   }
 
-  prompt += `\n**Rules:**
-- Stay under 60 characters whenever possible.
-- Keep the title visually short (target under ~580px width).
-- Prefer short, powerful words (e.g., "SEO", "Marketing", "Web Design" vs. long words like "Optimization", "Solutions").
-- Focus on clarity and primary keywords.
-- Use separators like "|" or "-" if needed, but keep them short.
-- Avoid repeating words or making the title feel too long.
-- **CRITICAL:** If a Business Name is provided, use it EXACTLY as written - do not modify, abbreviate, or guess variations.
-- **Only** output the meta title — no quotes, no extra text.
+  prompt += `\n**WRITING GUIDELINES:**
+- **Length:** Stay under 55 characters to ensure full visibility in Google search results.
+- **Structure:** [Primary Keyword/Hook] | [Brand Name] — keyword-first for SEO.
+- **Word choice:** Use short, powerful words (e.g., "SEO", "Web Design", "Expert" — not "Optimization", "Solutions", "Services").
+- **Avoid generic phrases:** Never use "elevate your presence", "take to the next level", or similar clichés.
+- **Be specific:** Include a concrete benefit, result, or differentiator when possible.
+- **Vary your approach:** Each title should feel unique and tailored to this specific page — not templated.
+- Use "|" or "—" as separators, but keep them minimal.
+- **CRITICAL:** Business name must appear EXACTLY as provided.
+- **Output:** Only the meta title — no quotes, no explanations, no extra text.
 `;
 
   const response = await openai.chat.completions.create({
-    model: "gpt-3.5-turbo",
+    model: "gpt-4-turbo",
     messages: [{ role: "user", content: prompt }],
     max_tokens: 60,
   });

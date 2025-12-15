@@ -36,14 +36,14 @@ export async function POST(req) {
           // This creates stability and forces users to work through their suggestions
           // The data flywheel will improve recommendations over time based on success stories
           console.log("✅ Returning cached keywords (never expires)");
-          return NextResponse.json({
-            success: true,
-            opportunities: cachedData.opportunities,
-            cannibalizationAnalysis: cachedData.cannibalizationAnalysis,
-            hubAndSpokeStrategy: cachedData.hubAndSpokeStrategy,
-            fromCache: true,
-            cacheAge: Math.round(cacheAge / (60 * 60 * 1000)) // hours
-          });
+            return NextResponse.json({
+              success: true,
+              opportunities: cachedData.opportunities,
+              cannibalizationAnalysis: cachedData.cannibalizationAnalysis,
+              hubAndSpokeStrategy: cachedData.hubAndSpokeStrategy,
+              fromCache: true,
+              cacheAge: Math.round(cacheAge / (60 * 60 * 1000)) // hours
+            });
         } else {
           console.log("📝 No cache found, generating new data");
         }
