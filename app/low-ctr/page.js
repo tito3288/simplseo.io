@@ -500,19 +500,39 @@ export default function LowCtrPage() {
     return targets;
   }, [focusLowCtrPages, focusKeywordsNotShown]);
 
+  // Create reverse map: pageUrl → keyword (for looking up focus keyword by page)
+  const focusKeywordByPage = useMemo(() => {
+    const map = new Map();
+    focusKeywordAssignments.forEach((pageUrl, keyword) => {
+      if (pageUrl) {
+        const normalizedUrl = normalizeUrlForComparison(pageUrl);
+        if (normalizedUrl) {
+          map.set(normalizedUrl, keyword);
+        }
+      }
+    });
+    return map;
+  }, [focusKeywordAssignments]);
+
   const rawSuggestionTargets = useMemo(
     () =>
-      lowCtrPages.map((page) => ({
-        pageUrl: page.page,
-        focusKeyword: null,
-        metrics: {
-          impressions: page.impressions,
-          clicks: page.clicks,
-          ctr: page.ctr,
-        },
-        key: buildSuggestionKey(page.page, null),
-      })),
-    [lowCtrPages]
+      lowCtrPages.map((page) => {
+        // Look up saved focus keyword for this page
+        const normalizedPageUrl = normalizeUrlForComparison(page.page);
+        const savedFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+        
+        return {
+          pageUrl: page.page,
+          focusKeyword: savedFocusKeyword,
+          metrics: {
+            impressions: page.impressions,
+            clicks: page.clicks,
+            ctr: page.ctr,
+          },
+          key: buildSuggestionKey(page.page, savedFocusKeyword),
+        };
+      }),
+    [lowCtrPages, focusKeywordByPage]
   );
 
   const suggestionTargets = useMemo(() => {

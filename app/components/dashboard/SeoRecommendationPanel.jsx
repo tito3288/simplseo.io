@@ -167,7 +167,9 @@ const SeoRecommendationPanel = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           pageUrl,
-          userId: user?.id, // ✅ Add userId so API can fetch onboarding data
+          userId: user?.id,
+          // ✅ Pass focus keyword to generate consistent cache key
+          ...(focusKeyword ? { focusKeywords: [focusKeyword] } : {}),
         }),
       });
       const descRes = await fetch("/api/seo-assistant/meta-description", {
@@ -175,14 +177,20 @@ const SeoRecommendationPanel = ({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 
           pageUrl,
-          userId: user?.id, // ✅ Add userId so API can fetch onboarding data
+          userId: user?.id,
+          // ✅ Pass focus keyword to generate consistent cache key
+          ...(focusKeyword ? { focusKeywords: [focusKeyword] } : {}),
         }),
       });
 
-      await deleteDoc(doc(db, "seoMetaTitles", encodeURIComponent(pageUrl)));
-      await deleteDoc(
-        doc(db, "seoMetaDescriptions", encodeURIComponent(pageUrl))
-      );
+      // Build the correct cache key (with focus keyword if available)
+      const cacheKey = focusKeyword 
+        ? `${pageUrl}::${focusKeyword.toLowerCase()}`
+        : pageUrl;
+      const encodedCacheKey = encodeURIComponent(cacheKey);
+      
+      await deleteDoc(doc(db, "seoMetaTitles", encodedCacheKey));
+      await deleteDoc(doc(db, "seoMetaDescriptions", encodedCacheKey));
 
       toast.success("✨ New AI suggestions will appear on next refresh.");
     } catch (err) {
