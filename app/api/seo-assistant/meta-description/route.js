@@ -35,6 +35,13 @@ export async function POST(req) {
   };
 
   const focusKeywordList = normalizeFocusKeywordList(focusKeywords);
+  
+  // DEBUG: Log what we received
+  console.log(`📥 [META DESC API] Received request for: ${pageUrl}`);
+  console.log(`📥 [META DESC API] focusKeywords received:`, focusKeywords);
+  console.log(`📥 [META DESC API] focusKeywordList (normalized):`, focusKeywordList);
+  console.log(`📥 [META DESC API] userId:`, userId);
+  
   const focusKeywordsString = focusKeywordList.join(", ");
   const focusKeywordCacheKey = focusKeywordList.length
     ? `${pageUrl}::${focusKeywordList

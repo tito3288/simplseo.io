@@ -35,6 +35,12 @@ export async function POST(req) {
 
   const focusKeywordList = normalizeFocusKeywordList(focusKeywords);
 
+  // DEBUG: Log what we received
+  console.log(`📥 [META TITLE API] Received request for: ${pageUrl}`);
+  console.log(`📥 [META TITLE API] focusKeywords received:`, focusKeywords);
+  console.log(`📥 [META TITLE API] focusKeywordList (normalized):`, focusKeywordList);
+  console.log(`📥 [META TITLE API] userId:`, userId);
+
   // 🧠 Fallback if onboarding was not passed in
   if (!onboarding && userId) {
     try {

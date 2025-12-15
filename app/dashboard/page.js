@@ -647,14 +647,27 @@ export default function Dashboard() {
       // Look up the saved focus keyword for this page
       const normalizedUrl = normalizeUrlForComparison(pageUrl);
       let focusKeywordForPage = null;
+      
+      // DEBUG: Log the lookup process
+      console.log(`🔍 [META DESC] Looking up focus keyword for: ${pageUrl}`);
+      console.log(`🔍 [META DESC] Normalized URL: ${normalizedUrl}`);
+      console.log(`🔍 [META DESC] focusKeywordByPage size: ${focusKeywordByPage.size}`);
+      console.log(`🔍 [META DESC] focusKeywordByPage entries:`, Array.from(focusKeywordByPage.entries()));
+      
       for (const [pageKey, keyword] of focusKeywordByPage.entries()) {
         if (pageKey && pageKey !== "__unknown__") {
           const normalizedPageKey = normalizeUrlForComparison(pageKey);
+          console.log(`🔍 [META DESC] Comparing: "${normalizedPageKey}" === "${normalizedUrl}" ? ${normalizedPageKey === normalizedUrl}`);
           if (normalizedPageKey === normalizedUrl) {
             focusKeywordForPage = keyword;
+            console.log(`✅ [META DESC] Found focus keyword: ${keyword}`);
             break;
           }
         }
+      }
+      
+      if (!focusKeywordForPage) {
+        console.warn(`⚠️ [META DESC] No focus keyword found for ${pageUrl}`);
       }
 
       const cacheParams = {
@@ -698,14 +711,26 @@ export default function Dashboard() {
       // Look up the saved focus keyword for this page
       const normalizedUrl = normalizeUrlForComparison(pageUrl);
       let focusKeywordForPage = null;
+      
+      // DEBUG: Log the lookup process
+      console.log(`🔍 [META TITLE] Looking up focus keyword for: ${pageUrl}`);
+      console.log(`🔍 [META TITLE] Normalized URL: ${normalizedUrl}`);
+      console.log(`🔍 [META TITLE] focusKeywordByPage size: ${focusKeywordByPage.size}`);
+      
       for (const [pageKey, keyword] of focusKeywordByPage.entries()) {
         if (pageKey && pageKey !== "__unknown__") {
           const normalizedPageKey = normalizeUrlForComparison(pageKey);
+          console.log(`🔍 [META TITLE] Comparing: "${normalizedPageKey}" === "${normalizedUrl}" ? ${normalizedPageKey === normalizedUrl}`);
           if (normalizedPageKey === normalizedUrl) {
             focusKeywordForPage = keyword;
+            console.log(`✅ [META TITLE] Found focus keyword: ${keyword}`);
             break;
           }
         }
+      }
+      
+      if (!focusKeywordForPage) {
+        console.warn(`⚠️ [META TITLE] No focus keyword found for ${pageUrl}`);
       }
 
       const cacheParams = {
@@ -779,6 +804,8 @@ export default function Dashboard() {
       }
       try {
         const stored = await getFocusKeywords(user.id);
+        console.log(`📦 [LOAD FOCUS KW] Raw from Firestore:`, stored);
+        
         if (Array.isArray(stored) && stored.length > 0) {
           const keywordList = [];
           const assignments = new Map();
@@ -787,10 +814,12 @@ export default function Dashboard() {
             if (!keyword) return;
             keywordList.push(keyword);
             const pageKey = normalizePageKey(pageUrl);
+            console.log(`📦 [LOAD FOCUS KW] Storing: "${pageUrl}" -> normalized: "${pageKey}" -> keyword: "${keyword}"`);
             assignments.set(pageKey, keyword);
             // Store source, defaulting to "gsc-existing" for backwards compatibility
             sources.set(pageKey, source || "gsc-existing");
           });
+          console.log(`📦 [LOAD FOCUS KW] Final assignments map:`, Array.from(assignments.entries()));
           setFocusKeywords(keywordList);
           setFocusKeywordByPage(assignments);
           setFocusKeywordSourceByPage(sources);
