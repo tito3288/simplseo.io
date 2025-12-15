@@ -773,6 +773,14 @@ export default function Dashboard() {
           const match = tip.match(/href="(.*?)"/);
           const pageUrl = match?.[1] || "";
 
+          // Skip pages that don't have a focus keyword selected
+          const normalizedUrl = normalizeUrlForComparison(pageUrl);
+          const focusKeyword = focusKeywordByPage.get(normalizedUrl);
+          if (!focusKeyword) {
+            console.log(`⏭️ Skipping meta generation for ${pageUrl} - no focus keyword selected`);
+            return null; // Skip this page
+          }
+
           const [title, description] = await Promise.all([
             generateMetaTitle(pageUrl),
             generateMetaDescription(pageUrl),
@@ -782,15 +790,21 @@ export default function Dashboard() {
         })
       );
 
-      setGeneratedMeta(results);
+      // Filter out null results (pages without focus keywords)
+      setGeneratedMeta(results.filter(Boolean));
     };
 
-    // Wait for BOTH aiTips AND focusKeywords to be loaded
-    // This prevents creating documents without focus keywords (race condition fix)
-    if (aiTips.length > 0 && initialFocusKeywordsLoaded) {
+    // Wait for ALL conditions before generating meta:
+    // 1. aiTips exist (pages to process)
+    // 2. Focus keywords loaded from Firestore
+    // 3. At least one focus keyword selected (so API has keywords to use)
+    // 4. Post-onboarding flow complete (user finished selecting pages + keywords)
+    const hasCompletedOnboarding = !data?.postOnboardingStep || data?.postOnboardingStep === 'complete';
+    
+    if (aiTips.length > 0 && initialFocusKeywordsLoaded && focusKeywordByPage.size > 0 && hasCompletedOnboarding) {
       fetchTitlesAndDescriptions();
     }
-  }, [aiTips, generateMetaTitle, generateMetaDescription, initialFocusKeywordsLoaded]);
+  }, [aiTips, generateMetaTitle, generateMetaDescription, initialFocusKeywordsLoaded, focusKeywordByPage.size, data?.postOnboardingStep]);
 
   useEffect(() => {
     const loadFocusKeywords = async () => {

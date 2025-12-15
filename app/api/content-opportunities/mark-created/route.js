@@ -38,6 +38,14 @@ export async function POST(req) {
       userId: userId,
     };
 
+    // First, ensure the parent document exists with data so it appears in queries
+    // (Without this, Firestore creates a "virtual" document that doesn't show in .get() queries)
+    await db
+      .collection("createdContentOpportunities")
+      .doc(userId)
+      .set({ userId, updatedAt: new Date().toISOString() }, { merge: true });
+
+    // Then save the actual opportunity in the subcollection
     await db
       .collection("createdContentOpportunities")
       .doc(userId)

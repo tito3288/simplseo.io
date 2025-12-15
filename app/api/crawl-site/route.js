@@ -70,7 +70,13 @@ const fetchSitemapUrls = async (origin) => {
 
   for (const sitemapUrl of possibleSitemaps) {
     try {
-      const res = await fetch(sitemapUrl, { cache: "no-store" });
+      const res = await fetch(sitemapUrl, {
+        cache: "no-store",
+        headers: {
+          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+          "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        },
+      });
       if (!res.ok) continue;
       const xml = await res.text();
       const json = parser.parse(xml);
@@ -92,7 +98,13 @@ const fetchSitemapUrls = async (origin) => {
         for (const child of childSitemaps) {
           if (!child?.loc) continue;
           try {
-            const childRes = await fetch(child.loc, { cache: "no-store" });
+            const childRes = await fetch(child.loc, {
+              cache: "no-store",
+              headers: {
+                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+              },
+            });
             if (!childRes.ok) continue;
             const childXml = await childRes.text();
             const childJson = parser.parse(childXml);
@@ -418,7 +430,9 @@ export async function POST(req) {
         // Fetch the page HTML directly to extract links
         const pageRes = await fetch(url, {
           headers: {
-            "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)",
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Accept-Language": "en-US,en;q=0.5",
           },
         });
 
@@ -521,7 +535,9 @@ export async function POST(req) {
         try {
           const pageRes = await fetch(url, {
             headers: {
-              "User-Agent": "Mozilla/5.0 (compatible; SEOBot/1.0)",
+              "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+              "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+              "Accept-Language": "en-US,en;q=0.5",
             },
           });
 

@@ -17,7 +17,19 @@ import {
 import { Info, Sparkles, Plus, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-const normalizePage = (page) => page || "__unknown__";
+// Must match normalizePageKey in dashboard/page.js for consistent lookups
+const normalizePage = (page) => {
+  if (!page) return "__unknown__";
+  try {
+    const u = new URL(page);
+    // Remove trailing slash except for root, lowercase for consistency
+    const normalized = u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+    return normalized.toLowerCase();
+  } catch {
+    // Fallback: just remove trailing slash and lowercase
+    return page.trim().replace(/\/$/, '').toLowerCase();
+  }
+};
 
 const FocusKeywordSelector = ({
   keywords = [],

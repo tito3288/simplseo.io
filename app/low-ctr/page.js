@@ -309,7 +309,11 @@ export default function LowCtrPage() {
             keywordList.push(keyword);
             assignments.set(keyword.toLowerCase(), pageUrl || null);
             if (pageUrl) {
-              sources.set(pageUrl, source || "gsc-existing");
+              // Normalize URL to ensure consistent matching
+              const normalizedUrl = normalizeUrlForComparison(pageUrl);
+              if (normalizedUrl) {
+                sources.set(normalizedUrl, source || "gsc-existing");
+              }
             }
           });
           setFocusKeywords(keywordList);
@@ -628,10 +632,21 @@ export default function LowCtrPage() {
     );
     if (!missing.length) return;
 
+    // Filter to only include pages with focus keywords selected
+    const missingWithKeywords = missing.filter(({ focusKeyword, pageUrl }) => {
+      if (!focusKeyword) {
+        console.log(`⏭️ [LOW-CTR] Skipping meta generation for ${pageUrl} - no focus keyword selected`);
+        return false;
+      }
+      return true;
+    });
+
+    if (!missingWithKeywords.length) return;
+
     let cancelled = false;
     const loadSuggestions = async () => {
       const suggestions = await Promise.all(
-        missing.map((target) => requestAiMeta(target))
+        missingWithKeywords.map((target) => requestAiMeta(target))
       );
       if (cancelled) return;
       setAiMetaByPage((prev) => {
@@ -730,29 +745,41 @@ export default function LowCtrPage() {
 
     setLowCtrPages(grouped);
 
-    // Look up saved focus keywords for each page (same logic as rawSuggestionTargets)
-    const aiResults = await Promise.all(
-      grouped.map((item) => {
-        // Look up saved focus keyword for this page
-        const normalizedPageUrl = normalizeUrlForComparison(item.page);
-        const savedFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
-        
-        console.log(`📦 [LOW-CTR fetchLowCtrPages] "${item.page}" -> normalized: "${normalizedPageUrl}" -> keyword: "${savedFocusKeyword || 'NULL'}"`);
-        
-        return requestAiMeta({
-          pageUrl: item.page,
-          focusKeyword: savedFocusKeyword, // Use saved focus keyword instead of matching GSC keywords
-        });
-      })
-    );
-
-    setAiMetaByPage((prev) => {
-      const next = { ...prev };
-      aiResults.forEach((entry) => {
-        next[entry.pageUrl] = entry;
-      });
-      return next;
+    // Look up saved focus keywords for each page - only include pages with focus keywords
+    const pagesWithKeywords = grouped.filter((item) => {
+      const normalizedPageUrl = normalizeUrlForComparison(item.page);
+      const savedFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+      
+      if (!savedFocusKeyword) {
+        console.log(`⏭️ [LOW-CTR fetchLowCtrPages] Skipping meta generation for ${item.page} - no focus keyword selected`);
+        return false;
+      }
+      console.log(`📦 [LOW-CTR fetchLowCtrPages] "${item.page}" -> normalized: "${normalizedPageUrl}" -> keyword: "${savedFocusKeyword}"`);
+      return true;
     });
+
+    if (pagesWithKeywords.length > 0) {
+      const aiResults = await Promise.all(
+        pagesWithKeywords.map((item) => {
+          const normalizedPageUrl = normalizeUrlForComparison(item.page);
+          const savedFocusKeyword = focusKeywordByPage.get(normalizedPageUrl);
+          
+          return requestAiMeta({
+            pageUrl: item.page,
+            focusKeyword: savedFocusKeyword,
+          });
+        })
+      );
+
+      setAiMetaByPage((prev) => {
+        const next = { ...prev };
+        aiResults.forEach((entry) => {
+          next[entry.pageUrl] = entry;
+        });
+        return next;
+      });
+    }
+    
     setLoading(false);
   };
 
@@ -825,7 +852,9 @@ export default function LowCtrPage() {
 
   const suggestionsToRender = suggestionTargets.map((target) => {
     const suggestion = aiMetaByPage[target.key];
-    const source = focusKeywordSourceByPage.get(target.pageUrl) || "gsc-existing";
+    // Normalize URL for consistent lookup against focusKeywordSourceByPage
+    const normalizedPageUrl = normalizeUrlForComparison(target.pageUrl);
+    const source = focusKeywordSourceByPage.get(normalizedPageUrl) || "gsc-existing";
     return {
       pageUrl: target.pageUrl,
       focusKeyword: target.focusKeyword,

@@ -13,7 +13,7 @@ async function getStoredGSCData(userId) {
     return {
       refreshToken: userData.gscRefreshToken || null,
       accessToken: userData.gscAccessToken || null,
-      siteUrl: userData.gscProperty || null,
+      siteUrl: userData.gscSiteUrl || null,  // Fixed: was gscProperty, should be gscSiteUrl
       tokenExpiresAt: userData.gscTokenExpiresAt || null,
     };
   } catch (error) {
