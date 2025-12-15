@@ -503,23 +503,28 @@ export default function LowCtrPage() {
   // Create reverse map: pageUrl → keyword (for looking up focus keyword by page)
   const focusKeywordByPage = useMemo(() => {
     const map = new Map();
+    console.log(`📦 [LOW-CTR] Building focusKeywordByPage from assignments:`, Array.from(focusKeywordAssignments.entries()));
     focusKeywordAssignments.forEach((pageUrl, keyword) => {
       if (pageUrl) {
         const normalizedUrl = normalizeUrlForComparison(pageUrl);
         if (normalizedUrl) {
+          console.log(`📦 [LOW-CTR] Mapping: "${normalizedUrl}" -> "${keyword}"`);
           map.set(normalizedUrl, keyword);
         }
       }
     });
+    console.log(`📦 [LOW-CTR] Final focusKeywordByPage size: ${map.size}`);
     return map;
   }, [focusKeywordAssignments]);
 
   const rawSuggestionTargets = useMemo(
-    () =>
-      lowCtrPages.map((page) => {
+    () => {
+      console.log(`📦 [LOW-CTR rawSuggestionTargets] Building for ${lowCtrPages.length} pages, focusKeywordByPage size: ${focusKeywordByPage.size}`);
+      return lowCtrPages.map((page) => {
         // Look up saved focus keyword for this page
         const normalizedPageUrl = normalizeUrlForComparison(page.page);
         const savedFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+        console.log(`📦 [LOW-CTR rawSuggestionTargets] "${page.page}" -> normalized: "${normalizedPageUrl}" -> keyword: "${savedFocusKeyword || 'NULL'}"`);
         
         return {
           pageUrl: page.page,
@@ -531,7 +536,8 @@ export default function LowCtrPage() {
           },
           key: buildSuggestionKey(page.page, savedFocusKeyword),
         };
-      }),
+      });
+    },
     [lowCtrPages, focusKeywordByPage]
   );
 
@@ -551,6 +557,10 @@ export default function LowCtrPage() {
     key,
   }) => {
     try {
+      // DEBUG: Log what's being sent to the API
+      console.log(`🔍 [LOW-CTR requestAiMeta] pageUrl: ${pageUrl}`);
+      console.log(`🔍 [LOW-CTR requestAiMeta] focusKeywordArg: ${focusKeywordArg || 'NULL'}`);
+      
       const payload = {
         pageUrl,
         userId: user?.id, // ✅ Add userId so API can fetch onboarding data
@@ -560,6 +570,8 @@ export default function LowCtrPage() {
         },
         ...(focusKeywordArg ? { focusKeywords: [focusKeywordArg] } : {}),
       };
+      
+      console.log(`🔍 [LOW-CTR requestAiMeta] payload.focusKeywords:`, payload.focusKeywords || 'NOT SET');
 
       // Cache params for both title and description
       const cacheParams = {
