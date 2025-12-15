@@ -33,7 +33,7 @@ export async function POST(req) {
     return [];
   };
 
-  let focusKeywordList = normalizeFocusKeywordList(focusKeywords);
+  const focusKeywordList = normalizeFocusKeywordList(focusKeywords);
 
   // 🧠 Fallback if onboarding was not passed in
   if (!onboarding && userId) {
@@ -47,34 +47,9 @@ export async function POST(req) {
     }
   }
 
-  const resolveBaseUrl = () => {
-    const explicitBase = process.env.NEXT_PUBLIC_BASE_URL?.trim();
-    if (explicitBase) return explicitBase;
-    const vercelUrl = process.env.VERCEL_URL?.trim();
-    if (vercelUrl) {
-      const prefix = vercelUrl.startsWith("http") ? "" : "https://";
-      return `${prefix}${vercelUrl}`;
-    }
-    return null;
-  };
-
-  if (!focusKeywordList.length) {
-    const baseUrl = resolveBaseUrl();
-    if (baseUrl) {
-      try {
-        const kwRes = await fetch(new URL("/api/extract-keywords", baseUrl).toString(), {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ pageUrl }),
-        });
-
-        const kwData = await kwRes.json();
-        focusKeywordList = normalizeFocusKeywordList(kwData.keywords);
-      } catch (err) {
-        // Fallback keyword extraction failed - continue without keywords
-      }
-    }
-  }
+  // NOTE: We intentionally do NOT auto-extract keywords here.
+  // Focus keywords should always be passed from the client (dashboard, low-ctr, easy-wins).
+  // This prevents creating duplicate documents with different auto-extracted keywords.
 
   const focusKeywordCacheKey = focusKeywordList.length
     ? `${pageUrl}::${focusKeywordList
