@@ -747,10 +747,12 @@ export default function Dashboard() {
       setGeneratedMeta(results);
     };
 
-    if (aiTips.length > 0) {
+    // Wait for BOTH aiTips AND focusKeywords to be loaded
+    // This prevents creating documents without focus keywords (race condition fix)
+    if (aiTips.length > 0 && initialFocusKeywordsLoaded) {
       fetchTitlesAndDescriptions();
     }
-  }, [aiTips, generateMetaTitle, generateMetaDescription]);
+  }, [aiTips, generateMetaTitle, generateMetaDescription, initialFocusKeywordsLoaded]);
 
   useEffect(() => {
     const loadFocusKeywords = async () => {

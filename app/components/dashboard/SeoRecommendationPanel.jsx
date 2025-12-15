@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, ChevronDown, Pencil, Save, X } from "lucide-react";
+import { Copy, ChevronDown } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -18,7 +18,6 @@ import { useAuth } from "../../contexts/AuthContext";
 import {
   fetchWithCache,
   CACHE_DURATIONS,
-  clearAllMetaCaches,
 } from "../../lib/apiCache";
 import {
   Tooltip,
@@ -58,7 +57,6 @@ const SeoRecommendationPanel = ({
   suggestedDescription = "",
   keywordSource = "gsc-existing", // "ai-generated" or "gsc-existing"
   focusKeyword = "",
-  onSuggestionsUpdated = null, // Callback when suggestions are edited
 }) => {
   const { user } = useAuth();
 
@@ -79,28 +77,6 @@ const SeoRecommendationPanel = ({
   const [loadingMetaTags, setLoadingMetaTags] = useState(false);
   const fetchedPageUrlRef = useRef(null);
   const [metaTagsExpanded, setMetaTagsExpanded] = useState(false); // For collapsing meta tags when implemented
-  
-  // Edit mode state for suggested title/description
-  const [isEditingTitle, setIsEditingTitle] = useState(false);
-  const [isEditingDescription, setIsEditingDescription] = useState(false);
-  const [editedTitle, setEditedTitle] = useState(suggestedTitle?.replace(/^["']|["']$/g, '') || '');
-  const [editedDescription, setEditedDescription] = useState(suggestedDescription?.replace(/^["']|["']$/g, '') || '');
-  const [isSaving, setIsSaving] = useState(false);
-  
-  // Local state for displayed suggestions (can be overridden by edits)
-  const [localSuggestedTitle, setLocalSuggestedTitle] = useState(suggestedTitle);
-  const [localSuggestedDescription, setLocalSuggestedDescription] = useState(suggestedDescription);
-  
-  // Update local state when props change
-  useEffect(() => {
-    setLocalSuggestedTitle(suggestedTitle);
-    setEditedTitle(suggestedTitle?.replace(/^["']|["']$/g, '') || '');
-  }, [suggestedTitle]);
-  
-  useEffect(() => {
-    setLocalSuggestedDescription(suggestedDescription);
-    setEditedDescription(suggestedDescription?.replace(/^["']|["']$/g, '') || '');
-  }, [suggestedDescription]);
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -115,81 +91,6 @@ const SeoRecommendationPanel = ({
       toast.success(`${typeLabel} copied to clipboard`);
     } catch {
       toast.error("Failed to copy text");
-    }
-  };
-
-  // Save edited suggestion to Firestore
-  const handleSaveEdit = async (type) => {
-    if (!user?.id || !pageUrl) {
-      toast.error("Missing user or page information");
-      return;
-    }
-    
-    setIsSaving(true);
-    try {
-      // Build the cache key - should match how it's stored
-      const focusKeywordLower = focusKeyword?.toLowerCase()?.trim();
-      const cacheKey = focusKeywordLower 
-        ? `${pageUrl}::${focusKeywordLower}`
-        : pageUrl;
-      const encodedKey = encodeURIComponent(cacheKey);
-      
-      if (type === "title") {
-        // Update seoMetaTitles collection
-        await setDoc(
-          doc(db, "seoMetaTitles", encodedKey),
-          {
-            title: editedTitle,
-            pageUrl,
-            focusKeywords: focusKeyword ? [focusKeyword] : [],
-            userId: user.id,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-        setLocalSuggestedTitle(editedTitle);
-        setIsEditingTitle(false);
-        toast.success("✅ Suggested title updated!");
-      } else {
-        // Update seoMetaDescriptions collection
-        await setDoc(
-          doc(db, "seoMetaDescriptions", encodedKey),
-          {
-            description: editedDescription,
-            pageUrl,
-            focusKeywords: focusKeyword ? [focusKeyword] : [],
-            userId: user.id,
-            updatedAt: new Date().toISOString(),
-          },
-          { merge: true }
-        );
-        setLocalSuggestedDescription(editedDescription);
-        setIsEditingDescription(false);
-        toast.success("✅ Suggested description updated!");
-      }
-      
-      // Clear browser cache so other devices/browsers fetch fresh data from Firestore
-      clearAllMetaCaches();
-      
-      // Call callback if provided
-      if (onSuggestionsUpdated) {
-        onSuggestionsUpdated();
-      }
-    } catch (error) {
-      console.error("Error saving edit:", error);
-      toast.error("❌ Failed to save changes");
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleCancelEdit = (type) => {
-    if (type === "title") {
-      setEditedTitle(localSuggestedTitle?.replace(/^["']|["']$/g, '') || '');
-      setIsEditingTitle(false);
-    } else {
-      setEditedDescription(localSuggestedDescription?.replace(/^["']|["']$/g, '') || '');
-      setIsEditingDescription(false);
     }
   };
 
@@ -241,8 +142,8 @@ const SeoRecommendationPanel = ({
             pageUrl,
             implementedAt: implementedAt.toISOString(),
             nextUpdateDue: nextUpdateDue.toISOString(), // Individual 7-day schedule
-            title: localSuggestedTitle || suggestedTitle, // Use edited value if available
-            description: localSuggestedDescription || suggestedDescription, // Use edited value if available
+            title: suggestedTitle,
+            description: suggestedDescription,
             status: "implemented",
             preStats,
             gscToken, // Save the token for the Firebase function
@@ -654,14 +555,14 @@ const SeoRecommendationPanel = ({
                             <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
                             <div className="flex items-center justify-between gap-2">
                               <Textarea
-                                value={localSuggestedTitle?.replace(/^["']|["']$/g, '') || ''}
+                                value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
                                 readOnly
                                 className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
                               />
                               <Button
                                 variant="ghost"
                                 size="sm"
-                                onClick={() => copyToClipboard(localSuggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
+                                onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
                                 className="flex-shrink-0"
                               >
                                 <Copy className="h-4 w-4" />
@@ -694,7 +595,7 @@ const SeoRecommendationPanel = ({
                             <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
                             <div className="flex items-center justify-between gap-2">
                               <Textarea
-                                value={localSuggestedDescription?.replace(/^["']|["']$/g, '') || ''}
+                                value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
                                 readOnly
                                 className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
                               />
@@ -702,7 +603,7 @@ const SeoRecommendationPanel = ({
                                 variant="ghost"
                                 size="sm"
                                 onClick={() =>
-                                  copyToClipboard(localSuggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
+                                  copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
                                 }
                                 className="flex-shrink-0"
                               >
@@ -829,62 +730,21 @@ const SeoRecommendationPanel = ({
                         </div>
                         <div>
                           <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
-                          {isEditingTitle ? (
-                            <div className="space-y-2">
-                              <Textarea
-                                value={editedTitle}
-                                onChange={(e) => setEditedTitle(e.target.value)}
-                                className="resize-none flex-1 border-primary"
-                                rows={2}
-                              />
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSaveEdit("title")}
-                                  disabled={isSaving}
-                                >
-                                  <Save className="h-4 w-4 mr-1" />
-                                  {isSaving ? "Saving..." : "Save"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCancelEdit("title")}
-                                  disabled={isSaving}
-                                >
-                                  <X className="h-4 w-4 mr-1" />
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between gap-2">
-                              <Textarea
-                                value={localSuggestedTitle?.replace(/^["']|["']$/g, '') || ''}
-                                readOnly
-                                className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
-                              />
-                              <div className="flex flex-col gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setIsEditingTitle(true)}
-                                  className="flex-shrink-0"
-                                  title="Edit suggested title"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => copyToClipboard(localSuggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
-                                  className="flex-shrink-0"
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex items-center justify-between gap-2">
+                            <Textarea
+                              value={suggestedTitle?.replace(/^["']|["']$/g, '') || ''}
+                              readOnly
+                              className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() => copyToClipboard(suggestedTitle?.replace(/^["']|["']$/g, '') || '', "title")}
+                              className="flex-shrink-0"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -910,64 +770,23 @@ const SeoRecommendationPanel = ({
                         </div>
                         <div>
                           <Label className="text-xs text-muted-foreground mb-1 block">Suggested</Label>
-                          {isEditingDescription ? (
-                            <div className="space-y-2">
-                              <Textarea
-                                value={editedDescription}
-                                onChange={(e) => setEditedDescription(e.target.value)}
-                                className="resize-none flex-1 border-primary"
-                                rows={3}
-                              />
-                              <div className="flex gap-2">
-                                <Button
-                                  size="sm"
-                                  onClick={() => handleSaveEdit("description")}
-                                  disabled={isSaving}
-                                >
-                                  <Save className="h-4 w-4 mr-1" />
-                                  {isSaving ? "Saving..." : "Save"}
-                                </Button>
-                                <Button
-                                  size="sm"
-                                  variant="outline"
-                                  onClick={() => handleCancelEdit("description")}
-                                  disabled={isSaving}
-                                >
-                                  <X className="h-4 w-4 mr-1" />
-                                  Cancel
-                                </Button>
-                              </div>
-                            </div>
-                          ) : (
-                            <div className="flex items-center justify-between gap-2">
-                              <Textarea
-                                value={localSuggestedDescription?.replace(/^["']|["']$/g, '') || ''}
-                                readOnly
-                                className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
-                              />
-                              <div className="flex flex-col gap-1">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() => setIsEditingDescription(true)}
-                                  className="flex-shrink-0"
-                                  title="Edit suggested description"
-                                >
-                                  <Pencil className="h-4 w-4" />
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  onClick={() =>
-                                    copyToClipboard(localSuggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
-                                  }
-                                  className="flex-shrink-0"
-                                >
-                                  <Copy className="h-4 w-4" />
-                                </Button>
-                              </div>
-                            </div>
-                          )}
+                          <div className="flex items-center justify-between gap-2">
+                            <Textarea
+                              value={suggestedDescription?.replace(/^["']|["']$/g, '') || ''}
+                              readOnly
+                              className="resize-none flex-1 bg-green-50 dark:bg-green-900/20 border-green-200 dark:border-green-900/40 text-green-900 dark:text-green-100"
+                            />
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              onClick={() =>
+                                copyToClipboard(suggestedDescription?.replace(/^["']|["']$/g, '') || '', "description")
+                              }
+                              className="flex-shrink-0"
+                            >
+                              <Copy className="h-4 w-4" />
+                            </Button>
+                          </div>
                         </div>
                       </div>
                     </div>
