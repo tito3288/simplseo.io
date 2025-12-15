@@ -1,5 +1,81 @@
 import { NextResponse } from "next/server";
-import { db } from "../../../lib/firebaseAdmin";
+import { db, auth } from "../../../lib/firebaseAdmin";
+import nodemailer from "nodemailer";
+
+// ============================================
+// ADMIN NOTIFICATION FOR ACCOUNT DELETIONS
+// ============================================
+async function notifyAdminOfDeletion(userInfo) {
+  let transporter;
+
+  // Use SendGrid if configured (preferred)
+  if (process.env.SENDGRID_API_KEY) {
+    transporter = nodemailer.createTransport({
+      service: "SendGrid",
+      auth: {
+        user: "apikey",
+        pass: process.env.SENDGRID_API_KEY,
+      },
+    });
+  } else if (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS) {
+    // Fallback to Gmail SMTP
+    transporter = nodemailer.createTransport({
+      host: process.env.SMTP_HOST,
+      port: parseInt(process.env.SMTP_PORT || "587"),
+      secure: false,
+      auth: {
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS,
+      },
+    });
+  } else {
+    console.warn("⚠️ No email config found - skipping admin notification");
+    return false;
+  }
+
+  try {
+    const adminEmail = process.env.ADMIN_EMAIL || process.env.SMTP_USER;
+    
+    await transporter.sendMail({
+      from: process.env.SMTP_FROM || process.env.SMTP_USER || "noreply@simplseo.io",
+      to: adminEmail,
+      subject: `🚨 User Deleted Account - ${userInfo.email || "Unknown"}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #ef4444;">🚨 User Account Deleted</h2>
+          <p>A user has deleted their SimplSEO account. Consider reaching out for feedback.</p>
+          
+          <div style="background-color: #1a1a2e; color: #ffffff; padding: 20px; border-radius: 8px; margin: 20px 0; border-left: 4px solid #ef4444;">
+            <h3 style="margin-top: 0; color: #00BF63;">User Details:</h3>
+            <p><strong>Email:</strong> ${userInfo.email || "N/A"}</p>
+            <p><strong>User ID:</strong> ${userInfo.userId}</p>
+            <p><strong>Website:</strong> ${userInfo.website || "N/A"}</p>
+            <p><strong>Account Created:</strong> ${userInfo.createdAt || "Unknown"}</p>
+            <p><strong>Deleted At:</strong> ${userInfo.deletedAt}</p>
+            <p><strong>Days Active:</strong> ${userInfo.daysActive || "Unknown"}</p>
+          </div>
+
+          <p style="margin-top: 20px;">
+            <strong>Follow up for feedback:</strong><br/>
+            ${userInfo.email ? `<a href="mailto:${userInfo.email}?subject=Quick%20Question%20About%20SimplSEO&body=Hi%2C%0A%0AI%20noticed%20you%20recently%20deleted%20your%20SimplSEO%20account.%20I%27d%20love%20to%20hear%20any%20feedback%20you%20have%20-%20what%20could%20we%20have%20done%20better%3F%0A%0AThanks%2C%0ABryan" style="color: #00BF63;">${userInfo.email}</a>` : "Email not available"}
+          </p>
+
+          <hr style="border: none; border-top: 1px solid #333; margin: 30px 0;" />
+          <p style="font-size: 0.8em; color: #999;">
+            This notification was sent from SimplSEO's account deletion system.
+          </p>
+        </div>
+      `,
+      text: `User Account Deleted\n\nEmail: ${userInfo.email || "N/A"}\nUser ID: ${userInfo.userId}\nWebsite: ${userInfo.website || "N/A"}\nAccount Created: ${userInfo.createdAt || "Unknown"}\nDeleted At: ${userInfo.deletedAt}\nDays Active: ${userInfo.daysActive || "Unknown"}\n\nConsider reaching out for feedback.`,
+    });
+
+    console.log(`📧 Admin notified of account deletion: ${userInfo.email}`);
+    return true;
+  } catch (error) {
+    console.error("❌ Failed to send admin notification:", error);
+    return false;
+  }
+}
 
 export async function POST(req) {
   try {
@@ -11,6 +87,69 @@ export async function POST(req) {
         { status: 400 }
       );
     }
+
+    // ============================================
+    // CAPTURE USER INFO BEFORE DELETION
+    // ============================================
+    let userInfo = { 
+      userId,
+      deletedAt: new Date().toISOString(),
+    };
+
+    // Get email and signup date from Firebase Auth
+    try {
+      const userRecord = await auth.getUser(userId);
+      userInfo.email = userRecord.email;
+      userInfo.createdAt = userRecord.metadata?.creationTime;
+      
+      // Calculate days active
+      if (userRecord.metadata?.creationTime) {
+        const createdDate = new Date(userRecord.metadata.creationTime);
+        const now = new Date();
+        const daysActive = Math.floor((now - createdDate) / (1000 * 60 * 60 * 24));
+        userInfo.daysActive = daysActive;
+      }
+    } catch (e) {
+      console.log("⚠️ Could not get auth user:", e.message);
+    }
+
+    // Get additional info from Firestore (website, etc.)
+    try {
+      const userDoc = await db.collection("users").doc(userId).get();
+      if (userDoc.exists) {
+        const data = userDoc.data();
+        userInfo.website = data.gscSiteUrl || data.siteUrl || data.website;
+      }
+    } catch (e) {
+      console.log("⚠️ Could not get user doc:", e.message);
+    }
+
+    // Store deleted user record for analytics/follow-up
+    try {
+      await db.collection("deletedUsers").doc(userId).set({
+        ...userInfo,
+        notificationSent: false, // Will be updated after email
+      });
+      console.log("📝 Stored deleted user record for analytics");
+    } catch (e) {
+      console.log("⚠️ Could not store deleted user record:", e.message);
+    }
+
+    // Send admin notification email
+    const notificationSent = await notifyAdminOfDeletion(userInfo);
+    
+    // Update notification status
+    if (notificationSent) {
+      try {
+        await db.collection("deletedUsers").doc(userId).update({
+          notificationSent: true,
+          notificationSentAt: new Date().toISOString(),
+        });
+      } catch (e) {
+        // Ignore if update fails
+      }
+    }
+    // ============================================
 
     let deleteCount = 0;
 
