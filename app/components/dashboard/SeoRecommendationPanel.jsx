@@ -130,12 +130,18 @@ const SeoRecommendationPanel = ({
         }
 
         const docId = createSafeDocId(user.id, pageUrl);
+        const implementedAt = new Date();
+        // Set nextUpdateDue to exactly 7 days after implementation
+        // This creates an individual 7-day cycle for each tip
+        const nextUpdateDue = new Date(implementedAt.getTime() + 7 * 24 * 60 * 60 * 1000);
+        
         await setDoc(
           doc(db, "implementedSeoTips", docId),
           {
             userId: user.id,
             pageUrl,
-            implementedAt: new Date().toISOString(),
+            implementedAt: implementedAt.toISOString(),
+            nextUpdateDue: nextUpdateDue.toISOString(), // Individual 7-day schedule
             title: suggestedTitle,
             description: suggestedDescription,
             status: "implemented",

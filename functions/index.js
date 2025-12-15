@@ -425,11 +425,11 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
   }
 });
 
-// ⏰ Weekly cron job to check SEO progress after 7 days
-// Runs every Monday at 1:00 AM ET - updates postStats weekly after initial 7-day wait
-// ✅ FIXED: Added safeguards to prevent overwriting good data with 0s
+// ⏰ Daily cron job to check SEO progress with per-document 7-day cycles
+// Runs every day at 1:00 AM ET - each tip has its own individual 7-day update schedule
+// ✅ FIXED: Per-document scheduling - tips implemented on different days update on their own 7-day cycles
 exports.checkSeoTipProgress = pubsub
-  .schedule("every monday 01:00")
+  .schedule("every day 01:00")
   .timeZone("America/New_York")
   .onRun(async (context) => {
     const snapshot = await db
@@ -438,18 +438,21 @@ exports.checkSeoTipProgress = pubsub
       .get();
 
     const now = Date.now();
+    const nowISO = new Date().toISOString();
     const updates = [];
     let processedCount = 0;
     let skippedCount = 0;
     let createdCount = 0;
     let updatedCount = 0;
+    let notDueYetCount = 0;
 
     for (const doc of snapshot.docs) {
       const data = doc.data();
-      const { implementedAt, pageUrl, userId, preStats, postStats } = data;
+      const { implementedAt, pageUrl, userId, preStats, postStats, nextUpdateDue } = data;
 
       console.log(`🔍 Processing document: ${doc.id}`);
       console.log(`📅 Implemented at: ${implementedAt}`);
+      console.log(`📅 Next update due: ${nextUpdateDue || 'not set'}`);
       console.log(`📊 Has preStats: ${!!preStats}`);
       console.log(`📊 Has postStats: ${!!postStats}`);
 
@@ -463,10 +466,37 @@ exports.checkSeoTipProgress = pubsub
 
       console.log(`📅 Days since implementation: ${daysSince.toFixed(1)}`);
 
-      // Only process documents that are 7+ days old
-      if (daysSince < 7) {
-        console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
-        skippedCount++;
+      // Per-document scheduling logic:
+      // 1. If nextUpdateDue exists, check if it's time to update
+      // 2. If nextUpdateDue doesn't exist (legacy docs), fall back to 7-day check
+      
+      let shouldUpdate = false;
+      
+      if (nextUpdateDue) {
+        // New per-document scheduling: check if nextUpdateDue has passed
+        const dueTime = new Date(nextUpdateDue).getTime();
+        if (now >= dueTime) {
+          shouldUpdate = true;
+          console.log(`✅ ${doc.id} is due for update (nextUpdateDue: ${nextUpdateDue})`);
+        } else {
+          const daysUntilDue = (dueTime - now) / (1000 * 60 * 60 * 24);
+          console.log(`⏳ ${doc.id} not due yet - ${daysUntilDue.toFixed(1)} days until next update`);
+          notDueYetCount++;
+          continue;
+        }
+      } else {
+        // Legacy fallback: check if 7+ days have passed since implementation
+        if (daysSince >= 7) {
+          shouldUpdate = true;
+          console.log(`✅ ${doc.id} is due for update (legacy: ${daysSince.toFixed(1)} days old)`);
+        } else {
+          console.log(`⏳ Skipping ${doc.id} - only ${daysSince.toFixed(1)} days old`);
+          skippedCount++;
+          continue;
+        }
+      }
+
+      if (!shouldUpdate) {
         continue;
       }
       
@@ -531,15 +561,20 @@ exports.checkSeoTipProgress = pubsub
         // 3. If postStats exists with real data and new data is zeros, skip (don't overwrite good data)
         // 4. If postStats exists and new data is better, update it
 
+        // Calculate next update due date (7 days from now)
+        const nextUpdateDueDate = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
+
         if (!postStats) {
           // First time - create postStats (even if zeros, it's the first attempt)
           console.log(`📝 Creating postStats for ${pageUrl} (first time)`);
+          console.log(`📅 Next update scheduled for: ${nextUpdateDueDate}`);
           updates.push(
             doc.ref.set(
               {
                 postStats: newPostStats,
                 updatedAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
+                nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
               },
               { merge: true }
             )
@@ -548,12 +583,14 @@ exports.checkSeoTipProgress = pubsub
         } else if (!existingHasData && isAllZeros) {
           // Existing data is also zeros, update anyway (might get real data later)
           console.log(`🔄 Updating postStats for ${pageUrl} (both zeros, trying again)`);
+          console.log(`📅 Next update scheduled for: ${nextUpdateDueDate}`);
           updates.push(
             doc.ref.set(
               {
                 postStats: newPostStats,
                 updatedAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
+                nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
               },
               { merge: true }
             )
@@ -561,18 +598,30 @@ exports.checkSeoTipProgress = pubsub
           updatedCount++;
         } else if (existingHasData && isAllZeros) {
           // Existing data is good, new data is zeros - SKIP to protect good data
+          // But still update nextUpdateDue to check again in 7 days
           console.log(`🛡️ Skipping update for ${pageUrl} - existing data is good, new data is zeros`);
+          console.log(`📅 Still scheduling next check for: ${nextUpdateDueDate}`);
+          updates.push(
+            doc.ref.set(
+              {
+                nextUpdateDue: nextUpdateDueDate, // Still schedule next check
+              },
+              { merge: true }
+            )
+          );
           skippedCount++;
           continue;
         } else {
           // Both have data - update with new data (refreshing)
           console.log(`🔄 Refreshing postStats for ${pageUrl}`);
+          console.log(`📅 Next update scheduled for: ${nextUpdateDueDate}`);
           updates.push(
             doc.ref.set(
               {
                 postStats: newPostStats,
                 updatedAt: new Date().toISOString(),
                 lastUpdated: new Date().toISOString(),
+                nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
               },
               { merge: true }
             )
@@ -586,9 +635,11 @@ exports.checkSeoTipProgress = pubsub
     }
 
     await Promise.all(updates);
-    console.log(`✅ Processed ${processedCount} documents:`);
-    console.log(`   - Created: ${createdCount}`);
-    console.log(`   - Updated: ${updatedCount}`);
-    console.log(`   - Skipped: ${skippedCount}`);
+    console.log(`✅ Daily cron completed:`);
+    console.log(`   - Processed (due today): ${processedCount}`);
+    console.log(`   - Created (first postStats): ${createdCount}`);
+    console.log(`   - Updated (refreshed): ${updatedCount}`);
+    console.log(`   - Skipped (protected good data): ${skippedCount}`);
+    console.log(`   - Not due yet: ${notDueYetCount}`);
     return null;
   });

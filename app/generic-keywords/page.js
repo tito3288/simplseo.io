@@ -176,91 +176,164 @@ export default function GenericKeywordsPage() {
     }
   };
 
+  // Store GSC credentials for direct page checks
+  const [gscCredentials, setGscCredentials] = useState(null);
+
   // Fetch GSC keywords for success stories matching
   useEffect(() => {
     const fetchGSCDataForSuccessStories = async () => {
-      if (!user?.id || !data?.gscProperty) return;
+      if (!user?.id) return;
+
+      console.log("🔍 [Success Stories] Starting GSC data fetch...");
 
       try {
         const tokenManager = createGSCTokenManager(user.id);
         const gscData = await tokenManager.getStoredGSCData();
         
+        console.log("🔍 [Success Stories] GSC data:", { 
+          hasRefreshToken: !!gscData?.refreshToken, 
+          siteUrl: gscData?.siteUrl 
+        });
+        
         if (!gscData?.refreshToken || !gscData?.siteUrl) {
+          console.log("❌ [Success Stories] No GSC credentials found");
           return;
         }
 
         const validToken = await tokenManager.getValidAccessToken();
         if (!validToken) {
+          console.log("❌ [Success Stories] Could not get valid access token");
           return;
         }
 
+        // Store credentials for direct page checks
+        setGscCredentials({ siteUrl: gscData.siteUrl, token: validToken });
+
+        console.log("✅ [Success Stories] Got valid token, fetching keywords...");
         const keywords = await fetchGSCKeywords(gscData.siteUrl, validToken);
+        console.log("✅ [Success Stories] Fetched", keywords?.length || 0, "keywords from GSC");
+        
+        // Log unique pages found
+        const uniquePages = [...new Set(keywords?.map(k => k.page) || [])];
+        console.log("📄 [Success Stories] Unique pages in GSC data:", uniquePages.length);
+        console.log("📄 [Success Stories] Sample pages:", uniquePages.slice(0, 5));
+        
         setGscKeywords(keywords || []);
       } catch (error) {
-        console.error("Error fetching GSC data for success stories:", error);
+        console.error("❌ [Success Stories] Error fetching GSC data:", error);
       }
     };
 
     fetchGSCDataForSuccessStories();
-  }, [user?.id, data?.gscProperty]);
+  }, [user?.id]);
 
   // Match created opportunities with GSC data to find success stories
   useEffect(() => {
-    if (createdOpportunities.length === 0 || gscKeywords.length === 0) {
-      setSuccessStories([]);
-      return;
-    }
-
-    // Helper function to extract and normalize pathname only (not full URL)
-    const normalizeUrlPath = (url) => {
-      try {
-        const u = new URL(url);
-        // Return just the pathname, normalized (lowercase, no trailing slash)
-        return u.pathname.toLowerCase().replace(/\/$/, '') || '/';
-      } catch {
-        return url.toLowerCase().replace(/\/$/, '');
+    const matchSuccessStories = async () => {
+      console.log("🔄 [Success Stories] Matching effect triggered");
+      console.log("🔄 [Success Stories] Created opportunities:", createdOpportunities.length);
+      console.log("🔄 [Success Stories] GSC keywords:", gscKeywords.length);
+      console.log("🔄 [Success Stories] Has GSC credentials:", !!gscCredentials);
+      
+      if (createdOpportunities.length === 0) {
+        console.log("⏭️ [Success Stories] Skipping - no created opportunities");
+        setSuccessStories([]);
+        return;
       }
-    };
 
-    const stories = createdOpportunities
-      .filter(opp => {
-        // Check if the page URL exists in GSC data (exact pathname match only)
-        return gscKeywords.some(kw => {
-          const oppPath = normalizeUrlPath(opp.pageUrl);
-          const kwPath = normalizeUrlPath(kw.page);
-          
-          // Use EXACT path matching only - no includes() which causes false positives
-          return oppPath === kwPath;
-        });
-      })
-      .map(opp => {
-        // Find matching GSC keyword data (exact pathname match only)
-        const matchingKw = gscKeywords.find(kw => {
-          const oppPath = normalizeUrlPath(opp.pageUrl);
-          const kwPath = normalizeUrlPath(kw.page);
-          // Use EXACT path matching only
-          return oppPath === kwPath;
-        });
-
-        if (matchingKw) {
-          const createdAt = new Date(opp.createdAt);
-          const now = new Date();
-          const daysSinceCreated = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
-
-          return {
-            ...opp,
-            position: matchingKw.position,
-            impressions: matchingKw.impressions,
-            clicks: matchingKw.clicks,
-            ctr: matchingKw.ctr,
-            daysSinceCreated,
-            gscPage: matchingKw.page,
-          };
+      // Helper function to extract and normalize pathname only (not full URL)
+      const normalizeUrlPath = (url) => {
+        try {
+          const u = new URL(url);
+          // Return just the pathname, normalized (lowercase, no trailing slash)
+          return u.pathname.toLowerCase().replace(/\/$/, '') || '/';
+        } catch {
+          return url.toLowerCase().replace(/\/$/, '');
         }
-        return null;
-      })
-      .filter(Boolean)
-      .sort((a, b) => {
+      };
+      
+      // Log created opportunities URLs for debugging
+      console.log("📋 [Success Stories] Created opportunity URLs:");
+      createdOpportunities.forEach(opp => {
+        const normalized = normalizeUrlPath(opp.pageUrl);
+        console.log(`  - ${opp.keyword}: ${opp.pageUrl} → ${normalized}`);
+      });
+      
+      // Log unique GSC pages for comparison
+      const uniqueGscPaths = [...new Set(gscKeywords.map(kw => normalizeUrlPath(kw.page)))];
+      console.log("📋 [Success Stories] GSC page paths (sample):", uniqueGscPaths.slice(0, 10));
+      
+      const foundStories = [];
+      
+      for (const opp of createdOpportunities) {
+        const oppPath = normalizeUrlPath(opp.pageUrl);
+        
+        // First: Check if the page exists in the main GSC data (fast check)
+        const foundInMainData = gscKeywords.some(kw => {
+          const kwPath = normalizeUrlPath(kw.page);
+          return oppPath === kwPath;
+        });
+        
+        if (foundInMainData) {
+          console.log(`✅ [Success Stories] "${opp.keyword}": ${oppPath} → FOUND in main GSC data`);
+          
+          // Get matching keyword data
+          const matchingKw = gscKeywords.find(kw => normalizeUrlPath(kw.page) === oppPath);
+          foundStories.push({
+            ...opp,
+            gscData: matchingKw ? {
+              impressions: matchingKw.impressions,
+              clicks: matchingKw.clicks,
+              position: matchingKw.position
+            } : null
+          });
+          continue;
+        }
+        
+        // Second: If not found in main data, do a direct check (for low-impression pages)
+        if (gscCredentials) {
+          console.log(`🔍 [Success Stories] "${opp.keyword}": ${oppPath} → NOT in main data, doing direct check...`);
+          
+          const directCheck = await checkPageExistsInGSC(
+            gscCredentials.siteUrl, 
+            gscCredentials.token, 
+            opp.pageUrl
+          );
+          
+          if (directCheck.exists) {
+            console.log(`✅ [Success Stories] "${opp.keyword}": ${oppPath} → FOUND via direct check!`);
+            foundStories.push({
+              ...opp,
+              gscData: {
+                impressions: directCheck.impressions,
+                clicks: directCheck.clicks,
+                position: Math.round(directCheck.position || 0)
+              }
+            });
+          } else {
+            console.log(`❌ [Success Stories] "${opp.keyword}": ${oppPath} → NOT FOUND (even with direct check)`);
+          }
+        } else {
+          console.log(`❌ [Success Stories] "${opp.keyword}": ${oppPath} → NOT FOUND (no credentials for direct check)`);
+        }
+      }
+      
+      // Calculate additional data for each story
+      const stories = foundStories.map(story => {
+        const createdAt = new Date(story.createdAt);
+        const now = new Date();
+        const daysSinceCreated = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
+        
+        return {
+          ...story,
+          position: story.gscData?.position || 0,
+          impressions: story.gscData?.impressions || 0,
+          clicks: story.gscData?.clicks || 0,
+          ctr: story.gscData?.ctr ? `${(story.gscData.ctr * 100).toFixed(1)}%` : '0%',
+          daysSinceCreated,
+          gscPage: story.pageUrl,
+        };
+      }).sort((a, b) => {
         // Sort by impressions (descending) then clicks (descending)
         if (b.impressions !== a.impressions) {
           return b.impressions - a.impressions;
@@ -268,8 +341,12 @@ export default function GenericKeywordsPage() {
         return b.clicks - a.clicks;
       });
 
-    setSuccessStories(stories);
-  }, [createdOpportunities, gscKeywords]);
+      console.log("🎉 [Success Stories] Found", stories.length, "success stories");
+      setSuccessStories(stories);
+    };
+    
+    matchSuccessStories();
+  }, [createdOpportunities, gscKeywords, gscCredentials]);
 
   const fetchGSCKeywords = async (siteUrl, token) => {
     const today = new Date();
@@ -322,6 +399,130 @@ export default function GenericKeywordsPage() {
     }));
 
     return formatted;
+  };
+
+  // Check if a specific page URL exists in GSC (for pages with low impressions not in top 1000)
+  const checkPageExistsInGSC = async (siteUrl, token, pageUrl) => {
+    const today = new Date();
+    const start = new Date(today);
+    start.setDate(today.getDate() - 28);
+
+    const format = (d) => d.toISOString().split("T")[0];
+    const from = format(start);
+    const to = format(today);
+
+    // Try both with and without trailing slash
+    const urlsToTry = [
+      pageUrl,
+      pageUrl.endsWith('/') ? pageUrl.slice(0, -1) : pageUrl + '/'
+    ];
+
+    console.log(`🔍 [Direct Check] Checking if ${pageUrl} exists in GSC...`);
+    console.log(`🔍 [Direct Check] Will try these URLs:`, urlsToTry);
+
+    for (const urlToCheck of urlsToTry) {
+      try {
+        console.log(`🔍 [Direct Check] Trying: ${urlToCheck}`);
+        
+        const res = await fetch(
+          `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+            siteUrl
+          )}/searchAnalytics/query`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              startDate: from,
+              endDate: to,
+              dimensions: ["page"],
+              dimensionFilterGroups: [{
+                filters: [{
+                  dimension: "page",
+                  operator: "equals",
+                  expression: urlToCheck
+                }]
+              }],
+              rowLimit: 1,
+            }),
+          }
+        );
+
+        const json = await res.json();
+        console.log(`🔍 [Direct Check] Raw API response for ${urlToCheck}:`, json);
+        
+        if (json.rows && json.rows.length > 0) {
+          const row = json.rows[0];
+          console.log(`✅ [Direct Check] Found ${urlToCheck} in GSC: ${row.impressions} impressions, ${row.clicks} clicks`);
+          return {
+            exists: true,
+            impressions: row.impressions,
+            clicks: row.clicks,
+            ctr: row.ctr,
+            position: row.position
+          };
+        }
+        
+        console.log(`⚠️ [Direct Check] ${urlToCheck} returned no rows`);
+      } catch (error) {
+        console.error(`❌ [Direct Check] Error checking ${urlToCheck}:`, error);
+      }
+    }
+    
+    // Also try a "contains" search as a fallback
+    try {
+      const pathname = new URL(pageUrl).pathname.replace(/\/$/, '');
+      console.log(`🔍 [Direct Check] Trying CONTAINS search for pathname: ${pathname}`);
+      
+      const res = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+          siteUrl
+        )}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: from,
+            endDate: to,
+            dimensions: ["page"],
+            dimensionFilterGroups: [{
+              filters: [{
+                dimension: "page",
+                operator: "contains",
+                expression: pathname
+              }]
+            }],
+            rowLimit: 10,
+          }),
+        }
+      );
+
+      const json = await res.json();
+      console.log(`🔍 [Direct Check] CONTAINS search response:`, json);
+      
+      if (json.rows && json.rows.length > 0) {
+        // Find the best matching row
+        const row = json.rows[0];
+        console.log(`✅ [Direct Check] Found via CONTAINS: ${row.keys[0]} with ${row.impressions} impressions`);
+        return {
+          exists: true,
+          impressions: row.impressions,
+          clicks: row.clicks,
+          ctr: row.ctr,
+          position: row.position
+        };
+      }
+    } catch (error) {
+      console.error(`❌ [Direct Check] Error in CONTAINS search:`, error);
+    }
+    
+    console.log(`❌ [Direct Check] ${pageUrl} not found in GSC (tried all methods)`);
+    return { exists: false };
   };
 
   const fetchGenericOpportunitiesFromDashboard = async () => {

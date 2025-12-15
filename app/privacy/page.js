@@ -342,7 +342,7 @@ export default function PrivacyPolicyPage() {
             </p>
             <div className="bg-muted/50 p-4 rounded-lg">
               <p className="text-foreground/90"><strong>SimplSEO</strong></p>
-              <p className="text-foreground/90">Email: privacy@simplseo.io</p>
+              <p className="text-foreground/90">Email: simplseoai@gmail.com</p>
             </div>
             <p className="text-foreground/90 leading-relaxed">
               We will respond to your inquiry within 30 days.
