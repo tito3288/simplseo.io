@@ -730,15 +730,20 @@ export default function LowCtrPage() {
 
     setLowCtrPages(grouped);
 
+    // Look up saved focus keywords for each page (same logic as rawSuggestionTargets)
     const aiResults = await Promise.all(
-      grouped.map((item) =>
-        requestAiMeta({
+      grouped.map((item) => {
+        // Look up saved focus keyword for this page
+        const normalizedPageUrl = normalizeUrlForComparison(item.page);
+        const savedFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+        
+        console.log(`📦 [LOW-CTR fetchLowCtrPages] "${item.page}" -> normalized: "${normalizedPageUrl}" -> keyword: "${savedFocusKeyword || 'NULL'}"`);
+        
+        return requestAiMeta({
           pageUrl: item.page,
-          focusKeyword: (item.keywords || []).find((keyword) =>
-            focusKeywordSet.has(keyword.toLowerCase())
-          ) || null,
-        })
-      )
+          focusKeyword: savedFocusKeyword, // Use saved focus keyword instead of matching GSC keywords
+        });
+      })
     );
 
     setAiMetaByPage((prev) => {
