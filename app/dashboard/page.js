@@ -130,7 +130,20 @@ export default function Dashboard() {
   const [isRecrawling, setIsRecrawling] = useState(false);
   const [isInitialCrawlRunning, setIsInitialCrawlRunning] = useState(false);
 
-  const normalizePageKey = (page) => page || "__unknown__";
+  // Normalize page URLs consistently - same logic as normalizeUrlForComparison
+  // This ensures consistent keys when storing and looking up focus keywords
+  const normalizePageKey = (page) => {
+    if (!page) return "__unknown__";
+    try {
+      const u = new URL(page);
+      // Remove trailing slash except for root
+      const normalized = u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+      return normalized.toLowerCase();
+    } catch {
+      // Fallback: just remove trailing slash and lowercase
+      return page.trim().replace(/\/$/, '').toLowerCase();
+    }
+  };
   const assignmentsToEntries = (assignments, sourceMap = new Map()) =>
     Array.from(assignments.entries())
       .map(([pageKey, keyword]) => {
