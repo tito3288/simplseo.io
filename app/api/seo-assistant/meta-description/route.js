@@ -41,6 +41,21 @@ export async function POST(req) {
   console.log(`📥 [META DESC API] focusKeywords received:`, focusKeywords);
   console.log(`📥 [META DESC API] focusKeywordList (normalized):`, focusKeywordList);
   console.log(`📥 [META DESC API] userId:`, userId);
+  console.log(`📥 [META DESC API] context.source:`, context?.source);
+  console.log(`📥 [META DESC API] Stack trace:`, new Error().stack?.split('\n').slice(1, 4).join('\n'));
+
+  // 🚨 GUARD: Prevent creating documents with empty focusKeywords
+  if (!focusKeywordList || focusKeywordList.length === 0) {
+    console.error(`❌ [META DESC API] BLOCKED: Empty focusKeywords for ${pageUrl}`);
+    console.error(`❌ [META DESC API] Request body:`, JSON.stringify({ pageUrl, focusKeywords, userId, context: context?.source }));
+    return NextResponse.json(
+      { 
+        error: "focusKeywords is required. Please provide at least one focus keyword.",
+        pageUrl 
+      },
+      { status: 400 }
+    );
+  }
   
   const focusKeywordsString = focusKeywordList.join(", ");
   const focusKeywordCacheKey = focusKeywordList.length
