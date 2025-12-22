@@ -36,7 +36,7 @@ const stackingCards = [
     description: "Your page shows up in Google but nobody clicks? We'll tell you exactly why and how to fix it. Usually it's the title we'll help you write better ones that people actually want to click.",
     lightColor: "hsl(45, 50%, 92%)",
     darkColor: "hsl(40, 35%, 32%)", // Soft warm beige
-    image: "/4.png",
+    image: "/Google-2.png",
   },
   {
     icon: MessageSquare,

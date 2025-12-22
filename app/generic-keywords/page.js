@@ -13,7 +13,9 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw, Plus } from "lucide-react";
+import { Progress } from "@/components/ui/progress";
+import { getFocusKeywords, saveFocusKeywords } from "../lib/firestoreHelpers";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import SquashBounceLoader from "../components/ui/squash-bounce-loader";
 import { useMinimumLoading } from "../hooks/use-minimum-loading";
@@ -67,6 +69,14 @@ export default function GenericKeywordsPage() {
   // Skipped keywords state
   const [skippedKeywords, setSkippedKeywords] = useState([]);
   const [showSkipped, setShowSkipped] = useState(false);
+  
+  // Track which success stories have been added to focus keywords
+  const [addedToFocusKeywords, setAddedToFocusKeywords] = useState(new Set());
+  const [addingToFocusKeyword, setAddingToFocusKeyword] = useState(null); // Track which one is currently being added
+  
+  // Settling period constants
+  const SETTLING_DAYS_REQUIRED = 30;
+  const SETTLING_IMPRESSIONS_REQUIRED = 50;
 
   // Helper function to get display name for page types
   const getPageTypeDisplayName = (pageType) => {
@@ -173,6 +183,55 @@ export default function GenericKeywordsPage() {
     } catch (error) {
       console.error("Error restoring keyword:", error);
       toast.error("Failed to restore keyword");
+    }
+  };
+
+  // Add a success story keyword to focus keywords
+  const handleAddToFocusKeywords = async (story) => {
+    if (!user?.id) return;
+    
+    const storyKey = `${story.keyword.toLowerCase()}_${story.pageUrl}`;
+    setAddingToFocusKeyword(storyKey);
+    
+    try {
+      // Fetch existing focus keywords
+      const existingKeywords = await getFocusKeywords(user.id);
+      
+      // Check if this keyword is already in focus keywords
+      const alreadyExists = existingKeywords.some(
+        k => k.keyword.toLowerCase() === story.keyword.toLowerCase()
+      );
+      
+      if (alreadyExists) {
+        toast.info("This keyword is already in your Focus Keywords list");
+        setAddedToFocusKeywords(prev => new Set([...prev, storyKey]));
+        setAddingToFocusKeyword(null);
+        return;
+      }
+      
+      // Add the new keyword with page URL and source
+      const newKeyword = {
+        keyword: story.keyword,
+        pageUrl: story.pageUrl,
+        source: "ai-generated", // Mark as AI-generated since it came from Generic Keywords
+      };
+      
+      const updatedKeywords = [...existingKeywords, newKeyword];
+      
+      // Save to Firestore
+      await saveFocusKeywords(user.id, updatedKeywords);
+      
+      // Update local state
+      setAddedToFocusKeywords(prev => new Set([...prev, storyKey]));
+      
+      toast.success("Added to Focus Keywords!", {
+        description: "You can now optimize this page in Low CTR Fixes.",
+      });
+    } catch (error) {
+      console.error("Error adding to focus keywords:", error);
+      toast.error("Failed to add to Focus Keywords");
+    } finally {
+      setAddingToFocusKeyword(null);
     }
   };
 
@@ -1240,51 +1299,146 @@ export default function GenericKeywordsPage() {
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {successStories.map((story, index) => (
-                <div
-                  key={story.id || index}
-                  className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-green-200 dark:border-green-800"
-                >
-                  <div className="flex items-start justify-between">
-                    <div className="flex-1">
-                      <div className="flex items-center gap-2 mb-2">
-                        <h4 className="font-semibold text-green-800 dark:text-green-200">
-                          {story.keyword}
-                        </h4>
-                        <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
-                          Ranking
-                        </Badge>
-                      </div>
-                      <a
-                        href={story.pageUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="text-sm text-green-700 dark:text-green-300 hover:underline flex items-center gap-1 mb-2"
-                      >
-                        {story.pageUrl}
-                        <ExternalLink className="w-3 h-3" />
-                      </a>
-                      <div className="flex flex-wrap items-center gap-4 text-sm text-green-700 dark:text-green-300">
-                        <span>
-                          <strong>Position:</strong> {story.position}
-                        </span>
-                        <span>
-                          <strong>Impressions:</strong> {story.impressions.toLocaleString()}
-                        </span>
-                        <span>
-                          <strong>Clicks:</strong> {story.clicks.toLocaleString()}
-                        </span>
-                        <span>
-                          <strong>CTR:</strong> {story.ctr}
-                        </span>
-                        <span className="text-xs text-green-600 dark:text-green-400">
-                          Created {story.daysSinceCreated} {story.daysSinceCreated === 1 ? 'day' : 'days'} ago
-                        </span>
+              {successStories.map((story, index) => {
+                // Calculate settling period progress
+                const daysProgress = Math.min(story.daysSinceCreated / SETTLING_DAYS_REQUIRED, 1);
+                const impressionsProgress = Math.min(story.impressions / SETTLING_IMPRESSIONS_REQUIRED, 1);
+                const overallProgress = ((daysProgress + impressionsProgress) / 2) * 100;
+                
+                const daysRemaining = Math.max(SETTLING_DAYS_REQUIRED - story.daysSinceCreated, 0);
+                const impressionsRemaining = Math.max(SETTLING_IMPRESSIONS_REQUIRED - story.impressions, 0);
+                
+                const isSettled = story.daysSinceCreated >= SETTLING_DAYS_REQUIRED && story.impressions >= SETTLING_IMPRESSIONS_REQUIRED;
+                
+                const storyKey = `${story.keyword.toLowerCase()}_${story.pageUrl}`;
+                const isAlreadyAdded = addedToFocusKeywords.has(storyKey);
+                const isAdding = addingToFocusKeyword === storyKey;
+                
+                return (
+                  <div
+                    key={story.id || index}
+                    className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-green-200 dark:border-green-800"
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1">
+                        <div className="flex items-center gap-2 mb-2">
+                          <h4 className="font-semibold text-green-800 dark:text-green-200">
+                            {story.keyword}
+                          </h4>
+                          <Badge variant="outline" className="bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-200">
+                            Ranking
+                          </Badge>
+                        </div>
+                        <a
+                          href={story.pageUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="text-sm text-green-700 dark:text-green-300 hover:underline flex items-center gap-1 mb-2"
+                        >
+                          {story.pageUrl}
+                          <ExternalLink className="w-3 h-3" />
+                        </a>
+                        <div className="flex flex-wrap items-center gap-4 text-sm text-green-700 dark:text-green-300">
+                          <span>
+                            <strong>Position:</strong> {story.position}
+                          </span>
+                          <span>
+                            <strong>Impressions:</strong> {story.impressions.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>Clicks:</strong> {story.clicks.toLocaleString()}
+                          </span>
+                          <span>
+                            <strong>CTR:</strong> {story.ctr}
+                          </span>
+                          <span className="text-xs text-green-600 dark:text-green-400">
+                            Created {story.daysSinceCreated} {story.daysSinceCreated === 1 ? 'day' : 'days'} ago
+                          </span>
+                        </div>
+                        
+                        {/* Settling Period / Add to Focus Keywords Section */}
+                        <div className="mt-4 pt-3 border-t border-green-200 dark:border-green-800">
+                          {isSettled ? (
+                            // Page has settled - show Add to Focus Keywords button
+                            <div className="flex items-center gap-3">
+                              <div className="flex items-center gap-2 text-green-600 dark:text-green-400">
+                                <CheckCircle className="w-4 h-4" />
+                                <span className="text-sm font-medium">Ready to optimize!</span>
+                              </div>
+                              {isAlreadyAdded ? (
+                                <div className="flex items-center gap-2 text-sm text-green-600 dark:text-green-400 px-3 py-1.5 bg-green-100 dark:bg-green-900/30 rounded-md">
+                                  <Check className="w-4 h-4" />
+                                  <span>Added to Focus Keywords</span>
+                                </div>
+                              ) : (
+                                <Button
+                                  size="sm"
+                                  onClick={() => handleAddToFocusKeywords(story)}
+                                  disabled={isAdding}
+                                  className="gap-2 bg-green-600 hover:bg-green-700"
+                                >
+                                  {isAdding ? (
+                                    <>
+                                      <Loader2 className="w-4 h-4 animate-spin" />
+                                      Adding...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Plus className="w-4 h-4" />
+                                      Add to Focus Keywords
+                                    </>
+                                  )}
+                                </Button>
+                              )}
+                            </div>
+                          ) : (
+                            // Page is still settling - show progress
+                            <div className="space-y-2">
+                              <div className="flex items-center gap-2 text-amber-600 dark:text-amber-400">
+                                <Clock className="w-4 h-4" />
+                                <span className="text-sm font-medium">Settling Period</span>
+                                <span className="text-xs text-muted-foreground">
+                                  Let this page find its ranking before optimizing
+                                </span>
+                              </div>
+                              
+                              <div className="flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted-foreground">
+                                {daysRemaining > 0 && (
+                                  <span className={daysRemaining === 0 ? "text-green-600 dark:text-green-400" : ""}>
+                                    • {daysRemaining} more {daysRemaining === 1 ? 'day' : 'days'} needed ({SETTLING_DAYS_REQUIRED} day minimum)
+                                  </span>
+                                )}
+                                {daysRemaining === 0 && (
+                                  <span className="text-green-600 dark:text-green-400">
+                                    • ✓ {SETTLING_DAYS_REQUIRED} days reached
+                                  </span>
+                                )}
+                                {impressionsRemaining > 0 && (
+                                  <span className={impressionsRemaining === 0 ? "text-green-600 dark:text-green-400" : ""}>
+                                    • {impressionsRemaining} more impressions needed ({SETTLING_IMPRESSIONS_REQUIRED} minimum)
+                                  </span>
+                                )}
+                                {impressionsRemaining === 0 && (
+                                  <span className="text-green-600 dark:text-green-400">
+                                    • ✓ {SETTLING_IMPRESSIONS_REQUIRED}+ impressions reached
+                                  </span>
+                                )}
+                              </div>
+                              
+                              <div className="flex items-center gap-2">
+                                <Progress value={overallProgress} className="h-2 flex-1" />
+                                <span className="text-xs font-medium text-muted-foreground w-10">
+                                  {Math.round(overallProgress)}%
+                                </span>
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </CardContent>
         </Card>

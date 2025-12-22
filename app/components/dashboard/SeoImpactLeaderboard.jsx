@@ -384,7 +384,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             </div>
             <div className="h-2 w-full overflow-hidden rounded bg-muted/60">
               <div
-                className="h-full rounded bg-primary transition-all duration-500"
+                className="h-full rounded bg-blue-500 transition-all duration-500"
                 style={{
                   width: `${Math.min(
                     (implementedCount / totalRecommendations) * 100,
@@ -532,7 +532,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
           </div>
           <div className="h-2 w-full overflow-hidden rounded bg-muted/60">
             <div
-              className="h-full rounded bg-primary transition-all duration-500"
+              className="h-full rounded bg-blue-500 transition-all duration-500"
               style={{
                 width: `${Math.min(
                   (implementedCount / totalRecommendations) * 100,
