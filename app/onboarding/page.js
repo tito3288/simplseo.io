@@ -618,57 +618,65 @@ const OnboardingWizard = () => {
                 {/* Privacy Policy Summary */}
                 <div className="border rounded-lg p-4 max-h-[350px] overflow-y-auto bg-muted/50">
                   <div className="space-y-3 text-sm">
-                    <h3 className="font-semibold text-base">What We Collect & How We Use Your Data</h3>
+                    <h3 className="font-semibold text-base">Your Data, Your Control</h3>
                     
-                    <p className="font-medium mt-3">Account Information:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Email address and authentication data via Google OAuth</li>
-                      <li>Business name, website URL, and business type</li>
-                      <li>Business location information</li>
-                    </ul>
+                    {/* Reassurance statement */}
+                    <p className="text-foreground/80 leading-relaxed">
+                      We only use your data to give you accurate SEO insights. We never modify your Google Search Console data, and you&apos;re always in control.
+                    </p>
                     
-                    <p className="font-medium mt-3">Google Search Console Data:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Keywords, pages, impressions, clicks, CTR, and rankings</li>
-                      <li>Used to provide SEO analysis and recommendations</li>
-                      <li>Read-only access - we cannot modify your GSC data</li>
-                    </ul>
+                    {/* TL;DR Box */}
+                    <div className="p-3 bg-primary/10 rounded-md border border-primary/20">
+                      <p className="font-semibold text-foreground text-xs uppercase tracking-wide mb-2">TL;DR</p>
+                      <ul className="list-disc list-inside space-y-1 text-foreground/90">
+                        <li>We only use your data to help you</li>
+                        <li>Read-only access to Google Search Console</li>
+                        <li>We never sell your data</li>
+                        <li>You&apos;re free to delete everything anytime</li>
+                      </ul>
+                    </div>
                     
-                    <p className="font-medium mt-3">AI & Training Data:</p>
-                    <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>Your data is used to train our AI assistant for personalized advice</li>
-                      <li>Data sent to OpenAI for processing AI responses</li>
-                      <li>Anonymized training data (hashed user IDs, no full conversations)</li>
-                    </ul>
-                    
+                    {/* 1. Privacy & Security (trust first) */}
                     <p className="font-medium mt-3">Privacy & Security:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
-                      <li>User IDs are hashed using SHA-256 encryption</li>
-                      <li>Data encrypted in transit (TLS) and at rest</li>
+                      <li>Your data is encrypted in transit and at rest</li>
                       <li>We do NOT sell your data to third parties</li>
                       <li>You can delete your account and data at any time</li>
+                      <li>We do not track you across websites, apps, or devices</li>
+                      <li>We only analyze data you choose to connect (like Google Search Console)</li>
                     </ul>
                     
-                    <div className="mt-4 p-3 bg-primary/10 rounded-md border border-primary/20">
-                      <p className="font-semibold text-foreground">Important:</p>
-                      <p className="mt-1">
-                        By continuing, you consent to all data collection and processing described in our 
-                        Privacy Policy. This consent is required to use SimplSEO.
-                    </p>
+                    {/* 2. What We Use (light framing) */}
+                    <p className="font-medium mt-3">What We Collect to get feedback:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Email address for your account</li>
+                      <li>Business name, website, and location you provided during onboarding</li>
+                    </ul>
+                    
+                    {/* 3. Google Search Console (clear reassurance) */}
+                    <p className="font-medium mt-3">Google Search Console:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Keywords, pages, impressions, clicks, and rankings</li>
+                      <li>Used to provide personalized SEO recommendations</li>
+                      <li>Read-only access — we cannot modify your GSC data</li>
+                    </ul>
+                    
+                    {/* 4. AI Assistance (clarified, non-threatening) */}
+                    <p className="font-medium mt-3">AI Assistance (How It Helps You):</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2">
+                      <li>Your data helps personalize SEO recommendations for your account</li>
+                      <li>Some requests are processed securely by OpenAI to generate AI responses</li>
+                      <li>We do not use your private business data to train public AI models</li>
+                      <li>Training data is anonymized (no names, no full conversations)</li>
+                    </ul>
+                    
+                    {/* 5. Consent statement (softened) */}
+                    <div className="mt-4 p-3 bg-muted rounded-md border border-border">
+                      <p className="text-foreground/90">
+                        By continuing, you agree to our Privacy Policy so we can provide SEO insights tailored to your business. You can delete your account and data at any time.
+                      </p>
                     </div>
                   </div>
-                </div>
-                
-                {/* Link to full policy */}
-                <div className="text-center">
-                  <a 
-                    href="/privacy" 
-                    target="_blank" 
-                    rel="noopener noreferrer"
-                    className="text-primary hover:underline text-sm font-medium"
-                  >
-                    Read Full Privacy Policy →
-                  </a>
                 </div>
                 
                 {/* Checkbox */}

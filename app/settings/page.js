@@ -951,9 +951,7 @@ export default function Settings() {
       // Delete the Firebase Auth user
       await deleteUser(currentUser);
       
-      toast.success("Account deleted successfully", {
-        description: "All your data has been permanently removed."
-      });
+      toast.success("Account deleted successfully");
       
       // Redirect to auth page
       router.push("/auth");

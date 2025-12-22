@@ -268,24 +268,32 @@ export default function GenericKeywordsPage() {
       for (const opp of createdOpportunities) {
         const oppPath = normalizeUrlPath(opp.pageUrl);
         
-        // First: Check if the page exists in the main GSC data (fast check)
-        const foundInMainData = gscKeywords.some(kw => {
+        // First: Check if the page exists in the main GSC data and aggregate all metrics
+        const matchingRows = gscKeywords.filter(kw => {
           const kwPath = normalizeUrlPath(kw.page);
           return oppPath === kwPath;
         });
         
-        if (foundInMainData) {
-          console.log(`✅ [Success Stories] "${opp.keyword}": ${oppPath} → FOUND in main GSC data`);
+        if (matchingRows.length > 0) {
+          console.log(`✅ [Success Stories] "${opp.keyword}": ${oppPath} → FOUND ${matchingRows.length} rows in main GSC data`);
           
-          // Get matching keyword data
-          const matchingKw = gscKeywords.find(kw => normalizeUrlPath(kw.page) === oppPath);
+          // Aggregate metrics from all matching rows for this page
+          const totalImpressions = matchingRows.reduce((sum, kw) => sum + kw.impressions, 0);
+          const totalClicks = matchingRows.reduce((sum, kw) => sum + kw.clicks, 0);
+          
+          // Weighted average position (weighted by impressions)
+          const weightedPosition = totalImpressions > 0 
+            ? matchingRows.reduce((sum, kw) => sum + (kw.position * kw.impressions), 0) / totalImpressions 
+            : matchingRows[0].position;
+          
           foundStories.push({
             ...opp,
-            gscData: matchingKw ? {
-              impressions: matchingKw.impressions,
-              clicks: matchingKw.clicks,
-              position: matchingKw.position
-            } : null
+            gscData: {
+              impressions: totalImpressions,
+              clicks: totalClicks,
+              position: Math.round(weightedPosition),
+              ctr: totalImpressions > 0 ? totalClicks / totalImpressions : 0
+            }
           });
           continue;
         }
@@ -324,12 +332,22 @@ export default function GenericKeywordsPage() {
         const now = new Date();
         const daysSinceCreated = Math.floor((now - createdAt) / (1000 * 60 * 60 * 24));
         
+        // Handle CTR - it might be a raw number or already formatted
+        let ctrFormatted = '0%';
+        if (story.gscData?.ctr) {
+          if (typeof story.gscData.ctr === 'number') {
+            ctrFormatted = `${(story.gscData.ctr * 100).toFixed(1)}%`;
+          } else {
+            ctrFormatted = story.gscData.ctr;
+          }
+        }
+        
         return {
           ...story,
           position: story.gscData?.position || 0,
           impressions: story.gscData?.impressions || 0,
           clicks: story.gscData?.clicks || 0,
-          ctr: story.gscData?.ctr ? `${(story.gscData.ctr * 100).toFixed(1)}%` : '0%',
+          ctr: ctrFormatted,
           daysSinceCreated,
           gscPage: story.pageUrl,
         };

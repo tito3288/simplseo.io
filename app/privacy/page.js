@@ -285,10 +285,11 @@ export default function PrivacyPolicyPage() {
               You can delete your account at any time through the Settings page. Upon deletion:
             </p>
             <ul className="list-disc pl-6 space-y-2 text-foreground/90">
-              <li>Your account and associated Personal Information will be deleted within 30 days.</li>
+              <li>Your account credentials and associated Personal Information (GSC data, SEO analyses, chat history, etc.) will be deleted immediately.</li>
               <li>Anonymized training data may be retained as it cannot be linked back to you.</li>
               <li>Cached data and logs will be purged according to our retention schedules.</li>
-              <li>This action is irreversible.</li>
+              <li><strong>Limited Retention for Product Improvement:</strong> We may retain your email address and basic account information (such as your website URL) for up to 90 days after deletion. This allows us to follow up for feedback to improve our service. This information is not used for marketing and will be permanently deleted after this period.</li>
+              <li>This action is irreversible regarding your account access and primary data.</li>
             </ul>
           </section>
 

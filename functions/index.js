@@ -563,17 +563,37 @@ exports.checkSeoTipProgress = pubsub
 
         // Calculate next update due date (7 days from now)
         const nextUpdateDueDate = new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString();
+        const currentDate = new Date().toISOString();
+        const dayNumber = Math.floor(daysSince);
+
+        // Helper to create history entry from current postStats (before overwriting)
+        const createHistoryEntry = (stats, dayNum) => ({
+          date: currentDate,
+          dayNumber: dayNum,
+          impressions: stats.impressions,
+          clicks: stats.clicks,
+          ctr: stats.ctr,
+          position: stats.position,
+        });
+
+        // Get existing history array (or empty array if none)
+        const existingHistory = data.postStatsHistory || [];
 
         if (!postStats) {
           // First time - create postStats (even if zeros, it's the first attempt)
+          // Also start the history array with this first entry
           console.log(`📝 Creating postStats for ${pageUrl} (first time)`);
           console.log(`📅 Next update scheduled for: ${nextUpdateDueDate}`);
+          
+          const firstHistoryEntry = createHistoryEntry(newPostStats, dayNumber);
+          
           updates.push(
             doc.ref.set(
               {
                 postStats: newPostStats,
-                updatedAt: new Date().toISOString(),
-                lastUpdated: new Date().toISOString(),
+                postStatsHistory: [firstHistoryEntry],
+                updatedAt: currentDate,
+                lastUpdated: currentDate,
                 nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
               },
               { merge: true }
@@ -584,12 +604,18 @@ exports.checkSeoTipProgress = pubsub
           // Existing data is also zeros, update anyway (might get real data later)
           console.log(`🔄 Updating postStats for ${pageUrl} (both zeros, trying again)`);
           console.log(`📅 Next update scheduled for: ${nextUpdateDueDate}`);
+          
+          // Add to history even if zeros (tracks attempts)
+          const historyEntry = createHistoryEntry(newPostStats, dayNumber);
+          const updatedHistory = [...existingHistory, historyEntry];
+          
           updates.push(
             doc.ref.set(
               {
                 postStats: newPostStats,
-                updatedAt: new Date().toISOString(),
-                lastUpdated: new Date().toISOString(),
+                postStatsHistory: updatedHistory,
+                updatedAt: currentDate,
+                lastUpdated: currentDate,
                 nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
               },
               { merge: true }
@@ -613,14 +639,21 @@ exports.checkSeoTipProgress = pubsub
           continue;
         } else {
           // Both have data - update with new data (refreshing)
+          // ✅ Save current postStats to history BEFORE overwriting
           console.log(`🔄 Refreshing postStats for ${pageUrl}`);
           console.log(`📅 Next update scheduled for: ${nextUpdateDueDate}`);
+          console.log(`📚 Saving previous postStats to history (day ${dayNumber})`);
+          
+          const historyEntry = createHistoryEntry(newPostStats, dayNumber);
+          const updatedHistory = [...existingHistory, historyEntry];
+          
           updates.push(
             doc.ref.set(
               {
                 postStats: newPostStats,
-                updatedAt: new Date().toISOString(),
-                lastUpdated: new Date().toISOString(),
+                postStatsHistory: updatedHistory,
+                updatedAt: currentDate,
+                lastUpdated: currentDate,
                 nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
               },
               { merge: true }

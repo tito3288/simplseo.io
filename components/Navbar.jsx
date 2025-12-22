@@ -47,7 +47,7 @@ const Navbar = () => {
           }}
           className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted"
         >
-          Why Us?
+          Why?
         </button>
         <button 
           onClick={() => {
@@ -71,7 +71,7 @@ const Navbar = () => {
           }}
           className="px-4 py-2 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors rounded-full hover:bg-muted"
         >
-          How it works
+          How?
         </button>
         <button 
           onClick={() => {
