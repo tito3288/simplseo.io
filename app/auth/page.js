@@ -181,21 +181,35 @@ const Auth = () => {
       const hasCompletedOnboarding =
         docSnap.exists() && docSnap.data()?.isComplete;
 
-      // 🛡️ SAFEGUARD: Detect if user is trying to create new account with existing email
-      if (!isLogin && hasCompletedOnboarding) {
-        // User clicked "Create Account" but account already exists and is active
-        toast.error("Account Already Exists", {
-          description: "You already have an active account with this Google email. Please log in to your existing account, or use a different Google account to manage a separate GSC property.",
-          duration: 10000,
-        });
-        
-        // Sign them out so they can choose what to do
-        await signOut(auth);
-        setIsLogin(true); // Switch to login mode
-        return; // Stop here, don't redirect
-      }
+    // 🛡️ SAFEGUARD: Detect if user is trying to create new account with existing email
+    if (!isLogin && hasCompletedOnboarding) {
+      // User clicked "Create Account" but account already exists and is active
+      toast.error("Account Already Exists", {
+        description: "You already have an active account with this Google email. Please log in to your existing account, or use a different Google account to manage a separate GSC property.",
+        duration: 10000,
+      });
+      
+      // Sign them out so they can choose what to do
+      await signOut(auth);
+      setIsLogin(true); // Switch to login mode
+      return; // Stop here, don't redirect
+    }
 
-      // Normal flow: redirect based on onboarding status
+    // 🛡️ SAFEGUARD: Detect if user is trying to log in with a non-existent account
+    if (isLogin && !hasCompletedOnboarding) {
+      // User clicked "Log In" but no account exists
+      toast.error("No Account Found", {
+        description: "We couldn't find an account with this Google email. Please create an account first.",
+        duration: 8000,
+      });
+      
+      // Sign them out so they can create an account
+      await signOut(auth);
+      setIsLogin(false); // Switch to create account mode
+      return; // Stop here, don't redirect
+    }
+
+    // Normal flow: redirect based on onboarding status
       if (hasCompletedOnboarding) {
         router.push("/dashboard");
       } else {

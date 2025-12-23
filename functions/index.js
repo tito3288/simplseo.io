@@ -473,14 +473,20 @@ exports.checkSeoTipProgress = pubsub
       let shouldUpdate = false;
       
       if (nextUpdateDue) {
-        // New per-document scheduling: check if nextUpdateDue has passed
-        const dueTime = new Date(nextUpdateDue).getTime();
-        if (now >= dueTime) {
+        // Per-document scheduling: check if the due DATE has arrived (ignore time)
+        // This ensures updates happen on the due day, regardless of what time the cron runs
+        const today = new Date();
+        today.setHours(0, 0, 0, 0); // Start of today (midnight)
+        
+        const dueDate = new Date(nextUpdateDue);
+        dueDate.setHours(0, 0, 0, 0); // Start of due date (midnight)
+        
+        if (today >= dueDate) {
           shouldUpdate = true;
-          console.log(`✅ ${doc.id} is due for update (nextUpdateDue: ${nextUpdateDue})`);
+          console.log(`✅ ${doc.id} is due for update (due date: ${dueDate.toDateString()}, today: ${today.toDateString()})`);
         } else {
-          const daysUntilDue = (dueTime - now) / (1000 * 60 * 60 * 24);
-          console.log(`⏳ ${doc.id} not due yet - ${daysUntilDue.toFixed(1)} days until next update`);
+          const daysUntilDue = Math.ceil((dueDate - today) / (1000 * 60 * 60 * 24));
+          console.log(`⏳ ${doc.id} not due yet - ${daysUntilDue} day(s) until due date`);
           notDueYetCount++;
           continue;
         }
