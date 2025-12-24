@@ -28,7 +28,20 @@ import {
   Computer,
   CheckCircle,
   FileText,
+  HelpCircle,
+  ExternalLink,
+  Copy,
+  Check,
+  ChevronDown,
+  ChevronUp,
 } from "lucide-react";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
 const businessTypes = [
   "Dentist",
@@ -58,6 +71,310 @@ const cmsPlatforms = [
   "Wix",
   "Squarespace",
 ];
+
+// GSC Setup Guide Modal Component
+const GSCSetupGuideModal = ({ websiteUrl }) => {
+  const [copiedUrl, setCopiedUrl] = useState(false);
+  const [expandedPlatform, setExpandedPlatform] = useState(null);
+  
+  const siteUrl = websiteUrl || "https://yourwebsite.com/";
+  
+  const copyToClipboard = (text) => {
+    navigator.clipboard.writeText(text);
+    setCopiedUrl(true);
+    setTimeout(() => setCopiedUrl(false), 2000);
+  };
+  
+  const togglePlatform = (platform) => {
+    setExpandedPlatform(expandedPlatform === platform ? null : platform);
+  };
+  
+  return (
+    <Dialog>
+      <DialogTrigger asChild>
+        <button className="inline-flex items-center gap-1 text-primary hover:text-primary/80 underline text-sm font-medium transition-colors">
+          <HelpCircle className="w-4 h-4" />
+          Need help setting up GSC?
+        </button>
+      </DialogTrigger>
+      <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto w-[calc(100%-2rem)] sm:w-full mx-auto rounded-xl">
+        <DialogHeader>
+          <DialogTitle className="flex items-center gap-2 text-xl">
+            <Computer className="w-5 h-5 text-primary" />
+            How to Set Up Google Search Console
+          </DialogTitle>
+        </DialogHeader>
+        
+        <div className="space-y-6 mt-4">
+          {/* Step 1: Go to GSC */}
+          <div className="space-y-2">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">1</span>
+              Go to Google Search Console
+            </h3>
+            <p className="text-muted-foreground ml-2 sm:ml-9">
+              Open{" "}
+              <a 
+                href="https://search.google.com/search-console" 
+                target="_blank" 
+                rel="noopener noreferrer"
+                className="text-primary hover:underline inline-flex items-center gap-1"
+              >
+                search.google.com/search-console
+                <ExternalLink className="w-3 h-3" />
+              </a>
+              {" "}and sign in with the same Google account you are using to create an account with SimplSEO.
+            </p>
+          </div>
+          
+          {/* Step 2: Add Property */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">2</span>
+              Add a New Property
+            </h3>
+            <div className="ml-2 sm:ml-9 space-y-3">
+              <p className="text-muted-foreground">
+                Click <strong>&quot;Add property&quot;</strong> in the top-left dropdown menu. You&apos;ll see two options:
+              </p>
+              
+              {/* Domain vs URL Prefix comparison */}
+              <div className="grid md:grid-cols-2 gap-3">
+                {/* Domain option */}
+                <div className="border border-border rounded-lg p-4 bg-muted/30">
+                  <h4 className="font-semibold text-amber-600 dark:text-amber-400 mb-2">🌐 Domain</h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Tracks all URLs across all subdomains (www, blog, shop, etc.)
+                  </p>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• Requires DNS verification</li>
+                    <li>• More comprehensive data</li>
+                    <li>• Slightly more technical</li>
+                  </ul>
+                </div>
+                
+                {/* URL Prefix option - Recommended */}
+                <div className="border-2 border-primary rounded-lg p-4 bg-primary/5 relative">
+                  <span className="absolute -top-2 right-2 bg-primary text-primary-foreground text-xs px-2 py-0.5 rounded-full font-medium">
+                    Recommended
+                  </span>
+                  <h4 className="font-semibold text-primary mb-2">🔗 URL Prefix</h4>
+                  <p className="text-sm text-muted-foreground mb-2">
+                    Tracks only URLs that start with your specified address
+                  </p>
+                  <ul className="text-xs text-muted-foreground space-y-1">
+                    <li>• Easiest to set up</li>
+                    <li>• Multiple verification options</li>
+                    <li>• Perfect for most websites</li>
+                  </ul>
+                </div>
+              </div>
+              
+              {/* URL to enter */}
+              <div className="bg-muted rounded-lg p-3 border border-border">
+                <p className="text-sm font-medium mb-2">Enter your website URL:</p>
+                <div className="flex items-center gap-2">
+                  <code className="flex-1 bg-background px-3 py-2 rounded text-sm border border-border">
+                    {siteUrl}
+                  </code>
+                  <button 
+                    onClick={() => copyToClipboard(siteUrl)}
+                    className="p-2 hover:bg-background rounded transition-colors"
+                    title="Copy URL"
+                  >
+                    {copiedUrl ? <Check className="w-4 h-4 text-green-500" /> : <Copy className="w-4 h-4" />}
+                  </button>
+                </div>
+                <p className="text-xs text-muted-foreground mt-2">
+                  💡 Make sure to include <code className="bg-background px-1 rounded">https://</code> at the beginning
+                </p>
+              </div>
+            </div>
+          </div>
+          
+          {/* Step 3: Verify Ownership */}
+          <div className="space-y-3">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">3</span>
+              Verify Ownership
+            </h3>
+            <div className="ml-2 sm:ml-9 space-y-3">
+              <p className="text-muted-foreground">
+                After adding your URL, Google will ask you to verify you own the website. The easiest method is <strong>HTML Tag</strong>:
+              </p>
+              
+              {/* HTML Tag Method */}
+              <div className="bg-green-50 dark:bg-green-950/30 border border-green-200 dark:border-green-900 rounded-lg p-4">
+                <h4 className="font-semibold text-green-700 dark:text-green-400 mb-2 flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  HTML Tag (Easiest Method)
+                </h4>
+                <ol className="text-sm space-y-2 text-green-800 dark:text-green-300">
+                  <li>1. Select <strong>&quot;HTML tag&quot;</strong> from the verification options</li>
+                  <li>2. Copy the meta tag Google provides (looks like: <code className="bg-green-100 dark:bg-green-900/50 px-1 rounded text-xs">&lt;meta name=&quot;google-site-verification&quot; content=&quot;...&quot; /&gt;</code>)</li>
+                  <li>3. Add it to the <code className="bg-green-100 dark:bg-green-900/50 px-1 rounded">&lt;head&gt;</code> section of your website</li>
+                  <li>4. Click <strong>&quot;Verify&quot;</strong> in Google Search Console</li>
+                </ol>
+              </div>
+              
+              {/* Platform-specific instructions */}
+              <div className="space-y-2">
+                <p className="font-medium text-sm">Platform-Specific Instructions:</p>
+                
+                {/* WordPress */}
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <button 
+                    onClick={() => togglePlatform('wordpress')}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <span className="font-medium flex items-center gap-2">
+                      <span className="text-blue-500">📘</span> WordPress
+                    </span>
+                    {expandedPlatform === 'wordpress' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedPlatform === 'wordpress' && (
+                    <div className="p-4 text-sm space-y-3 bg-background">
+                      <div className="p-3 bg-green-50 dark:bg-green-950/30 rounded-lg border border-green-200 dark:border-green-900">
+                        <p className="font-medium text-green-700 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" />
+                          Option A: WPCode Plugin (Recommended)
+                        </p>
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-2 mt-2">
+                          <li>Install the free <strong>&quot;WPCode&quot;</strong> plugin from Plugins → Add New</li>
+                          <li>Go to <strong>Code Snippets → Header & Footer</strong></li>
+                          <li>Paste the full meta tag in the <strong>&quot;Header&quot;</strong> section</li>
+                          <li>Click <strong>&quot;Save Changes&quot;</strong></li>
+                        </ol>
+                        <p className="text-xs text-green-600 dark:text-green-400 mt-2">
+                          💡 WPCode is beginner-friendly and won&apos;t break your site!
+                        </p>
+                      </div>
+                      
+                      <p className="font-medium text-blue-600 dark:text-blue-400">Option B: Using Yoast SEO</p>
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-2">
+                        <li>Go to <strong>Yoast SEO → Settings → Site connections</strong></li>
+                        <li>Find the <strong>&quot;Google verification code&quot;</strong> field</li>
+                        <li>Paste only the <code className="bg-muted px-1 rounded">content=&quot;...&quot;</code> value (the code between quotes)</li>
+                        <li>Save changes</li>
+                      </ol>
+                      
+                      {/* <p className="font-medium text-blue-600 dark:text-blue-400 mt-3">Option C: Manual (Theme Header)</p>
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-2">
+                        <li>Go to <strong>Appearance → Theme Editor → header.php</strong></li>
+                        <li>Paste the full meta tag inside the <code className="bg-muted px-1 rounded">&lt;head&gt;</code> section</li>
+                        <li>Save the file</li>
+                      </ol>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-1 ml-2">
+                        ⚠️ Be careful editing theme files — a mistake can break your site
+                      </p> */}
+                    </div>
+                  )}
+                </div>
+                
+                {/* Wix */}
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <button 
+                    onClick={() => togglePlatform('wix')}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <span className="font-medium flex items-center gap-2">
+                      <span className="text-yellow-500">🟡</span> Wix
+                    </span>
+                    {expandedPlatform === 'wix' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedPlatform === 'wix' && (
+                    <div className="p-4 text-sm space-y-2 bg-background">
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground">
+                        <li>Go to your <strong>Wix Dashboard</strong></li>
+                        <li>Click <strong>Settings</strong> in the left menu</li>
+                        <li>Scroll down and click <strong>&quot;Custom Code&quot;</strong> (under Advanced)</li>
+                        <li>Click <strong>&quot;+ Add Custom Code&quot;</strong></li>
+                        <li>Paste the full meta tag</li>
+                        <li>Name it <strong>&quot;Google Search Console Verification&quot;</strong></li>
+                        <li>Set placement to <strong>&quot;Head&quot;</strong></li>
+                        <li>Set pages to <strong>&quot;All pages&quot;</strong></li>
+                        <li>Click <strong>&quot;Apply&quot;</strong></li>
+                      </ol>
+                      <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                        ⚠️ Note: You need a Wix Premium plan to add custom code
+                      </p>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Squarespace */}
+                <div className="border border-border rounded-lg overflow-hidden">
+                  <button 
+                    onClick={() => togglePlatform('squarespace')}
+                    className="w-full px-4 py-3 flex items-center justify-between bg-muted/50 hover:bg-muted transition-colors"
+                  >
+                    <span className="font-medium flex items-center gap-2">
+                      <span className="text-gray-700 dark:text-gray-300">⬛</span> Squarespace
+                    </span>
+                    {expandedPlatform === 'squarespace' ? <ChevronUp className="w-4 h-4" /> : <ChevronDown className="w-4 h-4" />}
+                  </button>
+                  {expandedPlatform === 'squarespace' && (
+                    <div className="p-4 text-sm space-y-3 bg-background">
+                      <p className="font-medium text-foreground">Option A: HTML Tag (Code Injection)</p>
+                      <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-2">
+                        <li>Go to <strong>Settings → Developer Tools → Code Injection</strong></li>
+                        <li>Paste the full meta tag in the <strong>&quot;Header&quot;</strong> section</li>
+                        <li>Click <strong>&quot;Save&quot;</strong></li>
+                        <li>Return to GSC and click <strong>&quot;Verify&quot;</strong></li>
+                      </ol>
+                      
+                      <div className="border-t border-border pt-3 mt-3">
+                        <p className="font-medium text-green-600 dark:text-green-400 flex items-center gap-1">
+                          <CheckCircle className="w-4 h-4" />
+                          Option B: Built-in Integration (Easiest!)
+                        </p>
+                        <p className="text-xs text-muted-foreground mt-1 mb-2">
+                          Squarespace can verify your site automatically — no meta tag needed:
+                        </p>
+                        <ol className="list-decimal list-inside space-y-1 text-muted-foreground ml-2">
+                          <li>Go to <strong>Settings → Connected Accounts</strong></li>
+                          <li>Click <strong>&quot;Connect Account&quot;</strong></li>
+                          <li>Select <strong>&quot;Google Search Console&quot;</strong></li>
+                          <li>Sign in with your Google account</li>
+                          <li>Authorize access — Squarespace verifies ownership for you!</li>
+                        </ol>
+                        <p className="text-xs text-muted-foreground mt-2 p-2 bg-green-50 dark:bg-green-950/30 rounded border border-green-200 dark:border-green-900">
+                          💡 This method skips the HTML tag entirely — Squarespace handles verification through its direct connection with Google!
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          {/* Step 4: Come Back */}
+          <div className="space-y-2">
+            <h3 className="font-semibold text-lg flex items-center gap-2">
+              <span className="w-7 h-7 rounded-full bg-primary text-primary-foreground flex items-center justify-center text-sm font-bold">4</span>
+              Return Here & Connect
+            </h3>
+            <p className="text-muted-foreground ml-2 sm:ml-9">
+              Once verified in Google Search Console, come back here, toggle <strong>&quot;Yes&quot;</strong>, and now you will see your website URL appear under <strong>&quot;Select GSC Property&quot;</strong> and select it to connect your Google account to continue.
+            </p>
+          </div>
+          
+          {/* Pro Tips */}
+          <div className="bg-amber-50 dark:bg-amber-950/30 border border-amber-200 dark:border-amber-900 rounded-lg p-4">
+            <h4 className="font-semibold text-amber-700 dark:text-amber-400 mb-2">💡 Pro Tips</h4>
+            <ul className="text-sm space-y-1 text-amber-800 dark:text-amber-300">
+              <li>• It can take a few minutes for Google to verify your site</li>
+              <li>• Make sure your website is live and accessible</li>
+              <li>• If verification fails, wait a few minutes and try again</li>
+              <li>• Data in GSC may take 2-3 days to start appearing after verification</li>
+            </ul>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
+  );
+};
 
 const OnboardingWizard = () => {
   const { data, updateData } = useOnboarding();
@@ -405,7 +722,7 @@ const OnboardingWizard = () => {
                         </p>
                         <Input
                           id="businessLocation"
-                          placeholder="e.g. Washington"
+                          placeholder="e.g. Indiana"
                           value={data.businessLocation}
                           onChange={(e) =>
                             updateData({ businessLocation: e.target.value })
@@ -420,7 +737,7 @@ const OnboardingWizard = () => {
                         </p>
                         <Input
                           id="businessLocation"
-                          placeholder="e.g. Seattle, WA"
+                          placeholder="e.g. South Bend, IN"
                           value={data.businessLocation}
                           onChange={(e) =>
                             updateData({ businessLocation: e.target.value })
@@ -494,6 +811,9 @@ const OnboardingWizard = () => {
                         <li>3. Verify ownership (DNS record or HTML file)</li>
                         <li>4. Come back and connect your account</li>
                       </ol>
+                      <div className="pt-3 border-t border-border/50 mt-3">
+                        <GSCSetupGuideModal websiteUrl={data.websiteUrl} />
+                      </div>
                       <p className="text-xs text-muted-foreground mt-2">
                         <strong>Note:</strong> Google Search Console is required to continue. Please complete the setup steps above, then return to toggle &quot;Yes&quot; and connect your account.
                       </p>

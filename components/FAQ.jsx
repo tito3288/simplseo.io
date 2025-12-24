@@ -56,10 +56,10 @@ const FAQItem = ({ question, answer, isOpen, onClick, index }) => {
       
       <button
         onClick={onClick}
-        className="relative w-full p-6 flex items-start gap-5 text-left"
+        className="relative w-full p-4 sm:p-6 flex items-start gap-3 sm:gap-5 text-left"
       >
         {/* Number indicator */}
-        <div className={`flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center font-mono text-sm font-bold transition-all duration-300 ${
+        <div className={`flex-shrink-0 w-8 h-8 sm:w-10 sm:h-10 rounded-lg sm:rounded-xl flex items-center justify-center font-mono text-xs sm:text-sm font-bold transition-all duration-300 ${
           isOpen 
             ? 'bg-primary text-white shadow-lg shadow-primary/25' 
             : 'bg-muted/80 text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary'
@@ -68,7 +68,7 @@ const FAQItem = ({ question, answer, isOpen, onClick, index }) => {
         </div>
         
         <div className="flex-1 min-w-0">
-          <span className={`text-lg md:text-xl font-semibold block transition-colors duration-300 ${
+          <span className={`text-base sm:text-lg md:text-xl font-semibold block transition-colors duration-300 ${
             isOpen ? 'text-foreground' : 'text-foreground/80 group-hover:text-foreground'
           }`}>
             {question}
@@ -77,11 +77,11 @@ const FAQItem = ({ question, answer, isOpen, onClick, index }) => {
           {/* Answer with smooth height animation */}
           <div 
             className={`grid transition-all duration-500 ease-out ${
-              isOpen ? 'grid-rows-[1fr] opacity-100 mt-4' : 'grid-rows-[0fr] opacity-0'
+              isOpen ? 'grid-rows-[1fr] opacity-100 mt-3 sm:mt-4' : 'grid-rows-[0fr] opacity-0'
             }`}
           >
             <div className="overflow-hidden">
-              <p className="text-muted-foreground leading-relaxed whitespace-pre-line pr-4">
+              <p className="text-sm sm:text-base text-muted-foreground leading-relaxed whitespace-pre-line pr-2 sm:pr-4">
                 {answer}
               </p>
             </div>
@@ -89,15 +89,15 @@ const FAQItem = ({ question, answer, isOpen, onClick, index }) => {
         </div>
         
         {/* Toggle icon */}
-        <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
+        <div className={`flex-shrink-0 w-7 h-7 sm:w-8 sm:h-8 rounded-full flex items-center justify-center transition-all duration-300 ${
           isOpen 
             ? 'bg-primary text-white rotate-0' 
             : 'bg-muted text-muted-foreground group-hover:bg-primary/20 group-hover:text-primary'
         }`}>
           {isOpen ? (
-            <Minus className="w-4 h-4" />
+            <Minus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           ) : (
-            <Plus className="w-4 h-4" />
+            <Plus className="w-3.5 h-3.5 sm:w-4 sm:h-4" />
           )}
         </div>
       </button>
@@ -113,27 +113,27 @@ const FAQ = () => {
   };
 
   return (
-    <section id="faq" className="py-24 px-4 relative overflow-hidden">
+    <section id="faq" className="py-16 sm:py-24 px-4 relative overflow-hidden">
       {/* Subtle background glow */}
       <div className="absolute top-1/2 left-1/2 -translate-x-1/2 -translate-y-1/2 w-[800px] h-[600px] bg-primary/5 rounded-full blur-3xl pointer-events-none" />
       
       <div className="max-w-4xl mx-auto relative">
         {/* Header */}
-        <div className="text-center mb-16">
-          <div className="inline-flex items-center gap-2 px-4 py-2 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 mb-6">
+        <div className="text-center mb-10 sm:mb-16">
+          <div className="inline-flex items-center gap-2 px-3 sm:px-4 py-1.5 sm:py-2 rounded-full bg-gradient-to-r from-primary/10 to-primary/5 border border-primary/20 mb-4 sm:mb-6">
             <span className="w-2 h-2 rounded-full bg-primary animate-pulse" />
-            <span className="text-primary text-sm font-medium tracking-wide">Frequently Asked</span>
+            <span className="text-primary text-xs sm:text-sm font-medium tracking-wide">Frequently Asked</span>
           </div>
-          <h2 className="text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-6">
+          <h2 className="text-3xl sm:text-4xl md:text-5xl lg:text-6xl font-bold text-foreground mb-4 sm:mb-6">
             Got questions?
           </h2>
-          <p className="text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed">
+          <p className="text-base sm:text-xl text-muted-foreground max-w-2xl mx-auto leading-relaxed px-2">
             We've got answers. Here's everything you need to know about SimplSEO.
           </p>
         </div>
 
         {/* FAQ Items */}
-        <div className="space-y-3">
+        <div className="space-y-2 sm:space-y-3">
           {faqs.map((faq, index) => (
             <FAQItem
               key={index}
