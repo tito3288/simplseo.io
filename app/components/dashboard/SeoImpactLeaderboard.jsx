@@ -127,12 +127,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       const deltas = docs
         .filter((doc) => doc.preStats && doc.postStats)
         .map((doc) => {
-          const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory } = doc;
+          const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue } = doc;
           return {
             pageUrl,
             implementedAt,
             lastUpdated,
             updatedAt,
+            nextUpdateDue,
             preStats,
             postStats,
             postStatsHistory: postStatsHistory || [], // Include history array
@@ -234,12 +235,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         const deltas = docs
           .filter((doc) => doc.preStats && doc.postStats)
           .map((doc) => {
-            const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory } = doc;
+            const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue } = doc;
             return {
               pageUrl,
               implementedAt,
               lastUpdated,
               updatedAt,
+              nextUpdateDue,
               preStats,
               postStats,
               postStatsHistory: postStatsHistory || [], // Include history array
@@ -668,13 +670,22 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                       <h5 className="text-xs font-medium text-green-600 dark:text-green-400 mb-2">
                         🚀 After (7+ Days)
                       </h5>
-                      <div className="text-xs text-green-500 dark:text-green-400 mb-3">
+                      <div className="text-xs text-green-500 dark:text-green-400 mb-2">
                         Last updated: {new Date(item.lastUpdated || item.updatedAt || Date.now()).toLocaleDateString('en-US', {
                           year: 'numeric',
                           month: 'short',
                           day: 'numeric'
                         })} • {Math.floor((new Date(item.lastUpdated || item.updatedAt || Date.now()).getTime() - new Date(item.implementedAt).getTime()) / (1000 * 60 * 60 * 24))} days since implementation
                       </div>
+                      {item.nextUpdateDue && (
+                        <div className="text-xs text-blue-500 dark:text-blue-400 mb-3">
+                           Next update: {new Date(item.nextUpdateDue).toLocaleDateString('en-US', {
+                            year: 'numeric',
+                            month: 'short',
+                            day: 'numeric'
+                          })}
+                        </div>
+                      )}
                       <div className="grid grid-cols-4 gap-3 text-xs">
                         <div>
                           <span className="text-muted-foreground">Impressions:</span>

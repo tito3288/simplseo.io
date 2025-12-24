@@ -74,6 +74,14 @@ function createImprovementPrompt(pageUrl, auditResult, pageContent, title, metaD
   const safeMetaDescription = metaDescription || "";
   const safeHeadings = headings || [];
   
+  // Normalize headings to handle both old (string) and new (object) formats
+  const normalizedHeadings = safeHeadings.map(h => {
+    if (typeof h === 'string') {
+      return { tag: 'h2', text: h };  // Old format - assume H2
+    }
+    return h;
+  });
+  
   return `You are an expert SEO content strategist. Analyze this specific page content and provide actionable improvements that users can copy-paste directly into their website.
 
 PAGE INFORMATION:
@@ -83,7 +91,7 @@ PAGE INFORMATION:
 - Content Length: ${safePageContent.length} characters
 
 CURRENT HEADINGS:
-${safeHeadings.map(h => `- ${(h.tag || 'H1').toUpperCase()}: "${h.text || 'No text'}"`).join('\n')}
+${normalizedHeadings.map(h => `- ${(h.tag || 'h2').toUpperCase()}: "${h.text || 'Unknown'}"`).join('\n')}
 
 CONTENT AUDIT RESULTS:
 - Overall Score: ${contentScore}/100

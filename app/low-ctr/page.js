@@ -271,18 +271,31 @@ export default function LowCtrPage() {
 
       snapshot.docs.forEach(doc => {
         const data = doc.data();
-        if (data.postStats && data.implementedAt) {
+        if (data.postStats && data.implementedAt && data.preStats) {
           const daysSince = (now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24);
           
-          // Store implementation date for each page
+          // Calculate new impressions since implementation
+          const newImpressions = (data.postStats.impressions || 0) - (data.preStats.impressions || 0);
+          const currentPosition = data.postStats.position || 0;
+          
+          // Store implementation data for each page
           pageData[data.pageUrl] = {
             implementedAt: data.implementedAt,
             daysSince: daysSince,
-            hasZeroClicks: data.postStats.clicks === 0
+            hasZeroClicks: data.postStats.clicks === 0,
+            newImpressions: newImpressions,
+            currentPosition: currentPosition,
+            preStats: data.preStats,
+            postStats: data.postStats
           };
 
-          // Only add to eligible pages if 30+ days and 0 clicks
-          if (daysSince >= 30 && data.postStats.clicks === 0) {
+          // Content Audit eligibility: 30+ days AND 0 clicks AND 50+ new impressions AND position >= 15
+          const isEligible = daysSince >= 30 && 
+                            data.postStats.clicks === 0 && 
+                            newImpressions >= 50 && 
+                            currentPosition >= 15;
+          
+          if (isEligible) {
             eligiblePages.push(data.pageUrl);
           }
         }
@@ -666,12 +679,22 @@ export default function LowCtrPage() {
 
 
   // Helper function to check if a page is eligible for Content Quality Audit
+  // Criteria: 30+ days AND 0 clicks AND 50+ new impressions AND position >= 15 (page 2+)
   const isPageEligibleForContentAudit = (pageUrl) => {
     const pageData = pageImplementationDates[pageUrl];
     if (!pageData) return false;
     
-    // Page must be implemented for 30+ days and have 0 clicks
-    return pageData.daysSince >= 30 && pageData.hasZeroClicks;
+    const { daysSince, hasZeroClicks, newImpressions, currentPosition } = pageData;
+    
+    // All conditions must be true:
+    // 1. 30+ days since implementation (Google had time to react)
+    // 2. 0 clicks (CTR fixes didn't work)
+    // 3. 50+ new impressions (enough exposure to evaluate)
+    // 4. Position >= 15 (page 2+, not close to page 1)
+    return daysSince >= 30 && 
+           hasZeroClicks && 
+           (newImpressions || 0) >= 50 && 
+           (currentPosition || 0) >= 15;
   };
 
   const fetchLowCtrPages = async (siteUrl, token) => {
@@ -1218,36 +1241,13 @@ export default function LowCtrPage() {
             </AlertDescription>
           </Alert>
 
-          {/* Intent Mismatch Card */}
-          <Card className="mb-6">
-            <CardHeader>
-              <CardTitle>Search Intent Analysis</CardTitle>
-              <CardDescription>
-                Check if your content matches what users are actually searching for
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-              <p className="text-sm text-muted-foreground mb-4">
-                Sometimes low CTR happens because your content doesn&apos;t match the search intent. 
-                Our intent mismatch analysis can help identify and fix these issues.
-              </p>
-              <Button 
-                onClick={() => router.push("/intent-mismatch")}
-                className="bg-[#00BF63] hover:bg-[#00BF63]/90"
-              >
-                Fix Intent Mismatches
-              </Button>
-            </CardContent>
-          </Card>
-
 
           {/* Content Quality Audit Card */}
           <Card className="mb-6">
             <CardHeader>
               <CardTitle>Content Quality Audit</CardTitle>
               <CardDescription>
-                These pages haven&apos;t gotten any clicks after 30 days. Analyze and improve 
-                their content quality to boost SEO performance and rankings.
+                Pages that have had enough exposure but still aren&apos;t getting clicks may need deeper content improvements beyond meta tags.
               </CardDescription>
             </CardHeader>
             <CardContent className="space-y-4">
@@ -1261,7 +1261,7 @@ export default function LowCtrPage() {
                         No pages are eligible for Content Quality Audit yet.
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Pages become eligible 30 days after implementing AI suggestions and having 0 clicks.
+                        Pages become eligible when: 30+ days since implementation, 0 clicks, 50+ new impressions, and ranking on page 2 or beyond.
                       </p>
                     </div>
                   );
@@ -1273,7 +1273,7 @@ export default function LowCtrPage() {
                     <div key={page.page} className="mb-4">
                       <div className="text-sm text-muted-foreground mb-2">
                         Implemented {Math.floor(pageData?.daysSince || 0)} days ago • 
-                        {pageData?.hasZeroClicks ? ' No clicks yet' : ' Has clicks'}
+                        {pageData?.newImpressions || 0} new impressions • Position {Math.round(pageData?.currentPosition || 0)}
                       </div>
                       <ContentAuditPanel
                         pageUrl={page.page}

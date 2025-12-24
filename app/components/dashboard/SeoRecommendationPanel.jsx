@@ -549,7 +549,7 @@ const SeoRecommendationPanel = ({
                             {loadingMetaTags ? (
                               <p className="text-xs text-muted-foreground italic">Loading...</p>
                             ) : currentMetaTitle ? (
-                              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100">
+                              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-300 dark:border-amber-700 text-sm text-amber-700 dark:text-amber-300">
                                 {currentMetaTitle}
                               </div>
                             ) : (
@@ -589,7 +589,7 @@ const SeoRecommendationPanel = ({
                             {loadingMetaTags ? (
                               <p className="text-xs text-muted-foreground italic">Loading...</p>
                             ) : currentMetaDescription ? (
-                              <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100 max-h-32 overflow-y-auto">
+                              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-300 dark:border-amber-700 text-sm text-amber-700 dark:text-amber-300 max-h-32 overflow-y-auto">
                                 {currentMetaDescription}
                               </div>
                             ) : (
@@ -726,7 +726,7 @@ const SeoRecommendationPanel = ({
                           {loadingMetaTags ? (
                             <p className="text-xs text-muted-foreground italic">Loading...</p>
                           ) : currentMetaTitle ? (
-                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100">
+                            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-300 dark:border-amber-700 text-sm text-amber-700 dark:text-amber-300">
                               {currentMetaTitle}
                             </div>
                           ) : (
@@ -766,7 +766,7 @@ const SeoRecommendationPanel = ({
                           {loadingMetaTags ? (
                             <p className="text-xs text-muted-foreground italic">Loading...</p>
                           ) : currentMetaDescription ? (
-                            <div className="p-3 bg-blue-50 dark:bg-blue-900/20 rounded border border-blue-200 dark:border-blue-900/40 text-sm text-blue-900 dark:text-blue-100 max-h-32 overflow-y-auto">
+                            <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded border border-amber-300 dark:border-amber-700 text-sm text-amber-700 dark:text-amber-300 max-h-32 overflow-y-auto">
                               {currentMetaDescription}
                             </div>
                           ) : (

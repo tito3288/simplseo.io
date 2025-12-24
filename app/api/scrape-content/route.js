@@ -73,12 +73,15 @@ export async function POST(req) {
       .trim()
       .substring(0, 3000); // Limit to first 3000 characters
 
-    // Extract headings for context
+    // Extract headings for context (with tag info for proper analysis)
     const headings = [];
     $('h1, h2, h3, h4, h5, h6').each((i, el) => {
       const headingText = $(el).text().trim();
       if (headingText) {
-        headings.push(headingText);
+        headings.push({
+          tag: el.tagName.toLowerCase(),  // 'h1', 'h2', 'h3', etc.
+          text: headingText
+        });
       }
     });
 

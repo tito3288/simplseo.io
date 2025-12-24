@@ -4,11 +4,10 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, FileText, TrendingUp, AlertTriangle, CheckCircle2, Clock } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, TrendingUp, AlertTriangle, CheckCircle2, Clock, Sparkles, Loader2 } from "lucide-react";
 import { getPageContent } from "../../lib/pageScraper";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveContentAuditResult, getContentAuditResult, saveAiSuggestions, getAiSuggestions } from "../../lib/firestoreHelpers";
-import SquashBounceLoader from "../ui/squash-bounce-loader";
 import { toast } from "sonner";
 
 const ContentAuditPanel = ({ pageUrl, pageData }) => {
@@ -226,7 +225,7 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
       <CardContent>
         {isLoadingSavedData ? (
           <div className="text-center py-4">
-            <SquashBounceLoader size="sm" className="mb-2" />
+            <Loader2 className="h-5 w-5 animate-spin mx-auto mb-2 text-muted-foreground" />
             <p className="text-sm text-muted-foreground">Loading saved data...</p>
           </div>
         ) : !auditResult ? (
@@ -241,7 +240,7 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
             >
               {isLoading ? (
                 <>
-                  <SquashBounceLoader size="sm" className="mr-2" />
+                  <Loader2 className="h-4 w-4 animate-spin mr-2" />
                   Analyzing...
                 </>
               ) : (
@@ -345,10 +344,7 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                     <div className="space-y-3">
                       {auditResult.suggestions.map((suggestion, idx) => (
                         <div key={idx} className="p-4 bg-blue-50 dark:bg-blue-950/20 border border-blue-200 dark:border-blue-800 rounded-lg">
-                          <div className="flex items-start justify-between mb-2">
-                            <h5 className="font-medium text-blue-900 dark:text-blue-200">{suggestion.title}</h5>
-                            {getPriorityBadge(suggestion.priority)}
-                          </div>
+                          <h5 className="font-medium text-blue-900 dark:text-blue-200 mb-2">{suggestion.title}</h5>
                           <p className="text-sm text-blue-700 dark:text-blue-300 mb-2">{suggestion.description}</p>
                           <p className="text-sm text-blue-600 dark:text-blue-400 font-medium">Action: {suggestion.action}</p>
                         </div>
@@ -357,33 +353,25 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                   </div>
                 )}
 
-                {/* Action Buttons */}
-                <div className="flex gap-2 pt-4">
+                {/* Action Button */}
+                <div className="pt-4">
                   <Button 
                     onClick={generateAiSuggestions}
                     disabled={isGeneratingSuggestions || !auditResult}
-                    variant="outline"
                     size="sm"
-                    className="bg-green-50 dark:bg-green-950/20 border-green-200 dark:border-green-800 text-green-700 dark:text-green-300 hover:bg-green-100 dark:hover:bg-green-950/30"
+                    className="bg-gradient-to-r from-purple-500 to-pink-500 hover:from-purple-600 hover:to-pink-600 text-white border-0"
                   >
                     {isGeneratingSuggestions ? (
                       <>
-                        <SquashBounceLoader size="sm" className="mr-2" />
+                        <Loader2 className="h-4 w-4 animate-spin mr-2" />
                         Generating...
                       </>
                     ) : (
                       <>
-                        <TrendingUp className="w-4 h-4 mr-2" />
+                        <Sparkles className="w-4 h-4 mr-2" />
                         Get AI Suggestions
                       </>
                     )}
-                  </Button>
-                  <Button 
-                    onClick={runContentAudit}
-                    variant="outline"
-                    size="sm"
-                  >
-                    Refresh Analysis
                   </Button>
                 </div>
 
@@ -424,12 +412,12 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                                           Example {exampleIdx + 1} of {suggestion.examples.length}
                                         </div>
                                         <div className="space-y-3">
-                                          <div className="bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800">
-                                            <h6 className="text-sm font-bold text-red-800 dark:text-red-300 mb-2">BEFORE:</h6>
-                                            <p className="text-sm text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-line">{beforeMatch[1].replace(/\\n/g, '\n')}</p>
+                                          <div className="bg-amber-50 dark:bg-amber-950/20 p-3 rounded border border-amber-300 dark:border-amber-700">
+                                            <h6 className="text-sm font-bold text-amber-700 dark:text-amber-400 mb-2">CURRENT:</h6>
+                                            <p className="text-sm text-amber-600 dark:text-amber-300 font-mono leading-relaxed whitespace-pre-line">{beforeMatch[1].replace(/\\n/g, '\n')}</p>
                                           </div>
                                           <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800">
-                                            <h6 className="text-sm font-bold text-green-800 dark:text-green-300 mb-2">AFTER:</h6>
+                                            <h6 className="text-sm font-bold text-green-800 dark:text-green-300 mb-2">SUGGESTED:</h6>
                                             <p className="text-sm text-green-700 dark:text-green-300 font-mono leading-relaxed whitespace-pre-line">{afterMatch[1].replace(/\\n/g, '\n')}</p>
                                           </div>
                                         </div>
@@ -445,30 +433,6 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
                                     );
                                   }
                                 })}
-                              </div>
-                            </div>
-                          )}
-                          {suggestion.beforeAfter && suggestion.beforeAfter.length > 0 && (
-                            <div className="mt-3 bg-white dark:bg-gray-800 p-3 rounded border border-green-100 dark:border-green-800">
-                              <h6 className="text-xs font-medium text-green-800 dark:text-green-300 mb-2">Specific Changes:</h6>
-                              <div className="space-y-4">
-                                {suggestion.beforeAfter.map((change, changeIdx) => (
-                                  <div key={changeIdx} className="bg-gray-50 dark:bg-gray-800 p-4 rounded-lg border border-gray-200 dark:border-gray-700">
-                                    <div className="text-xs font-medium text-gray-600 dark:text-gray-400 mb-3">
-                                      Example {changeIdx + 1} of {suggestion.beforeAfter.length}
-                                    </div>
-                                    <div className="space-y-3">
-                                      <div className="bg-red-50 dark:bg-red-950/20 p-3 rounded border border-red-200 dark:border-red-800">
-                                        <h6 className="text-sm font-bold text-red-800 dark:text-red-300 mb-2">BEFORE:</h6>
-                                        <p className="text-sm text-red-700 dark:text-red-300 font-mono leading-relaxed whitespace-pre-line">{String(change.before || '').replace(/\\n/g, '\n')}</p>
-                                      </div>
-                                      <div className="bg-green-50 dark:bg-green-950/20 p-3 rounded border border-green-200 dark:border-green-800">
-                                        <h6 className="text-sm font-bold text-green-800 dark:text-green-300 mb-2">AFTER:</h6>
-                                        <p className="text-sm text-green-700 dark:text-green-300 font-mono leading-relaxed whitespace-pre-line">{String(change.after || '').replace(/\\n/g, '\n')}</p>
-                                      </div>
-                                    </div>
-                                  </div>
-                                ))}
                               </div>
                             </div>
                           )}

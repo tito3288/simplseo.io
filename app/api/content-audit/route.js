@@ -194,17 +194,26 @@ function calculateReadability(text) {
 }
 
 function analyzeHeadingStructure(headings) {
-  const h1Count = headings.filter(h => h.tag === 'h1').length;
-  const h2Count = headings.filter(h => h.tag === 'h2').length;
-  const h3Count = headings.filter(h => h.tag === 'h3').length;
+  // Handle both old format (plain strings) and new format (objects with tag/text)
+  const normalizedHeadings = headings.map(h => {
+    if (typeof h === 'string') {
+      // Old format - assume H2 for plain strings (conservative estimate)
+      return { tag: 'h2', text: h };
+    }
+    return h;
+  });
+  
+  const h1Count = normalizedHeadings.filter(h => h.tag === 'h1').length;
+  const h2Count = normalizedHeadings.filter(h => h.tag === 'h2').length;
+  const h3Count = normalizedHeadings.filter(h => h.tag === 'h3').length;
   
   return {
     hasH1: h1Count > 0,
     h1Count,
     h2Count,
     h3Count,
-    totalHeadings: headings.length,
-    structure: headings.map(h => h.tag).join(' → ')
+    totalHeadings: normalizedHeadings.length,
+    structure: normalizedHeadings.map(h => h.tag).join(' → ')
   };
 }
 
