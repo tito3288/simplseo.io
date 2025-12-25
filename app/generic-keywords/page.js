@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw, Plus } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw, Plus, RefreshCw } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { getFocusKeywords, saveFocusKeywords } from "../lib/firestoreHelpers";
 import { useOnboarding } from "../contexts/OnboardingContext";
@@ -73,6 +73,9 @@ export default function GenericKeywordsPage() {
   // Track which success stories have been added to focus keywords
   const [addedToFocusKeywords, setAddedToFocusKeywords] = useState(new Set());
   const [addingToFocusKeyword, setAddingToFocusKeyword] = useState(null); // Track which one is currently being added
+  
+  // Refresh keywords state
+  const [isRefreshing, setIsRefreshing] = useState(false);
   
   // Settling period constants
   const SETTLING_DAYS_REQUIRED = 30;
@@ -602,12 +605,16 @@ export default function GenericKeywordsPage() {
     return { exists: false };
   };
 
-  const fetchGenericOpportunitiesFromDashboard = async () => {
-    setLoading(true);
+  const fetchGenericOpportunitiesFromDashboard = async (forceRefresh = false) => {
+    if (forceRefresh) {
+      setIsRefreshing(true);
+    } else {
+      setLoading(true);
+    }
     setError(null);
 
     try {
-      console.log("🔍 Fetching generic opportunities using dashboard approach...");
+      console.log("🔍 Fetching generic opportunities using dashboard approach...", { forceRefresh });
       
       // Call the API directly with empty GSC keywords - the API will generate new ones
       const requestBody = {
@@ -617,13 +624,15 @@ export default function GenericKeywordsPage() {
         businessLocation: data.businessLocation,
         websiteUrl: data.websiteUrl,
         userId: user.id, // Add userId for caching
+        forceRefresh, // Add forceRefresh flag
       };
       
       console.log("🔍 API request body:", {
         gscKeywordsCount: requestBody.gscKeywords?.length || 0,
         businessType: requestBody.businessType,
         businessLocation: requestBody.businessLocation,
-        websiteUrl: requestBody.websiteUrl
+        websiteUrl: requestBody.websiteUrl,
+        forceRefresh: requestBody.forceRefresh
       });
 
       const response = await fetch("/api/generic-keywords/analyze", {
@@ -648,14 +657,26 @@ export default function GenericKeywordsPage() {
         setCannibalizationAnalysis(result.cannibalizationAnalysis || null);
         setFromCache(result.fromCache || false);
         setCacheAge(result.cacheAge || null);
+        
+        if (forceRefresh) {
+          toast.success("Keywords refreshed!", {
+            description: "New AI-generated keyword opportunities are now available.",
+          });
+        }
       } else {
         setError("No generic opportunities found");
       }
     } catch (err) {
       console.error("❌ Failed to fetch generic keywords:", err);
       setError(`Failed to load generic opportunities: ${err.message}`);
+      if (forceRefresh) {
+        toast.error("Failed to refresh keywords", {
+          description: err.message || "Please try again.",
+        });
+      }
     } finally {
       setLoading(false);
+      setIsRefreshing(false);
     }
   };
 
@@ -843,6 +864,11 @@ export default function GenericKeywordsPage() {
     [sortedOpportunities]
   );
 
+  // Set of top 3 keyword names for filtering from the main list
+  const topOpportunityKeywords = useMemo(() => {
+    return new Set(topOpportunities.map(opp => opp.keyword.toLowerCase()));
+  }, [topOpportunities]);
+
   // Set of skipped keyword names for quick lookup
   const skippedKeywordSet = useMemo(() => {
     return new Set(skippedKeywords.map(sk => sk.keyword.toLowerCase()));
@@ -850,6 +876,11 @@ export default function GenericKeywordsPage() {
 
   const filteredOpportunities = useMemo(() => {
     return sortedOpportunities.filter((opp) => {
+      // Filter out keywords that are in "Start with these 3"
+      if (topOpportunityKeywords.has(opp.keyword.toLowerCase())) {
+        return false;
+      }
+
       // Filter out skipped keywords
       if (skippedKeywordSet.has(opp.keyword.toLowerCase())) {
         return false;
@@ -869,7 +900,7 @@ export default function GenericKeywordsPage() {
 
       return true;
     });
-  }, [sortedOpportunities, categoryFilter, priorityFilter, skippedKeywordSet]);
+  }, [sortedOpportunities, categoryFilter, priorityFilter, skippedKeywordSet, topOpportunityKeywords]);
 
   const groupedOpportunities = useMemo(() => {
     return filteredOpportunities.reduce((acc, opportunity) => {
@@ -905,36 +936,63 @@ export default function GenericKeywordsPage() {
   }, [groupedOpportunities, categoryFilter]);
 
   const filterOptions = [
-    { value: "all", label: "All Opportunities", count: sortedOpportunities.length },
+    { value: "all", label: "All Opportunities", count: sortedOpportunities.filter(o => 
+      !topOpportunityKeywords.has(o.keyword.toLowerCase()) && 
+      !skippedKeywordSet.has(o.keyword.toLowerCase())
+    ).length },
     {
       value: "location_based",
       label: "Location-Based",
-      count: sortedOpportunities.filter((o) => o.category === "location_based").length,
+      count: sortedOpportunities.filter((o) => 
+        o.category === "location_based" && 
+        !topOpportunityKeywords.has(o.keyword.toLowerCase()) &&
+        !skippedKeywordSet.has(o.keyword.toLowerCase())
+      ).length,
     },
     {
       value: "service_based",
       label: "Service-Based",
-      count: sortedOpportunities.filter((o) => o.category === "service_based").length,
+      count: sortedOpportunities.filter((o) => 
+        o.category === "service_based" && 
+        !topOpportunityKeywords.has(o.keyword.toLowerCase()) &&
+        !skippedKeywordSet.has(o.keyword.toLowerCase())
+      ).length,
     },
     {
       value: "comparison",
       label: "Comparison",
-      count: sortedOpportunities.filter((o) => o.category === "comparison").length,
+      count: sortedOpportunities.filter((o) => 
+        o.category === "comparison" && 
+        !topOpportunityKeywords.has(o.keyword.toLowerCase()) &&
+        !skippedKeywordSet.has(o.keyword.toLowerCase())
+      ).length,
     },
     {
       value: "problem_solving",
       label: "Problem-Solving",
-      count: sortedOpportunities.filter((o) => o.category === "problem_solving").length,
+      count: sortedOpportunities.filter((o) => 
+        o.category === "problem_solving" && 
+        !topOpportunityKeywords.has(o.keyword.toLowerCase()) &&
+        !skippedKeywordSet.has(o.keyword.toLowerCase())
+      ).length,
     },
     {
       value: "trending_search",
       label: "Trending Search",
-      count: sortedOpportunities.filter((o) => o.category === "trending_search").length,
+      count: sortedOpportunities.filter((o) => 
+        o.category === "trending_search" && 
+        !topOpportunityKeywords.has(o.keyword.toLowerCase()) &&
+        !skippedKeywordSet.has(o.keyword.toLowerCase())
+      ).length,
     },
     {
       value: "long_tail",
       label: "Long-Tail",
-      count: sortedOpportunities.filter((o) => o.category === "long_tail").length,
+      count: sortedOpportunities.filter((o) => 
+        o.category === "long_tail" && 
+        !topOpportunityKeywords.has(o.keyword.toLowerCase()) &&
+        !skippedKeywordSet.has(o.keyword.toLowerCase())
+      ).length,
     },
   ];
 
@@ -1222,9 +1280,29 @@ export default function GenericKeywordsPage() {
             Discover new keywords and content ideas to expand your reach and attract new customers
           </p>
         </div>
-        <Button onClick={() => window.history.back()} variant="outline">
-          Back to Dashboard
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button
+            onClick={() => fetchGenericOpportunitiesFromDashboard(true)}
+            disabled={isRefreshing || loading}
+            variant="outline"
+            className="gap-2"
+          >
+            {isRefreshing ? (
+              <>
+                <Loader2 className="w-4 h-4 animate-spin" />
+                Refreshing...
+              </>
+            ) : (
+              <>
+                <RefreshCw className="w-4 h-4" />
+                Refresh Keywords
+              </>
+            )}
+          </Button>
+          <Button onClick={() => window.history.back()} variant="outline">
+            Back to Dashboard
+          </Button>
+        </div>
       </div>
 
       {/* Dummy Success Story Card - For Preview Only */}
@@ -1705,15 +1783,37 @@ export default function GenericKeywordsPage() {
                 ))}
               </div>
               
-              {/* Cache Status Indicator */}
-              {fromCache && (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span>
-                    Cached data loaded {cacheAge ? `(${cacheAge} hours old)` : ''}
-                  </span>
-                </div>
-              )}
+              {/* Cache Status Indicator and Refresh Button */}
+              <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
+                {fromCache && (
+                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                    <span>
+                      Cached data loaded {cacheAge ? `(${cacheAge} hours old)` : ''}
+                    </span>
+                  </div>
+                )}
+                {!fromCache && <div />}
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => fetchGenericOpportunitiesFromDashboard(true)}
+                  disabled={isRefreshing || loading}
+                  className="gap-2"
+                >
+                  {isRefreshing ? (
+                    <>
+                      <Loader2 className="w-4 h-4 animate-spin" />
+                      Refreshing...
+                    </>
+                  ) : (
+                    <>
+                      <RefreshCw className="w-4 h-4" />
+                      Refresh Keywords
+                    </>
+                  )}
+                </Button>
+              </div>
             </CardContent>
           </Card>
 

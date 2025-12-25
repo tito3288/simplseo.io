@@ -13,15 +13,187 @@ function sanitizeUrlForCache(url) {
   return sanitized;
 }
 
+// ============================================================================
+// SEMANTIC SIMILARITY DETECTION
+// These modifier groups all target the same search intent
+// ============================================================================
+const SEMANTIC_GROUPS = {
+  quality: ['best', 'top', 'top rated', 'top-rated', '#1', 'number one', 'premier', 'leading', 'greatest', 'finest'],
+  price: ['affordable', 'cheap', 'budget', 'low cost', 'low-cost', 'inexpensive', 'economical', 'budget-friendly'],
+  proximity: ['near me', 'nearby', 'close to me', 'around me', 'in my area', 'close by'],
+  urgency: ['emergency', 'urgent', '24 hour', '24/7', 'same day', 'same-day', 'immediate'],
+  reputation: ['trusted', 'reliable', 'reputable', 'professional', 'licensed', 'certified', 'experienced']
+};
+
+// Function to get the "canonical" version of a keyword for deduplication
+function getSemanticKey(keyword) {
+  let normalized = keyword.toLowerCase().trim();
+  
+  // Replace all synonyms with canonical version (the group name)
+  Object.entries(SEMANTIC_GROUPS).forEach(([groupName, synonyms]) => {
+    // Sort synonyms by length (longest first) to avoid partial replacements
+    const sortedSynonyms = [...synonyms].sort((a, b) => b.length - a.length);
+    sortedSynonyms.forEach(synonym => {
+      if (normalized.includes(synonym)) {
+        normalized = normalized.replace(new RegExp(synonym.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'g'), `[${groupName}]`);
+      }
+    });
+  });
+  
+  // Remove extra spaces and normalize
+  normalized = normalized.replace(/\s+/g, ' ').trim();
+  
+  return normalized;
+}
+
+// Deduplicate keywords based on semantic similarity
+function deduplicateSemantically(suggestions) {
+  const seen = new Map(); // semanticKey → best suggestion
+  
+  suggestions.forEach(suggestion => {
+    const semanticKey = getSemanticKey(suggestion.keyword);
+    
+    if (!seen.has(semanticKey)) {
+      seen.set(semanticKey, suggestion);
+    } else {
+      // Keep the one with higher priority
+      const existing = seen.get(semanticKey);
+      if ((suggestion.priority || 0) > (existing.priority || 0)) {
+        seen.set(semanticKey, suggestion);
+      }
+    }
+  });
+  
+  const unique = Array.from(seen.values());
+  console.log(`🔍 Semantic dedup: ${suggestions.length} → ${unique.length} keywords`);
+  return unique;
+}
+
+// ============================================================================
+// BUSINESS TYPE AWARENESS
+// Determines if a business is B2B or B2C to generate appropriate keywords
+// ============================================================================
+const B2B_BUSINESS_TYPES = [
+  'web developer', 'web development', 'website developer', 'website design',
+  'marketing agency', 'digital marketing', 'seo agency', 'seo services',
+  'accountant', 'accounting', 'bookkeeper', 'bookkeeping',
+  'consultant', 'consulting', 'business consultant',
+  'photographer', 'photography', 'videographer', 'videography',
+  'graphic designer', 'graphic design', 'branding agency',
+  'software developer', 'software development', 'app developer',
+  'it services', 'it support', 'managed services',
+  'lawyer', 'attorney', 'law firm', 'legal services',
+  'real estate agent', 'realtor', 'real estate',
+  'insurance agent', 'insurance agency',
+  'financial advisor', 'financial planning',
+  'copywriter', 'copywriting', 'content writer'
+];
+
+function getBusinessTypeContext(businessType) {
+  const businessTypeLower = businessType.toLowerCase();
+  const isB2B = B2B_BUSINESS_TYPES.some(type => businessTypeLower.includes(type));
+  
+  if (isB2B) {
+    return {
+      isB2B: true,
+      description: 'B2B (serves other businesses)',
+      nichePrompt: `Target specific INDUSTRIES that might hire a ${businessType} as clients`,
+      servicePrompt: `Specific services a ${businessType} offers (different service types, not synonyms)`,
+      exampleNiche: getB2BNicheExamples(businessType),
+      exampleServices: getB2BServiceExamples(businessType)
+    };
+  } else {
+    return {
+      isB2B: false,
+      description: 'B2C (serves consumers directly)',
+      nichePrompt: `SKIP industry-niche keywords - focus on customer situations instead`,
+      servicePrompt: `Specific services a ${businessType} offers to customers`,
+      exampleSituations: getB2CSituationExamples(businessType),
+      exampleServices: getB2CServiceExamples(businessType)
+    };
+  }
+}
+
+function getB2BNicheExamples(businessType) {
+  const bt = businessType.toLowerCase();
+  if (bt.includes('web') || bt.includes('developer') || bt.includes('design')) {
+    return ['restaurant website design', 'law firm website', 'dental office website', 'small business web design'];
+  }
+  if (bt.includes('marketing') || bt.includes('seo')) {
+    return ['restaurant marketing', 'dental practice marketing', 'law firm seo', 'contractor marketing'];
+  }
+  if (bt.includes('photo')) {
+    return ['real estate photography', 'product photography', 'headshot photographer', 'event photographer'];
+  }
+  return ['small business services', 'local business services'];
+}
+
+function getB2BServiceExamples(businessType) {
+  const bt = businessType.toLowerCase();
+  if (bt.includes('web') || bt.includes('developer')) {
+    return ['WordPress development', 'e-commerce website', 'website redesign', 'custom web application', 'landing page design'];
+  }
+  if (bt.includes('marketing') || bt.includes('seo')) {
+    return ['local seo', 'google ads management', 'social media marketing', 'email marketing', 'content marketing'];
+  }
+  if (bt.includes('photo')) {
+    return ['portrait photography', 'commercial photography', 'event photography', 'product shots'];
+  }
+  return ['consulting', 'strategy', 'implementation', 'support'];
+}
+
+function getB2CSituationExamples(businessType) {
+  const bt = businessType.toLowerCase();
+  if (bt.includes('car wash') || bt.includes('auto')) {
+    return ['car wash before road trip', 'muddy car cleaning', 'new car first wash', 'winter salt removal'];
+  }
+  if (bt.includes('dentist') || bt.includes('dental')) {
+    return ['toothache relief', 'chipped tooth repair', 'dental emergency', 'first dental visit'];
+  }
+  if (bt.includes('restaurant') || bt.includes('food')) {
+    return ['birthday dinner', 'business lunch', 'date night', 'family gathering'];
+  }
+  if (bt.includes('salon') || bt.includes('hair') || bt.includes('barber')) {
+    return ['wedding hair', 'prom hairstyle', 'mens haircut', 'color correction'];
+  }
+  if (bt.includes('plumb')) {
+    return ['clogged drain', 'water heater repair', 'leaky faucet', 'emergency plumber'];
+  }
+  if (bt.includes('hvac') || bt.includes('heating') || bt.includes('cooling')) {
+    return ['ac not cooling', 'furnace repair', 'hvac maintenance', 'new ac installation'];
+  }
+  return ['same day service', 'weekend availability', 'emergency service'];
+}
+
+function getB2CServiceExamples(businessType) {
+  const bt = businessType.toLowerCase();
+  if (bt.includes('car wash') || bt.includes('auto detail')) {
+    return ['car detailing', 'interior cleaning', 'wax treatment', 'ceramic coating', 'express wash'];
+  }
+  if (bt.includes('dentist') || bt.includes('dental')) {
+    return ['teeth whitening', 'dental implants', 'invisalign', 'root canal', 'dental cleaning'];
+  }
+  if (bt.includes('salon') || bt.includes('hair')) {
+    return ['haircut', 'hair coloring', 'balayage', 'keratin treatment', 'hair extensions'];
+  }
+  if (bt.includes('plumb')) {
+    return ['drain cleaning', 'water heater installation', 'pipe repair', 'toilet repair', 'sewer line'];
+  }
+  if (bt.includes('hvac')) {
+    return ['ac repair', 'furnace installation', 'duct cleaning', 'thermostat installation'];
+  }
+  return ['consultation', 'service', 'repair', 'installation'];
+}
+
 export async function POST(req) {
   try {
-    const { gscKeywords, businessType, businessLocation, websiteUrl, customBusinessType, userId } = await req.json();
+    const { gscKeywords, businessType, businessLocation, websiteUrl, customBusinessType, userId, forceRefresh } = await req.json();
 
     // Use custom business type if provided, otherwise use the selected business type
     const effectiveBusinessType = (businessType === "Other" && customBusinessType) ? customBusinessType : businessType;
 
-    // Check for cached results first
-    if (userId) {
+    // Check for cached results first (unless forceRefresh is true)
+    if (userId && !forceRefresh) {
       const sanitizedUrl = sanitizeUrlForCache(websiteUrl);
       const cacheKey = `genericKeywords_${userId}_${effectiveBusinessType}_${sanitizedUrl}`;
       
@@ -51,6 +223,8 @@ export async function POST(req) {
         console.error("⚠️ Error checking cache:", cacheError);
         // Continue with generation if cache check fails
       }
+    } else if (forceRefresh) {
+      console.log("🔄 Force refresh requested - bypassing cache");
     }
 
     // Allow empty GSC keywords for pure AI generation
@@ -136,33 +310,26 @@ export async function POST(req) {
 
 // Generate AI-powered generic keywords using Google Trends and business context
 async function generateAIGenericKeywords(businessType, businessLocation, websiteUrl, existingKeywords, siteAnalysis) {
-  const opportunities = [];
-  
   try {
-    // 1. Get trending keywords from Google Trends
-    const trendingKeywords = await getGoogleTrendsData(businessType, businessLocation);
+    // Get business type context (B2B vs B2C)
+    const businessContext = getBusinessTypeContext(businessType);
+    console.log(`🏢 Business context: ${businessContext.description}`);
     
-    // 2. Generate AI-powered keyword suggestions
-    const aiSuggestions = await generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl);
+    // 1. Get core keywords (limited set to avoid duplicates with AI)
+    const coreKeywords = await getCoreKeywords(businessType, businessLocation, businessContext);
     
-    // 3. Combine and deduplicate keywords (remove duplicates from trending + AI)
-    const allSuggestions = [...trendingKeywords, ...aiSuggestions];
+    // 2. Generate AI-powered keyword suggestions with business context
+    const aiSuggestions = await generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl, businessContext);
     
-    // Deduplicate: keep first occurrence of each keyword
-    const seenKeywords = new Set();
-    const uniqueSuggestions = allSuggestions.filter(suggestion => {
-      const keywordLower = suggestion.keyword.toLowerCase().trim();
-      if (seenKeywords.has(keywordLower)) {
-        return false; // Skip duplicate
-      }
-      seenKeywords.add(keywordLower);
-      return true;
-    });
+    // 3. Combine all suggestions
+    const allSuggestions = [...coreKeywords, ...aiSuggestions];
+    console.log(`📊 Total suggestions before dedup: ${allSuggestions.length}`);
     
-    console.log(`🔍 Removed ${allSuggestions.length - uniqueSuggestions.length} duplicate keywords`);
+    // 4. SEMANTIC DEDUPLICATION - removes "best X" if "top rated X" exists
+    const semanticallyUnique = deduplicateSemantically(allSuggestions);
     
-    // Filter out keywords they already rank for
-    const filteredSuggestions = uniqueSuggestions.filter(suggestion => {
+    // 5. Filter out keywords they already rank for
+    const filteredSuggestions = semanticallyUnique.filter(suggestion => {
       const suggestionLower = suggestion.keyword.toLowerCase();
       const suggestionWords = suggestionLower.split(' ').filter(w => w.length > 2);
       
@@ -172,7 +339,10 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
         // Exact match - definitely filter out
         if (existingLower === suggestionLower) return true;
         
-        // If the existing keyword is a subset of the suggestion (e.g., "dentist" in "dentist independence")
+        // Semantic match - check if they're semantically the same
+        if (getSemanticKey(existingLower) === getSemanticKey(suggestionLower)) return true;
+        
+        // If the existing keyword is a subset of the suggestion
         // Only filter if it's a very close match (80%+ word overlap)
         if (suggestionWords.length >= 2) {
           const existingWords = existingLower.split(' ').filter(w => w.length > 2);
@@ -185,7 +355,7 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
       });
     });
     
-    console.log(`🔍 Filtered ${uniqueSuggestions.length - filteredSuggestions.length} keywords that user already ranks for`);
+    console.log(`🔍 After filtering existing keywords: ${filteredSuggestions.length} keywords`);
     
     // Parse location for fallback
     const locationParts = businessLocation.split(',').map(p => p.trim());
@@ -301,8 +471,9 @@ async function generateAIGenericKeywords(businessType, businessLocation, website
   }
 }
 
-// Generate trending-style keywords without external API
-async function getGoogleTrendsData(businessType, businessLocation) {
+// Generate core keywords - limited set to avoid semantic duplicates with AI
+// Only generates ONE quality modifier keyword, ONE price modifier keyword, etc.
+async function getCoreKeywords(businessType, businessLocation, businessContext) {
   try {
     // Parse location - get city and state separately
     const locationParts = businessLocation.split(',').map(p => p.trim());
@@ -310,17 +481,18 @@ async function getGoogleTrendsData(businessType, businessLocation) {
     const state = locationParts[1] || '';
     const stateAbbrev = getStateAbbreviation(state);
     
-    // Generate trending-style keywords based on common patterns - MUST include location
-    const currentYear = new Date().getFullYear();
-    const trendingKeywords = [
+    // Generate MINIMAL core keywords - let AI handle the diversity
+    // Only ONE from each semantic group to avoid duplicates
+    const coreKeywords = [
+      // ONE quality modifier keyword (best/top/top-rated - pick ONE)
       {
         keyword: `best ${businessType} in ${city}`,
-        category: 'trending_search',
+        category: 'location_based',
         priority: 9,
         searchVolume: "High",
         competition: "High",
-        contentIdea: generateContentIdea(`best ${businessType} in ${city}`, businessType, businessLocation),
-        difficulty: "High",
+        contentIdea: `Create a comprehensive page showcasing why you're the best ${businessType} in ${city}`,
+        difficulty: "Medium",
         potential: "Very High",
         intent: "Commercial",
         intentExplanation: "Users are comparing options before making a purchase decision",
@@ -332,13 +504,14 @@ async function getGoogleTrendsData(businessType, businessLocation) {
         pageTypeReason: "Best for capturing local search traffic",
         valueExplanation: `This keyword targets customers actively looking for the best ${businessType} in ${city}.`
       },
+      // Primary location keyword
       {
         keyword: `${businessType} ${city} ${stateAbbrev}`,
         category: 'location_based',
         priority: 9,
         searchVolume: "High",
         competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} ${city} ${stateAbbrev}`, businessType, businessLocation),
+        contentIdea: `Create a local landing page optimized for ${city} customers`,
         difficulty: "Medium",
         potential: "Very High",
         intent: "Transactional",
@@ -351,33 +524,15 @@ async function getGoogleTrendsData(businessType, businessLocation) {
         pageTypeReason: "Optimized for local search intent",
         valueExplanation: `This keyword captures customers searching for ${businessType} services in your exact location.`
       },
-      {
-        keyword: `${businessType} near me`,
-        category: 'trending_search',
-        priority: 8,
-        searchVolume: "Very High",
-        competition: "High",
-        contentIdea: generateContentIdea(`${businessType} near me`, businessType, businessLocation),
-        difficulty: "High",
-        potential: "Very High",
-        intent: "Transactional",
-        intentExplanation: "Users with 'near me' searches have immediate intent to find a local business",
-        buyerReadiness: "High",
-        difficultyScore: 7,
-        difficultyLabel: "High",
-        difficultyExplanation: "Very competitive but high-value keyword",
-        pageType: "Local Landing Page",
-        pageTypeReason: "Captures 'near me' search traffic with local optimization",
-        valueExplanation: `This high-volume keyword attracts customers looking for immediate ${businessType} services nearby.`
-      },
+      // ONE price modifier keyword (affordable/cheap/budget - pick ONE)
       {
         keyword: `affordable ${businessType} ${city}`,
         category: 'location_based',
-        priority: 8,
-        searchVolume: "Medium-High",
+        priority: 7,
+        searchVolume: "Medium",
         competition: "Medium",
-        contentIdea: generateContentIdea(`affordable ${businessType} ${city}`, businessType, businessLocation),
-        difficulty: "Medium",
+        contentIdea: `Create a pricing page showcasing your competitive rates in ${city}`,
+        difficulty: "Easy",
         potential: "High",
         intent: "Commercial",
         intentExplanation: "Price-conscious customers comparing options",
@@ -388,32 +543,14 @@ async function getGoogleTrendsData(businessType, businessLocation) {
         pageType: "Pricing Page",
         pageTypeReason: "Perfect for showcasing competitive pricing",
         valueExplanation: `Attracts budget-conscious customers in ${city} looking for value.`
-      },
-      {
-        keyword: `${businessType} services ${city}`,
-        category: 'service_based',
-        priority: 8,
-        searchVolume: "High",
-        competition: "Medium",
-        contentIdea: generateContentIdea(`${businessType} services ${city}`, businessType, businessLocation),
-        difficulty: "Medium",
-        potential: "High",
-        intent: "Commercial",
-        intentExplanation: "Users researching available services in their area",
-        buyerReadiness: "Medium",
-        difficultyScore: 5,
-        difficultyLabel: "Medium",
-        difficultyExplanation: "Standard local service keyword",
-        pageType: "Service Page",
-        pageTypeReason: "Ideal for listing all services with local optimization",
-        valueExplanation: `This keyword helps customers discover your ${businessType} services in ${city}.`
       }
     ];
     
-    return trendingKeywords;
+    console.log(`📍 Generated ${coreKeywords.length} core keywords`);
+    return coreKeywords;
     
   } catch (error) {
-    console.error("Error generating trending keywords:", error);
+    console.error("Error generating core keywords:", error);
     return [];
   }
 }
@@ -443,10 +580,10 @@ function getStateAbbreviation(state) {
   return abbrev || state;
 }
 
-// Generate AI-powered keyword suggestions
-async function generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl) {
+// Generate AI-powered keyword suggestions with business context awareness
+async function generateAIKeywordSuggestions(businessType, businessLocation, websiteUrl, businessContext) {
   try {
-    console.log("🧠 Generating AI keyword suggestions...");
+    console.log("🧠 Generating AI keyword suggestions with business context...");
     
     // Parse location - get city and state separately
     const locationParts = businessLocation.split(',').map(p => p.trim());
@@ -454,38 +591,70 @@ async function generateAIKeywordSuggestions(businessType, businessLocation, webs
     const state = locationParts[1] || '';
     const stateAbbrev = getStateAbbreviation(state);
     
-    const prompt = `Generate 8 highly relevant, searchable keywords for a ${businessType} business in ${city}, ${stateAbbrev}. 
+    // Build context-aware prompt based on B2B vs B2C
+    const serviceExamples = businessContext.exampleServices?.join(', ') || 'various specialized services';
+    const nicheOrSituationExamples = businessContext.isB2B 
+      ? (businessContext.exampleNiche?.join(', ') || 'small business, local business')
+      : (businessContext.exampleSituations?.join(', ') || 'emergency, same day');
     
-    CRITICAL REQUIREMENTS:
-    1. AT LEAST 6 out of 8 keywords MUST include the location "${city}" or "${stateAbbrev}" in them
-    2. Keywords must be ones people actually search for in Google
-    3. Focus on keywords that will bring LOCAL customers to this business
-    
-    Keyword categories to include:
-    1. Location-based (PRIORITY - at least 4 keywords): "${businessType} ${city}", "best ${businessType} ${city}", "${businessType} near ${city}"
-    2. Service + Location: "${businessType} services ${city}", "professional ${businessType} ${city}"
-    3. Problem-solving + Location: "affordable ${businessType} ${city}", "emergency ${businessType} ${city}"
-    4. Comparison + Location: "top rated ${businessType} ${city}", "best ${businessType} in ${city} ${stateAbbrev}"
-    
-    DO NOT INCLUDE:
-    - Generic keywords without location (like just "${businessType} tips" or "${businessType} 2025")
-    - Made-up or artificial terms
-    - Keywords that are too broad (like just "${businessType}")
-    - Any keyword they might already rank for on their homepage
-    
-    For each keyword, include:
-    - intent: "Transactional" | "Commercial" | "Informational" | "Navigational"
-    - intentExplanation: Brief explanation of why this intent
-    - buyerReadiness: "High" | "Medium" | "Low"
-    - difficultyScore: 1-10 (1=easy, 10=hard)
-    - difficultyLabel: "Easy" | "Medium" | "Hard"
-    - difficultyExplanation: Brief explanation
-    - pageType: "Service Page" | "Local Landing Page" | "Blog Article" | "Pricing Page" | "Comparison Page" | "FAQ Page"
-    - pageTypeReason: Why this page type is recommended
-    - valueExplanation: 1-2 sentences on why this keyword matters for attracting local customers
-    
-    Return ONLY a valid JSON array with this exact format:
-    [{"keyword": "${businessType} ${city} ${stateAbbrev}", "category": "location_based", "priority": 9, "contentIdea": "Create a local landing page targeting ${city} customers", "difficulty": "Medium", "potential": "High", "intent": "Transactional", "intentExplanation": "Users searching with location are ready to buy", "buyerReadiness": "High", "difficultyScore": 5, "difficultyLabel": "Medium", "difficultyExplanation": "Local keyword with moderate competition", "pageType": "Local Landing Page", "pageTypeReason": "Best for capturing local search traffic", "valueExplanation": "This keyword targets customers actively looking for ${businessType} in ${city}."}]`;
+    const prompt = `Generate 10 DIVERSE keyword opportunities for a ${businessType} business in ${city}, ${stateAbbrev}.
+
+BUSINESS CONTEXT: This is a ${businessContext.description} business.
+
+CRITICAL RULES - FOLLOW EXACTLY:
+1. Each keyword MUST target a DIFFERENT search intent - NO SYNONYMS or variations
+2. DO NOT generate multiple "quality" keywords (pick ONE: best OR top OR top-rated - NOT all three)
+3. DO NOT generate multiple "price" keywords (pick ONE: affordable OR cheap OR budget - NOT all three)
+4. At least 8 of 10 keywords must include "${city}" or "${stateAbbrev}"
+5. Keywords must be things real people actually search for
+
+GENERATE EXACTLY ONE KEYWORD FOR EACH CATEGORY:
+
+1. **Service-Specific** (3 keywords): Different services a ${businessType} offers
+   Examples for ${businessType}: ${serviceExamples}
+   Format: "[specific service] ${city}" - e.g., "${serviceExamples.split(',')[0]?.trim() || 'specific service'} ${city}"
+
+2. **${businessContext.isB2B ? 'Industry-Niche' : 'Customer Situation'}** (2 keywords): ${businessContext.isB2B ? 'Industries that hire ' + businessType : 'Situations when customers need ' + businessType}
+   Examples: ${nicheOrSituationExamples}
+   ${businessContext.isB2B ? `Format: "[industry] ${businessType} ${city}" - targeting specific client industries` : `Format: "[situation] ${businessType} ${city}" - targeting customer needs`}
+
+3. **Question Keywords** (2 keywords): Questions people ask about ${businessType}
+   Format: "how much does [service] cost ${city}", "how to find [service] ${city}"
+
+4. **Long-Tail Specific** (2 keywords): Very specific 4-5 word phrases with lower competition
+   Format: Unique, specific searches that competitors aren't targeting
+
+5. **Urgency/Timing** (1 keyword): Time-sensitive searches
+   Format: "same day ${businessType} ${city}" or "emergency ${businessType} ${city}"
+
+DO NOT GENERATE:
+- "best ${businessType}" variations (I already have this)
+- "top rated ${businessType}" (synonym of best)
+- "top ${businessType}" (synonym of best)  
+- "affordable ${businessType}" variations (I already have this)
+- "cheap ${businessType}" (synonym of affordable)
+- "budget ${businessType}" (synonym of affordable)
+- Generic keywords like "${businessType} tips" or "${businessType} near me"
+- Any nonsensical combinations that don't make sense for a ${businessType}
+
+Return ONLY a valid JSON array. Each object must have:
+{
+  "keyword": "the search term with location",
+  "category": "service_based" | "long_tail" | "problem_solving" | "comparison" | "trending_search",
+  "priority": 6-9,
+  "contentIdea": "Brief content strategy",
+  "difficulty": "Easy" | "Medium" | "Hard",
+  "potential": "Medium" | "High" | "Very High",
+  "intent": "Transactional" | "Commercial" | "Informational",
+  "intentExplanation": "Why this intent",
+  "buyerReadiness": "High" | "Medium" | "Low",
+  "difficultyScore": 3-7,
+  "difficultyLabel": "Easy" | "Medium" | "Hard",
+  "difficultyExplanation": "Brief explanation",
+  "pageType": "Service Page" | "Local Landing Page" | "Blog Article" | "FAQ Page",
+  "pageTypeReason": "Why this page type",
+  "valueExplanation": "Why this keyword matters"
+}`;
 
     const response = await fetch('https://api.openai.com/v1/chat/completions', {
       method: 'POST',
@@ -494,10 +663,16 @@ async function generateAIKeywordSuggestions(businessType, businessLocation, webs
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        model: 'gpt-3.5-turbo',
-        messages: [{ role: 'user', content: prompt }],
-        max_tokens: 2500,
-        temperature: 0.5
+        model: 'gpt-4o-mini',
+        messages: [
+          {
+            role: 'system',
+            content: `You are an SEO expert generating diverse keyword opportunities. You NEVER generate synonym variations of the same keyword. Each keyword you generate must target a genuinely different search intent. You understand the difference between B2B businesses (that serve other businesses) and B2C businesses (that serve consumers directly).`
+          },
+          { role: 'user', content: prompt }
+        ],
+        max_tokens: 3000,
+        temperature: 0.7
       })
     });
 
@@ -515,102 +690,105 @@ async function generateAIKeywordSuggestions(businessType, businessLocation, webs
     // Clean and parse JSON response
     const cleanedResponse = aiResponse.trim().replace(/```json\n?/g, '').replace(/```\n?/g, '');
     const suggestions = JSON.parse(cleanedResponse);
-    console.log(`🧠 AI generated ${suggestions.length} keyword suggestions`);
+    console.log(`🧠 AI generated ${suggestions.length} diverse keyword suggestions`);
     
     return suggestions;
     
   } catch (error) {
     console.error("❌ AI keyword generation error:", error);
-    // Return fallback suggestions with LOCATION if AI fails
+    // Return diverse fallback suggestions if AI fails
     const locationParts = businessLocation.split(',').map(p => p.trim());
     const city = locationParts[0] || '';
     const stateAbbrev = getStateAbbreviation(locationParts[1] || '');
     
+    // Get service examples for this business type
+    const services = businessContext?.exampleServices || ['services', 'consultation', 'repair'];
+    
     return [
       {
-        keyword: `${businessType} ${city}`,
-        category: 'location_based',
-        priority: 9,
-        contentIdea: `Create a local landing page for ${businessType} in ${city}`,
+        keyword: `${services[0] || businessType} ${city}`,
+        category: 'service_based',
+        priority: 8,
+        contentIdea: `Create a dedicated service page for ${services[0]} in ${city}`,
         difficulty: "Medium",
         potential: "High",
-        intent: "Transactional",
-        intentExplanation: "Users searching with location are ready to contact a business",
+        intent: "Commercial",
+        intentExplanation: "Users looking for specific services",
         buyerReadiness: "High",
         difficultyScore: 5,
         difficultyLabel: "Medium",
-        difficultyExplanation: "Local keyword with moderate competition",
-        pageType: "Local Landing Page",
-        pageTypeReason: "Best for capturing local search traffic",
-        valueExplanation: `This keyword targets customers actively looking for ${businessType} in ${city}.`
+        difficultyExplanation: "Specific service keyword with moderate competition",
+        pageType: "Service Page",
+        pageTypeReason: "Best for highlighting specific service offerings",
+        valueExplanation: `Targets customers specifically looking for ${services[0]} services.`
       },
       {
-        keyword: `best ${businessType} in ${city}`,
-        category: 'location_based',
-        priority: 9,
-        contentIdea: `Create a page showcasing why you're the best ${businessType} in ${city}`,
-        difficulty: "Medium",
-        potential: "High",
-        intent: "Commercial",
-        intentExplanation: "Users comparing options before choosing",
-        buyerReadiness: "High",
-        difficultyScore: 6,
-        difficultyLabel: "Medium",
-        difficultyExplanation: "Competitive but valuable local keyword",
-        pageType: "Local Landing Page",
-        pageTypeReason: "Perfect for 'best' comparison searches",
-        valueExplanation: `Captures customers comparing ${businessType} options in ${city}.`
-      },
-      {
-        keyword: `${businessType} services ${city} ${stateAbbrev}`,
+        keyword: `${services[1] || 'professional ' + businessType} ${city}`,
         category: 'service_based',
-        priority: 8,
-        contentIdea: `Create a comprehensive services page for ${city} customers`,
+        priority: 7,
+        contentIdea: `Create content about ${services[1]} offerings in ${city}`,
         difficulty: "Medium",
         potential: "High",
         intent: "Commercial",
-        intentExplanation: "Users researching services in their area",
+        intentExplanation: "Users researching specific services",
         buyerReadiness: "Medium",
         difficultyScore: 5,
         difficultyLabel: "Medium",
-        difficultyExplanation: "Standard local service keyword",
+        difficultyExplanation: "Service-specific keyword",
         pageType: "Service Page",
-        pageTypeReason: "Ideal for listing all services with local optimization",
-        valueExplanation: `Helps customers discover your ${businessType} services in ${city}.`
+        pageTypeReason: "Highlights specific service",
+        valueExplanation: `Captures searches for ${services[1]} services.`
       },
       {
-        keyword: `affordable ${businessType} ${city}`,
+        keyword: `how much does ${businessType} cost ${city}`,
         category: 'problem_solving',
         priority: 7,
-        contentIdea: `Create a pricing/value page showing your affordable ${businessType} options`,
+        contentIdea: `Create a pricing guide or FAQ page about ${businessType} costs`,
         difficulty: "Easy",
         potential: "High",
-        intent: "Commercial",
-        intentExplanation: "Price-conscious customers looking for value",
+        intent: "Informational",
+        intentExplanation: "Users researching prices before contacting",
         buyerReadiness: "Medium",
         difficultyScore: 4,
         difficultyLabel: "Easy",
-        difficultyExplanation: "Less competitive than 'best' keywords",
-        pageType: "Pricing Page",
-        pageTypeReason: "Perfect for showcasing competitive pricing",
-        valueExplanation: `Attracts budget-conscious customers in ${city}.`
+        difficultyExplanation: "Question-based keywords have lower competition",
+        pageType: "FAQ Page",
+        pageTypeReason: "Perfect for answering pricing questions",
+        valueExplanation: `Captures price-research traffic and builds trust.`
       },
       {
-        keyword: `${businessType} near ${city}`,
-        category: 'location_based',
+        keyword: `emergency ${businessType} ${city}`,
+        category: 'trending_search',
         priority: 8,
-        contentIdea: `Create a page targeting nearby areas around ${city}`,
+        contentIdea: `Create an emergency services page with quick contact options`,
         difficulty: "Medium",
         potential: "High",
         intent: "Transactional",
-        intentExplanation: "Users looking for nearby services",
+        intentExplanation: "Users with urgent needs ready to hire immediately",
         buyerReadiness: "High",
         difficultyScore: 5,
         difficultyLabel: "Medium",
-        difficultyExplanation: "Good for capturing 'near' search traffic",
+        difficultyExplanation: "Urgency keywords have high conversion",
         pageType: "Local Landing Page",
-        pageTypeReason: "Captures broader geographic searches",
-        valueExplanation: `Expands your reach to customers searching near ${city}.`
+        pageTypeReason: "Emergency searches need quick information",
+        valueExplanation: `Captures high-intent emergency searches.`
+      },
+      {
+        keyword: `${businessType} for small business ${city}`,
+        category: 'long_tail',
+        priority: 6,
+        contentIdea: `Create content targeting small business owners in ${city}`,
+        difficulty: "Easy",
+        potential: "Medium",
+        intent: "Commercial",
+        intentExplanation: "Small businesses looking for services",
+        buyerReadiness: "Medium",
+        difficultyScore: 3,
+        difficultyLabel: "Easy",
+        difficultyExplanation: "Long-tail keyword with less competition",
+        pageType: "Service Page",
+        pageTypeReason: "Can highlight small business packages",
+        valueExplanation: `Targets the small business market segment.`
       }
     ];
   }
