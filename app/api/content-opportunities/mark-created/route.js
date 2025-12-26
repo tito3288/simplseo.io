@@ -1,6 +1,8 @@
 import { NextResponse } from "next/server";
 import { db } from "../../../lib/firebaseAdmin";
 
+const SCRAPE_BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
 export async function POST(req) {
   try {
     const { userId, keyword, pageUrl, opportunityId } = await req.json();
@@ -55,10 +57,52 @@ export async function POST(req) {
 
     console.log(`✅ Created opportunity marked: ${oppId} for ${userId}`);
 
+    // Auto-crawl the new page and add to pageContentCache
+    // This allows AI chatbots to know about the new page content
+    let pageCrawled = false;
+    try {
+      console.log(`🔍 Auto-crawling new page: ${normalizedUrl}`);
+      
+      const scrapeRes = await fetch(`${SCRAPE_BASE_URL}/api/scrape-content`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ pageUrl: normalizedUrl }),
+      });
+
+      if (scrapeRes.ok) {
+        const scrapeJson = await scrapeRes.json();
+        
+        if (scrapeJson?.data) {
+          // Save to pageContentCache so chatbots can access it
+          const { cachePageContent } = await import("../../../lib/firestoreMigrationHelpers");
+          await cachePageContent(userId, normalizedUrl, {
+            ...scrapeJson.data,
+            source: "ai-created",  // Mark as AI-created page
+            isNavLink: false,
+            crawlOrder: null,
+            createdFromKeyword: keyword.trim(),  // Track which keyword it was created for
+          });
+          
+          pageCrawled = true;
+          console.log(`✅ New AI-created page cached: ${normalizedUrl}`);
+        }
+      } else {
+        console.warn(`⚠️ Failed to scrape new page (status ${scrapeRes.status}): ${normalizedUrl}`);
+      }
+    } catch (crawlError) {
+      // Don't fail the whole operation if crawling fails
+      // The page might not be live yet
+      console.warn(`⚠️ Could not auto-crawl new page: ${crawlError.message}`);
+    }
+
     return NextResponse.json({
       success: true,
       opportunityId: oppId,
       message: "Opportunity marked as created",
+      pageCrawled: pageCrawled,
+      crawlNote: pageCrawled 
+        ? "Page content has been added to your website data for AI chatbots." 
+        : "Page could not be crawled yet. It may not be live. AI chatbots will learn about it once it's indexed.",
     });
   } catch (error) {
     console.error("❌ Error marking opportunity as created:", error);

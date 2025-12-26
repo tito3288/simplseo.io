@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw, Plus, RefreshCw } from "lucide-react";
+import { Target, MapPin, Clock, Wrench, Search, Filter, TrendingUp, AlertTriangle, ChevronDown, CheckCircle, ExternalLink, Sparkles, FileText, Lightbulb, Loader2, Copy, Check, X, RotateCcw, Plus, RefreshCw, LayoutGrid } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { getFocusKeywords, saveFocusKeywords } from "../lib/firestoreHelpers";
 import { useOnboarding } from "../contexts/OnboardingContext";
@@ -63,8 +63,22 @@ export default function GenericKeywordsPage() {
   const [isGeneratingOutline, setIsGeneratingOutline] = useState(false);
   const [copiedField, setCopiedField] = useState(null);
   
-  // Cache for content outlines (persists during session)
-  const [outlineCache, setOutlineCache] = useState(new Map());
+  // Cache for content outlines (persists in sessionStorage)
+  const [outlineCache, setOutlineCache] = useState(() => {
+    // Initialize from sessionStorage on mount
+    if (typeof window !== 'undefined') {
+      try {
+        const stored = sessionStorage.getItem('contentOutlineCache');
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          return new Map(Object.entries(parsed));
+        }
+      } catch (e) {
+        console.log('Failed to load outline cache from sessionStorage');
+      }
+    }
+    return new Map();
+  });
   
   // Skipped keywords state
   const [skippedKeywords, setSkippedKeywords] = useState([]);
@@ -77,9 +91,105 @@ export default function GenericKeywordsPage() {
   // Refresh keywords state
   const [isRefreshing, setIsRefreshing] = useState(false);
   
+  // Page type wireframe guide state
+  const [selectedWireframe, setSelectedWireframe] = useState(null);
+  
   // Settling period constants
   const SETTLING_DAYS_REQUIRED = 30;
   const SETTLING_IMPRESSIONS_REQUIRED = 50;
+
+  // Page type wireframe configurations
+  const pageTypeWireframes = {
+    "Service Page": {
+      label: "Service Page",
+      color: "from-blue-500 to-blue-600",
+      tips: [
+        "Hero section with strong headline & CTA",
+        "Service features in 2-3 column grid",
+        "Benefits/why choose us section",
+        "Testimonials for social proof",
+        "Clear pricing or quote CTA",
+        "Contact section at bottom"
+      ]
+    },
+    "Local Landing Page": {
+      label: "Landing Page",
+      color: "from-purple-500 to-purple-600",
+      tips: [
+        "Minimal navigation (focus on conversion)",
+        "Hero with location-specific headline",
+        "Trust badges & local reviews",
+        "Single focused CTA throughout",
+        "Local map or service area",
+        "Urgency elements (limited time offers)"
+      ]
+    },
+    "Blog Article": {
+      label: "Blog Post",
+      color: "from-green-500 to-green-600",
+      tips: [
+        "Engaging title with keyword",
+        "Table of contents for long posts",
+        "Subheadings every 200-300 words",
+        "Images/diagrams to break up text",
+        "Author bio & publish date",
+        "Related posts at bottom"
+      ]
+    },
+    "FAQ Page": {
+      label: "FAQ Page",
+      color: "from-amber-500 to-amber-600",
+      tips: [
+        "Accordion-style Q&A sections",
+        "Group questions by category",
+        "Keep answers concise but complete",
+        "Link to relevant service pages",
+        "Add schema markup for rich results",
+        "Include contact CTA for unanswered questions"
+      ]
+    },
+    "Pricing Page": {
+      label: "Pricing Page",
+      color: "from-rose-500 to-rose-600",
+      tips: [
+        "Clear pricing tiers (if applicable)",
+        "Comparison table for packages",
+        "Highlight most popular option",
+        "Money-back guarantee badge",
+        "FAQ section for pricing questions",
+        "Strong CTA for each tier"
+      ]
+    }
+  };
+
+  // Persist outline cache to sessionStorage whenever it changes
+  useEffect(() => {
+    if (outlineCache.size > 0) {
+      try {
+        const cacheObj = Object.fromEntries(outlineCache);
+        sessionStorage.setItem('contentOutlineCache', JSON.stringify(cacheObj));
+      } catch (e) {
+        console.log('Failed to save outline cache to sessionStorage');
+      }
+    }
+  }, [outlineCache]);
+
+  // Helper function to get color gradient for page types (matches wireframe colors)
+  const getPageTypeColor = (pageType) => {
+    const colorMap = {
+      'Service Page': 'from-blue-500 to-blue-600',
+      'Local Landing Page': 'from-purple-500 to-purple-600',
+      'Blog Article': 'from-green-500 to-green-600',
+      'FAQ Page': 'from-amber-500 to-amber-600',
+      'Pricing Page': 'from-rose-500 to-rose-600',
+      // Fallbacks for other page types
+      'Landing Page': 'from-purple-500 to-purple-600',
+      'Blog Post': 'from-green-500 to-green-600',
+      'FAQ': 'from-amber-500 to-amber-600',
+      'Service': 'from-blue-500 to-blue-600',
+    };
+    return colorMap[pageType] || 'from-violet-500 to-purple-600';
+  };
 
   // Helper function to get display name for page types
   const getPageTypeDisplayName = (pageType) => {
@@ -778,6 +888,7 @@ export default function GenericKeywordsPage() {
           businessLocation: data?.businessLocation,
           businessName: data?.businessName,
           websiteUrl: data?.websiteUrl,
+          userId: user?.id, // Pass userId to fetch user's existing pages
         }),
       });
 
@@ -859,20 +970,23 @@ export default function GenericKeywordsPage() {
     return ranked;
   }, [opportunities]);
 
+  // Set of skipped keyword names for quick lookup (must be defined first)
+  const skippedKeywordSet = useMemo(() => {
+    return new Set(skippedKeywords.map(sk => sk.keyword.toLowerCase()));
+  }, [skippedKeywords]);
+
+  // Top 3 opportunities - excluding skipped keywords
   const topOpportunities = useMemo(
-    () => sortedOpportunities.slice(0, 3),
-    [sortedOpportunities]
+    () => sortedOpportunities
+      .filter(opp => !skippedKeywordSet.has(opp.keyword.toLowerCase()))
+      .slice(0, 3),
+    [sortedOpportunities, skippedKeywordSet]
   );
 
   // Set of top 3 keyword names for filtering from the main list
   const topOpportunityKeywords = useMemo(() => {
     return new Set(topOpportunities.map(opp => opp.keyword.toLowerCase()));
   }, [topOpportunities]);
-
-  // Set of skipped keyword names for quick lookup
-  const skippedKeywordSet = useMemo(() => {
-    return new Set(skippedKeywords.map(sk => sk.keyword.toLowerCase()));
-  }, [skippedKeywords]);
 
   const filteredOpportunities = useMemo(() => {
     return sortedOpportunities.filter((opp) => {
@@ -1027,6 +1141,15 @@ export default function GenericKeywordsPage() {
               </div>
             </div>
             <div className="flex flex-wrap gap-2 justify-end">
+              {/* Page Type Badge - Color matches wireframe */}
+              {opportunity.pageType?.type && (
+                <Badge className={cn(
+                  "bg-gradient-to-r text-white border-0 font-medium",
+                  getPageTypeColor(opportunity.pageType.type)
+                )}>
+                   {opportunity.pageType.type}
+                </Badge>
+              )}
               {/* Intent Badge */}
               {opportunity.intent?.category && (
                 <Badge className={getIntentColor(opportunity.intent.category)}>
@@ -1195,7 +1318,7 @@ export default function GenericKeywordsPage() {
 
           {/* Action Buttons */}
           <div className="pt-4 border-t border-border flex flex-wrap gap-2">
-            {/* Generate Content Outline Button */}
+            {/* Generate Content Outline Button - Disabled if already created */}
             <Button
               variant="default"
               size="sm"
@@ -1203,7 +1326,8 @@ export default function GenericKeywordsPage() {
                 setContentOutlineDialog({ open: true, opportunity });
                 generateContentOutline(opportunity);
               }}
-              className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700"
+              disabled={createdOpportunities.some(co => co.keyword.toLowerCase() === opportunity.keyword.toLowerCase())}
+              className="gap-2 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Sparkles className="w-4 h-4" />
               Generate Content Outline
@@ -1605,64 +1729,6 @@ export default function GenericKeywordsPage() {
         );
       })()}
 
-      {/* Skipped Keywords Section */}
-      {skippedKeywords.length > 0 && (
-        <Card className="mb-6 border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <div>
-                <CardTitle className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
-                  <X className="w-5 h-5" />
-                  Skipped Keywords ({skippedKeywords.length})
-                </CardTitle>
-                <CardDescription className="text-gray-600 dark:text-gray-400">
-                  Keywords you&apos;ve chosen to skip. You can restore them anytime.
-                </CardDescription>
-              </div>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSkipped(!showSkipped)}
-                className="text-gray-600 dark:text-gray-400"
-              >
-                {showSkipped ? "Hide" : "Show"}
-                <ChevronDown className={cn("w-4 h-4 ml-1 transition-transform", showSkipped && "rotate-180")} />
-              </Button>
-            </div>
-          </CardHeader>
-          {showSkipped && (
-            <CardContent>
-              <div className="space-y-2">
-                {skippedKeywords.map((skipped, index) => (
-                  <div
-                    key={skipped.id || index}
-                    className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                  >
-                    <div>
-                      <p className="font-medium text-gray-700 dark:text-gray-300">
-                        {skipped.keyword}
-                      </p>
-                      <p className="text-xs text-gray-500 dark:text-gray-400">
-                        Skipped {new Date(skipped.skippedAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    <Button
-                      variant="outline"
-                      size="sm"
-                      onClick={() => handleRestoreKeyword(skipped.keyword)}
-                      className="gap-2"
-                    >
-                      <RotateCcw className="w-4 h-4" />
-                      Restore
-                    </Button>
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          )}
-        </Card>
-      )}
-
       {/* Keyword Cannibalization Analysis */}
       {cannibalizationAnalysis && cannibalizationAnalysis.totalCannibalized > 0 && (
         <Card className="mb-6 border-orange-200 bg-orange-50 dark:bg-orange-900/20">
@@ -1731,6 +1797,217 @@ export default function GenericKeywordsPage() {
         </Card>
       ) : (
         <>
+          {/* Page Type Visual Guide */}
+          <Card className="mb-6 border-border/50 bg-gradient-to-br from-slate-50 to-slate-100 dark:from-slate-900/50 dark:to-slate-800/50">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-lg flex items-center gap-2">
+                <LayoutGrid className="w-5 h-5 text-primary" />
+                Page Type Visual Guide
+              </CardTitle>
+              <CardDescription>
+                Click a page type to see layout tips. Your recommended pages are highlighted.
+              </CardDescription>
+            </CardHeader>
+            <CardContent>
+              <div className="flex flex-wrap justify-center gap-4">
+                {Object.entries(pageTypeWireframes).map(([type, config]) => {
+                  // Check if this page type is in the top opportunities
+                  const isHighlighted = topOpportunities.some(
+                    opp => opp.pageType?.type === type
+                  );
+                  const isSelected = selectedWireframe === type;
+                  
+                  return (
+                    <button
+                      key={type}
+                      onClick={() => setSelectedWireframe(isSelected ? null : type)}
+                      className={cn(
+                        "relative group transition-all duration-200",
+                        isSelected && "scale-105",
+                        isHighlighted && !isSelected && "ring-2 ring-primary ring-offset-2 rounded-xl"
+                      )}
+                    >
+                      {/* Wireframe Visual */}
+                      <div className={cn(
+                        "w-28 h-36 md:w-40 md:h-48 rounded-xl p-2 md:p-3 bg-gradient-to-br shadow-md transition-all",
+                        config.color,
+                        isSelected ? "shadow-lg" : "group-hover:shadow-lg group-hover:scale-[1.02]"
+                      )}>
+                        {/* Page Type Label */}
+                        <div className="text-[10px] md:text-xs font-bold text-white/90 mb-1.5 md:mb-2 text-center uppercase tracking-wide">
+                          {config.label}
+                        </div>
+                        
+                        {/* Wireframe Content */}
+                        <div className="bg-white/20 rounded-lg p-1.5 md:p-2 h-[calc(100%-20px)] md:h-[calc(100%-28px)] flex flex-col gap-1 md:gap-1.5">
+                          {/* Nav bar */}
+                          <div className="h-1.5 md:h-2 bg-white/40 rounded-full w-full" />
+                          
+                          {type === "Service Page" && (
+                            <>
+                              <div className="h-6 md:h-10 bg-amber-300/80 rounded w-full" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-3/4" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-1/2" />
+                              <div className="flex gap-0.5 md:gap-1 flex-1">
+                                <div className="flex-1 bg-white/30 rounded" />
+                                <div className="flex-1 bg-white/30 rounded" />
+                                <div className="flex-1 bg-white/30 rounded" />
+                              </div>
+                              <div className="h-2.5 md:h-4 bg-emerald-400/80 rounded w-1/2 mx-auto" />
+                            </>
+                          )}
+                          
+                          {type === "Local Landing Page" && (
+                            <>
+                              <div className="h-8 md:h-12 bg-amber-300/80 rounded w-full" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-2/3 mx-auto" />
+                              <div className="h-3 md:h-5 bg-emerald-400/80 rounded w-2/3 mx-auto" />
+                              <div className="flex gap-0.5 md:gap-1">
+                                <div className="flex-1 h-3 md:h-5 bg-white/30 rounded" />
+                                <div className="flex-1 h-3 md:h-5 bg-white/30 rounded" />
+                              </div>
+                              <div className="h-2 md:h-3 bg-white/30 rounded w-full" />
+                            </>
+                          )}
+                          
+                          {type === "Blog Article" && (
+                            <>
+                              <div className="h-5 md:h-8 bg-amber-300/80 rounded w-full" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-full" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-full" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-3/4" />
+                              <div className="h-1.5 md:h-2 bg-white/40 rounded w-1/2" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-full" />
+                              <div className="h-1 md:h-1.5 bg-white/50 rounded w-5/6" />
+                            </>
+                          )}
+                          
+                          {type === "FAQ Page" && (
+                            <>
+                              <div className="h-3 md:h-5 bg-amber-300/80 rounded w-2/3 mx-auto" />
+                              <div className="space-y-0.5 md:space-y-1 flex-1">
+                                <div className="h-2.5 md:h-4 bg-white/40 rounded w-full" />
+                                <div className="h-2.5 md:h-4 bg-white/30 rounded w-full" />
+                                <div className="h-2.5 md:h-4 bg-white/40 rounded w-full" />
+                                <div className="h-2.5 md:h-4 bg-white/30 rounded w-full" />
+                              </div>
+                              <div className="h-2 md:h-3 bg-emerald-400/80 rounded w-1/2 mx-auto" />
+                            </>
+                          )}
+                          
+                          {type === "Pricing Page" && (
+                            <>
+                              <div className="h-2.5 md:h-4 bg-amber-300/80 rounded w-2/3 mx-auto" />
+                              <div className="flex gap-0.5 md:gap-1 flex-1">
+                                <div className="flex-1 bg-white/30 rounded flex flex-col items-center justify-end pb-0.5 md:pb-1">
+                                  <div className="w-2/3 h-1.5 md:h-2.5 bg-white/50 rounded" />
+                                </div>
+                                <div className="flex-1 bg-emerald-400/50 rounded flex flex-col items-center justify-end pb-0.5 md:pb-1">
+                                  <div className="w-2/3 h-1.5 md:h-2.5 bg-white/70 rounded" />
+                                </div>
+                                <div className="flex-1 bg-white/30 rounded flex flex-col items-center justify-end pb-0.5 md:pb-1">
+                                  <div className="w-2/3 h-1.5 md:h-2.5 bg-white/50 rounded" />
+                                </div>
+                              </div>
+                            </>
+                          )}
+                        </div>
+                      </div>
+                      
+                      {/* Highlighted indicator */}
+                      {isHighlighted && (
+                        <div className="absolute -top-2 -right-2 md:-top-2.5 md:-right-2.5 bg-primary text-primary-foreground text-[9px] md:text-xs font-bold px-1.5 md:px-2 py-0.5 md:py-1 rounded-full">
+                          ★
+                        </div>
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+              
+              {/* Layout Tips Panel */}
+              {selectedWireframe && pageTypeWireframes[selectedWireframe] && (
+                <div className="mt-4 p-4 bg-white dark:bg-slate-800 rounded-xl border border-border shadow-sm">
+                  <div className="flex items-center gap-2 mb-3">
+                    <div className={cn(
+                      "w-3 h-3 rounded-full bg-gradient-to-br",
+                      pageTypeWireframes[selectedWireframe].color
+                    )} />
+                    <h4 className="font-semibold text-sm">
+                      {pageTypeWireframes[selectedWireframe].label} Layout Tips
+                    </h4>
+                  </div>
+                  <ul className="grid grid-cols-1 md:grid-cols-2 gap-2">
+                    {pageTypeWireframes[selectedWireframe].tips.map((tip, idx) => (
+                      <li key={idx} className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <span className="text-primary mt-0.5">•</span>
+                        <span>{tip}</span>
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Skipped Keywords Section */}
+          {skippedKeywords.length > 0 && (
+            <Card className="mb-6 border-gray-200 bg-gray-50 dark:border-gray-700 dark:bg-gray-800/50">
+              <CardHeader>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <CardTitle className="flex items-center gap-2 text-gray-700 dark:text-gray-300">
+                      <X className="w-5 h-5" />
+                      Skipped Keywords ({skippedKeywords.length})
+                    </CardTitle>
+                    <CardDescription className="text-gray-600 dark:text-gray-400">
+                      Keywords you&apos;ve chosen to skip. You can restore them anytime.
+                    </CardDescription>
+                  </div>
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    onClick={() => setShowSkipped(!showSkipped)}
+                    className="text-gray-600 dark:text-gray-400"
+                  >
+                    {showSkipped ? "Hide" : "Show"}
+                    <ChevronDown className={cn("w-4 h-4 ml-1 transition-transform", showSkipped && "rotate-180")} />
+                  </Button>
+                </div>
+              </CardHeader>
+              {showSkipped && (
+                <CardContent>
+                  <div className="space-y-2">
+                    {skippedKeywords.map((skipped, index) => (
+                      <div
+                        key={skipped.id || index}
+                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                      >
+                        <div>
+                          <p className="font-medium text-gray-700 dark:text-gray-300">
+                            {skipped.keyword}
+                          </p>
+                          <p className="text-xs text-gray-500 dark:text-gray-400">
+                            Skipped {new Date(skipped.skippedAt).toLocaleDateString()}
+                          </p>
+                        </div>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          onClick={() => handleRestoreKeyword(skipped.keyword)}
+                          className="gap-2"
+                        >
+                          <RotateCcw className="w-4 h-4" />
+                          Restore
+                        </Button>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              )}
+            </Card>
+          )}
+
           {topOpportunities.length > 0 && (
             <Card className="mb-6 border-primary/20 shadow-sm">
               <CardHeader className="pb-4">
@@ -2021,6 +2298,24 @@ export default function GenericKeywordsPage() {
                         </ul>
                       </div>
                     )}
+                    {/* CTA Details - Show button text and destination */}
+                    {section.ctaPlacement && (section.ctaText || section.ctaDestination) && (
+                      <div className="mt-3 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800">
+                        <p className="text-xs font-medium text-orange-800 dark:text-orange-200 mb-1">📍 CTA Button:</p>
+                        <div className="flex flex-wrap items-center gap-2">
+                          {section.ctaText && (
+                            <Badge className="bg-orange-100 dark:bg-orange-900/40 text-orange-800 dark:text-orange-200 border-orange-300">
+                              &quot;{section.ctaText}&quot;
+                            </Badge>
+                          )}
+                          {section.ctaDestination && (
+                            <span className="text-xs text-orange-700 dark:text-orange-300">
+                              → Links to: <code className="bg-orange-100 dark:bg-orange-900/40 px-1.5 py-0.5 rounded font-mono">{section.ctaDestination}</code>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
@@ -2060,9 +2355,31 @@ export default function GenericKeywordsPage() {
                   <Label className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 mb-2 block">
                     🔗 Internal Linking Suggestions
                   </Label>
-                  <ul className="text-sm space-y-1">
+                  <ul className="text-sm space-y-2">
                     {contentOutline.internalLinks.map((link, idx) => (
-                      <li key={idx} className="text-cyan-700 dark:text-cyan-300">• {link}</li>
+                      <li key={idx} className="text-cyan-700 dark:text-cyan-300">
+                        {typeof link === 'string' ? (
+                          // Legacy format - just a string
+                          <span>• {link}</span>
+                        ) : (
+                          // New format with url and context
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2">
+                              <span>•</span>
+                              <span className="font-medium">&quot;{link.text}&quot;</span>
+                              <span>→</span>
+                              <code className="bg-cyan-100 dark:bg-cyan-900/40 px-1.5 py-0.5 rounded text-xs font-mono">
+                                {link.url}
+                              </code>
+                            </div>
+                            {link.context && (
+                              <span className="text-xs text-cyan-600 dark:text-cyan-400 ml-4">
+                                {link.context}
+                              </span>
+                            )}
+                          </div>
+                        )}
+                      </li>
                     ))}
                   </ul>
                 </div>
@@ -2100,6 +2417,13 @@ export default function GenericKeywordsPage() {
                     </p>
                   </div>
                 </div>
+              </div>
+
+              {/* AI Disclaimer */}
+              <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 mt-2">
+                <p className="text-xs text-amber-700 dark:text-amber-300 text-center">
+                  ⚠️ <span className="font-medium">Quick heads up:</span> AI can sometimes get things wrong specially at the beginning. When you get your content from SEO Mentor, give it a quick read and feel free to tweak anything that doesn&apos;t sound right for your business!
+                </p>
               </div>
             </div>
           ) : (
@@ -2145,35 +2469,88 @@ export default function GenericKeywordsPage() {
                     const intentInfo = opportunity?.intent;
                     
                     const outlineText = `
-I need to create a new page for my website. Please help me write SEO-optimized content following this content brief. Make sure to naturally incorporate the focus keyword throughout the content, match the search intent, and follow the structure provided.
+**IMPORTANT: Start your response with this exact message (copy it word for word):**
+
+"⚠️ **Quick Reminder:** Give this content a quick read before using it. Feel free to edit anything that doesn't quite fit your business. The more you use SEO Mentor, the smarter it gets. 🚀
+
+📄 **Page Type: ${opportunity?.pageType?.type || 'Service Page'}** - This content is structured as a ${opportunity?.pageType?.type || 'Service Page'}."
 
 ---
 
+Now write the COMPLETE, publish-ready content for a **${opportunity?.pageType?.type || 'Service Page'}**. Write out every section with FULL PARAGRAPHS.
+
+**IMPORTANT FORMATTING RULES - Follow this exact format:**
+
+1. **Label every element** so beginners know what it is:
+   - Use [H1] for the main page title
+   - Use [H2] for section headings
+   - Use [H3] for subheadings within sections
+   - Use [PARAGRAPH] before body text
+   - Use [CTA BUTTON] for call-to-action button text
+   - Use [META TITLE] and [META DESCRIPTION] for SEO fields
+
+2. **Number each section** clearly (Section 1, Section 2, etc.)
+
+3. **Separate sections visually** with divider lines (---)
+
+4. Write in a professional, engaging tone for ${data?.businessName || 'the business'}
+
+**Example format to follow:**
+
+---
+**SECTION 1: Hero/Introduction**
+---
+
+[H1] Your Main Page Title Here
+
+[PARAGRAPH]
+Your introduction paragraph goes here...
+
+[CTA BUTTON] Get Started Today
+
+---
+**SECTION 2: Section Name**
+---
+
+[H2] Section Heading
+
+[PARAGRAPH]
+Section content here...
+
+[H3] Subheading
+
+[PARAGRAPH]
+More content...
+
+---
+
+Now write the content following this format:
+
 ## SEO Content Brief
 
+**Page Type:** ${opportunity?.pageType?.type || 'Service Page'} - Write this content in the style and structure of a ${opportunity?.pageType?.type || 'Service Page'}
 **Focus Keyword:** ${opportunity?.keyword || 'N/A'}
 ${intentInfo ? `**Search Intent:** ${intentInfo.category}${intentInfo.buyerReadiness ? ` (${intentInfo.buyerReadiness} Buyer Readiness)` : ''}` : ''}
 ${data?.businessName ? `**Business:** ${data.businessName}${data?.businessLocation ? ` | ${data.businessLocation}` : ''}` : ''}
 
----
-
-# ${contentOutline.h1}
-
+**Page Title (H1):** ${contentOutline.h1}
 **Meta Title:** ${contentOutline.metaTitle}
 **Meta Description:** ${contentOutline.metaDescription}
-
 **Target Word Count:** ${contentOutline.wordCount}
 
-## Content Sections:
-${contentOutline.sections?.map(s => `
-### ${s.h2}
-${s.description}
-${s.h3s?.length ? `\nSubheadings:\n${s.h3s.map(h3 => `- ${h3}`).join('\n')}` : ''}
-${s.ctaPlacement ? '\n[Add CTA Here]' : ''}
+## Sections to Write:
+${contentOutline.sections?.map((s, index) => `
+**Section ${index + 1}: ${s.h2}**
+- Description: ${s.description}
+${s.h3s?.length ? `- Subheadings (H3s) to include:\n${s.h3s.map(h3 => `  • ${h3}`).join('\n')}` : ''}
+${s.ctaPlacement ? `- Include a CTA button: "${s.ctaText || 'Contact Us'}" → Links to: ${s.ctaDestination || '/contact'}` : ''}
 `).join('\n')}
 
-**Internal Links to Include:**
-${contentOutline.internalLinks?.map(l => `- ${l}`).join('\n')}
+**Internal Links to Include (Use these ACTUAL URLs):**
+${contentOutline.internalLinks?.map(l => {
+  if (typeof l === 'string') return `- ${l}`;
+  return `- Link text: "${l.text}" → URL: ${l.url}${l.context ? ` (${l.context})` : ''}`;
+}).join('\n')}
 `.trim();
                     copyToClipboard(outlineText, 'fullOutline');
                   }}
@@ -2309,9 +2686,18 @@ ${contentOutline.internalLinks?.map(l => `- ${l}`).join('\n')}
                     throw new Error(errorData.error || "Failed to mark as created");
                   }
 
-                  toast.success("Page marked as created!", {
-                    description: "We'll track when this page starts ranking in Google Search Console.",
-                  });
+                  const result = await response.json();
+                  
+                  // Show success message with crawl status
+                  if (result.pageCrawled) {
+                    toast.success("Page marked as created! 🎉", {
+                      description: "Page content added to SEO Mentor's knowledge. We'll track when it starts ranking.",
+                    });
+                  } else {
+                    toast.success("Page marked as created!", {
+                      description: "We'll track when this page starts ranking. Note: The page couldn't be crawled yet (it may not be live). SEO Mentor will learn about it once it's accessible.",
+                    });
+                  }
 
                   // Refresh created opportunities
                   await fetchCreatedOpportunities();

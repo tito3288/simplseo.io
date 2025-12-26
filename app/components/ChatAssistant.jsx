@@ -233,6 +233,8 @@ const ChatAssistant = ({
   const [isExpanded, setIsExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
   const [chatWidth, setChatWidth] = useState(384); // Default width (w-96)
+  const [chatHeight, setChatHeight] = useState(500); // Default height
+  const [isDesktop, setIsDesktop] = useState(false);
   const inputRef = useRef(null);
   const messagesEndRef = useRef(null);
   const fileInputRef = useRef(null);
@@ -486,7 +488,15 @@ const ChatAssistant = ({
     inputRef.current?.focus();
   }, []);
 
-  // Resize functionality
+  // Check if desktop on mount and window resize
+  useEffect(() => {
+    const checkDesktop = () => setIsDesktop(window.innerWidth >= 768);
+    checkDesktop();
+    window.addEventListener('resize', checkDesktop);
+    return () => window.removeEventListener('resize', checkDesktop);
+  }, []);
+
+  // Resize functionality - width and height (desktop only)
   useEffect(() => {
     const handleMouseMove = (e) => {
       if (!isResizing) return;
@@ -497,6 +507,12 @@ const ChatAssistant = ({
       const rightEdge = window.innerWidth - 24; // 24px margin from right edge
       const newWidth = Math.min(Math.max(320, rightEdge - e.clientX), window.innerWidth - 48);
       setChatWidth(newWidth);
+      
+      // Calculate height based on distance from bottom edge of screen (desktop only)
+      // When dragging up, chat gets taller; when dragging down, chat gets shorter
+      const bottomEdge = window.innerHeight - 100; // Account for bottom margin
+      const newHeight = Math.min(Math.max(350, bottomEdge - e.clientY), window.innerHeight - 120);
+      setChatHeight(newHeight);
     };
 
     const handleMouseUp = () => {
@@ -523,8 +539,10 @@ const ChatAssistant = ({
     setIsExpanded(!isExpanded);
     if (!isExpanded) {
       setChatWidth(Math.min(800, window.innerWidth - 48));
+      setChatHeight(Math.min(700, window.innerHeight - 120));
     } else {
       setChatWidth(384);
+      setChatHeight(500);
     }
   };
 
@@ -684,8 +702,11 @@ const ChatAssistant = ({
 
   return (
     <div 
-      className="flex flex-col h-[500px] overflow-hidden rounded-xl bg-white/1 backdrop-blur-md border border-white/10 shadow-md relative"
-      style={{ width: `${chatWidth}px` }}
+      className="flex flex-col overflow-hidden rounded-xl bg-white/1 backdrop-blur-md border border-white/10 shadow-md relative"
+      style={{ 
+        width: `${chatWidth}px`,
+        height: isDesktop ? `${chatHeight}px` : '500px'
+      }}
     >
       <div className="p-3 border-b border-border flex justify-between items-center bg-[#00bf63]/8">
         <div className="flex items-center gap-2">
