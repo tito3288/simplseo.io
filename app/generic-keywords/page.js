@@ -2469,7 +2469,7 @@ export default function GenericKeywordsPage() {
                     const intentInfo = opportunity?.intent;
                     
                     const outlineText = `
-**IMPORTANT: Start your response with this exact message (copy it word for word):**
+**IMPORTANT: Start your FIRST response ONLY with this exact message (do NOT include this reminder in any follow-up responses):**
 
 "⚠️ **Quick Reminder:** Give this content a quick read before using it. Feel free to edit anything that doesn't quite fit your business. The more you use SEO Mentor, the smarter it gets. 🚀
 

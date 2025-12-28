@@ -1,6 +1,51 @@
 import { NextResponse } from "next/server";
 import { db } from "../../lib/firebaseAdmin";
 import { saveConversationSummary } from "../../lib/conversationSummarizer";
+import OpenAI from "openai";
+
+// Initialize OpenAI client
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY,
+});
+
+// Generate an AI-powered conversation title from the messages
+async function generateConversationTitle(messages) {
+  try {
+    // Get conversation context (first few exchanges, limited content)
+    const conversationSnippet = messages
+      .slice(0, 4) // First 2 user messages + 2 AI responses max
+      .map(m => `${m.role}: ${m.content.slice(0, 300)}`)
+      .join('\n');
+
+    const completion = await openai.chat.completions.create({
+      model: "gpt-3.5-turbo", // Use cheaper, faster model for titles
+      messages: [
+        {
+          role: "system",
+          content: "Generate a concise 5-8 word title that summarizes this SEO conversation. Be specific about the topic discussed (e.g., 'Blog outline for pet grooming services', 'Meta title optimization tips', 'Keyword strategy for local business'). Do not use quotes. Just return the title, nothing else."
+        },
+        {
+          role: "user",
+          content: conversationSnippet
+        }
+      ],
+      max_tokens: 30,
+      temperature: 0.3,
+    });
+
+    const generatedTitle = completion.choices[0]?.message?.content?.trim();
+    
+    // Validate the title is reasonable
+    if (generatedTitle && generatedTitle.length > 3 && generatedTitle.length < 100) {
+      return generatedTitle;
+    }
+    
+    return null; // Fall back to default behavior
+  } catch (error) {
+    console.error("Error generating AI title:", error.message);
+    return null; // Fall back to default behavior
+  }
+}
 
 // GET - Fetch all conversations for a user
 export async function GET(req) {
@@ -82,9 +127,16 @@ export async function POST(req) {
       }, { status: 400 });
     }
 
-    // Auto-generate title from first user message if not provided
+    // Auto-generate title - try AI first, then fallback to first message
     let conversationTitle = title;
     const firstUserMessage = messages.find(msg => msg.role === 'user');
+    
+    // Try AI-generated title if we have enough context (at least 2 messages)
+    if (!conversationTitle && messages.length >= 2) {
+      conversationTitle = await generateConversationTitle(messages);
+    }
+    
+    // Fallback to first user message if AI fails or not enough context
     if (!conversationTitle && firstUserMessage) {
       conversationTitle = firstUserMessage.content.slice(0, 50);
       if (firstUserMessage.content.length > 50) {
