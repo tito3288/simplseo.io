@@ -545,6 +545,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
           </div>
         </div>
 
+        {/* SEO Tip */}
+        <div className="mb-4 rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+          <p className="text-sm text-blue-800 dark:text-blue-200">
+            <span className="font-semibold">💡 SEO Tip:</span> Your Impressions, Clicks and Position will move up and down week to week, This is normal, SEO takes time. <br></br>We share updates every 7 days so you can see progress as it happens, SEO changes usually take about 30 days to fully settle.
+          </p>
+        </div>
+
         <div className="space-y-3">
           {leaderboardData.map((item, idx) => {
             const cleanUrl = item.pageUrl
@@ -711,8 +718,8 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                     </div>
 
                     {/* Summary of Changes */}
-                    <div className="rounded-lg border border-primary/20 bg-primary/10 p-3">
-                      <h5 className="mb-2 text-xs font-medium text-primary">
+                    <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+                      <h5 className="mb-2 text-xs font-medium text-blue-600 dark:text-blue-400">
                         📈 Summary of Changes
                       </h5>
                       <div className="text-xs text-muted-foreground">
@@ -732,7 +739,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                       <Button
                         variant="outline"
                         size="sm"
-                        className="w-full mt-2 flex items-center justify-center gap-2"
+                        className="w-full mt-2 flex items-center justify-center gap-2 border-green-500 text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 hover:text-green-700"
                         onClick={(e) => {
                           e.stopPropagation();
                           setSelectedItemHistory(item);
@@ -875,39 +882,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             
             {selectedItemHistory && (
               <div className="overflow-y-auto flex-1 pr-2 space-y-4">
-                {/* Baseline (preStats) */}
-                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-4">
-                  <h4 className="text-sm font-medium text-blue-600 dark:text-blue-400 mb-2">
-                    🎯 Baseline (Before Implementation)
-                  </h4>
-                  <p className="text-xs text-muted-foreground mb-3">
-                    Implemented on: {new Date(selectedItemHistory.implementedAt).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric'
-                    })}
-                  </p>
-                  <div className="grid grid-cols-4 gap-3 text-sm">
-                    <div>
-                      <span className="text-muted-foreground text-xs">Impressions</span>
-                      <p className="font-semibold">{selectedItemHistory.preStats.impressions}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-xs">Clicks</span>
-                      <p className="font-semibold">{selectedItemHistory.preStats.clicks}</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-xs">CTR</span>
-                      <p className="font-semibold">{(selectedItemHistory.preStats.ctr * 100).toFixed(2)}%</p>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground text-xs">Position</span>
-                      <p className="font-semibold">{selectedItemHistory.preStats.position.toFixed(2)}</p>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Timeline of snapshots */}
+                {/* Timeline of snapshots - LATEST first */}
                 <div className="relative">
                   <h4 className="text-sm font-medium text-muted-foreground mb-3">
                     📊 Progress Timeline
@@ -935,13 +910,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                             )} />
                             
                             <div className={cn(
-                              "rounded-lg border p-3",
-                              idx === 0 ? "border-green-500/30 bg-green-50/10 dark:bg-green-900/10" : "border-muted"
+                              "rounded-lg border",
+                              idx === 0 ? "p-4 border-green-500/30 bg-green-50/10 dark:bg-green-900/10" : "p-3 border-muted"
                             )}>
                               <div className="flex items-center justify-between mb-2">
                                 <span className={cn(
-                                  "text-xs font-medium uppercase tracking-wide",
-                                  idx === 0 ? "text-green-600 dark:text-green-400" : "text-muted-foreground"
+                                  "font-medium uppercase tracking-wide",
+                                  idx === 0 ? "text-sm text-green-600 dark:text-green-400" : "text-xs text-muted-foreground"
                                 )}>
                                   {idx === 0 ? "Latest" : `Day ${snapshot.dayNumber}`}
                                 </span>
@@ -954,10 +929,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                                 </span>
                               </div>
                               
-                              <div className="grid grid-cols-4 gap-3 text-sm">
+                              <div className={cn(
+                                "grid grid-cols-4 gap-3",
+                                idx === 0 ? "text-base" : "text-sm"
+                              )}>
                                 <div>
                                   <span className="text-muted-foreground text-xs">Impressions</span>
-                                  <p className="font-semibold">{snapshot.impressions}</p>
+                                  <p className={cn("font-semibold", idx === 0 && "text-lg")}>{snapshot.impressions}</p>
                                   <span className={cn(
                                     "text-xs",
                                     impressionsDelta >= 0 ? "text-green-600" : "text-red-600"
@@ -967,7 +945,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground text-xs">Clicks</span>
-                                  <p className="font-semibold">{snapshot.clicks}</p>
+                                  <p className={cn("font-semibold", idx === 0 && "text-lg")}>{snapshot.clicks}</p>
                                   <span className={cn(
                                     "text-xs",
                                     clicksDelta >= 0 ? "text-green-600" : "text-red-600"
@@ -977,11 +955,11 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground text-xs">CTR</span>
-                                  <p className="font-semibold">{(snapshot.ctr * 100).toFixed(2)}%</p>
+                                  <p className={cn("font-semibold", idx === 0 && "text-lg")}>{(snapshot.ctr * 100).toFixed(2)}%</p>
                                 </div>
                                 <div>
                                   <span className="text-muted-foreground text-xs">Position</span>
-                                  <p className="font-semibold">{snapshot.position.toFixed(2)}</p>
+                                  <p className={cn("font-semibold", idx === 0 && "text-lg")}>{snapshot.position.toFixed(2)}</p>
                                   <span className={cn(
                                     "text-xs",
                                     positionDelta <= 0 ? "text-green-600" : "text-red-600"
@@ -994,6 +972,40 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                           </div>
                         );
                       })}
+                  </div>
+                </div>
+
+                {/* Baseline (preStats) - at the bottom, smaller */}
+                <div className="rounded-lg border border-blue-200 dark:border-blue-800 bg-blue-50 dark:bg-blue-900/20 p-3">
+                  <div className="flex items-center justify-between mb-2">
+                    <h4 className="text-xs font-medium text-blue-600 dark:text-blue-400">
+                      🎯 Baseline (Before Implementation)
+                    </h4>
+                    <span className="text-xs text-muted-foreground">
+                      Implemented on: {new Date(selectedItemHistory.implementedAt).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'short',
+                        day: 'numeric'
+                      })}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-4 gap-3 text-xs">
+                    <div>
+                      <span className="text-muted-foreground">Impressions</span>
+                      <p className="font-semibold text-sm">{selectedItemHistory.preStats.impressions}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Clicks</span>
+                      <p className="font-semibold text-sm">{selectedItemHistory.preStats.clicks}</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">CTR</span>
+                      <p className="font-semibold text-sm">{(selectedItemHistory.preStats.ctr * 100).toFixed(2)}%</p>
+                    </div>
+                    <div>
+                      <span className="text-muted-foreground">Position</span>
+                      <p className="font-semibold text-sm">{selectedItemHistory.preStats.position.toFixed(2)}</p>
+                    </div>
                   </div>
                 </div>
               </div>

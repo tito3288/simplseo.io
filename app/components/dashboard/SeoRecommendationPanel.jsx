@@ -916,12 +916,14 @@ const SeoRecommendationPanel = ({
                 Cancel
               </Button>
               <Button
-                onClick={() => {
+                onClick={async () => {
                   setShowConfirmModal(false);
-                  handleImplementation(true);
+                  await handleImplementation(true);
+                  // Refresh the page so user can see the updated UI (SEO Progress card, etc.)
+                  window.location.reload();
                 }}
               >
-                Yes, I’ve updated it
+                Yes, I've updated it
               </Button>
             </div>
           </div>

@@ -3030,18 +3030,15 @@ export default function Dashboard() {
             ) : (
               <ul className="space-y-2">
                 {topPages.map((page) => (
-                  <li key={page.page} className="flex flex-col">
+                  <li key={page.page}>
                     <a
                       href={page.page}
                       target="_blank"
                       rel="noopener noreferrer"
-                      className="text-[#00BF63] underline truncate max-w-full"
+                      className="text-[#00BF63] underline truncate max-w-full block"
                     >
                       {page.page}
                     </a>
-                    <div className="text-sm text-muted-foreground">
-                      {page.clicks} clicks
-                    </div>
                   </li>
                 ))}
               </ul>
