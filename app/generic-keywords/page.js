@@ -1766,7 +1766,7 @@ export default function GenericKeywordsPage() {
                                       <span className="text-lg">{navRec.icon}</span>
                                       <div className="flex-1">
                                         <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
-                                          💡 Not Getting Enough Impressions After 30+ Days: Add This <strong>"{navRec.placement}"</strong> Page to Your Navigation
+                                          💡 Not Getting Enough Impressions After 30+ Days: Add This <strong>&quot;{navRec.placement}&quot;</strong> Page to Your Navigation
                                         </p>
                                         <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
                                           {navRec.suggestion}
