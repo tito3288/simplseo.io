@@ -4,13 +4,22 @@ import { useState, useEffect } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
-import { ChevronDown, ChevronRight, FileText, TrendingUp, AlertTriangle, CheckCircle2, Clock, Sparkles, Loader2 } from "lucide-react";
+import { ChevronDown, ChevronRight, FileText, TrendingUp, AlertTriangle, CheckCircle2, Clock, Sparkles, Loader2, BarChart3, Search, MousePointerClick, ArrowUp, ArrowDown, Minus } from "lucide-react";
 import { getPageContent } from "../../lib/pageScraper";
 import { useAuth } from "../../contexts/AuthContext";
 import { saveContentAuditResult, getContentAuditResult, saveAiSuggestions, getAiSuggestions } from "../../lib/firestoreHelpers";
 import { toast } from "sonner";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
 
-const ContentAuditPanel = ({ pageUrl, pageData }) => {
+const ContentAuditPanel = ({ pageUrl, pageData, implementationData }) => {
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -18,8 +27,112 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [isLoadingSavedData, setIsLoadingSavedData] = useState(true);
+  
+  // Keyword Insights Modal state
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [keywordData, setKeywordData] = useState(null);
+  const [isLoadingKeywords, setIsLoadingKeywords] = useState(false);
+  const [pageFocusKeyword, setPageFocusKeyword] = useState(null);
+  const [focusKeywordSource, setFocusKeywordSource] = useState(null); // "ai-generated" or "gsc-existing"
 
   const cleanUrl = pageUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  // Normalize URL for comparison
+  const normalizeUrl = (url) => {
+    if (!url) return null;
+    try {
+      const u = new URL(url);
+      return (u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '')).toLowerCase();
+    } catch {
+      return url.trim().replace(/\/$/, '').toLowerCase();
+    }
+  };
+
+  // Fetch keywords when modal opens
+  const fetchKeywordInsights = async () => {
+    if (!user?.id || keywordData) return; // Don't refetch if already loaded
+    
+    setIsLoadingKeywords(true);
+    try {
+      // Get GSC token and siteUrl using the token manager
+      const { createGSCTokenManager } = await import("../../lib/gscTokenManager");
+      const { getFocusKeywords } = await import("../../lib/firestoreHelpers");
+      
+      const tokenManager = createGSCTokenManager(user.id);
+      const gscData = await tokenManager.getStoredGSCData();
+      
+      if (!gscData?.accessToken || !gscData?.siteUrl) {
+        throw new Error("GSC not connected");
+      }
+
+      // Get valid access token (refreshes if needed)
+      const validToken = await tokenManager.getValidAccessToken();
+      if (!validToken) {
+        throw new Error("Could not get valid GSC token");
+      }
+
+      // Fetch focus keywords to find the one for this page
+      const focusKeywords = await getFocusKeywords(user.id);
+      if (focusKeywords && focusKeywords.length > 0) {
+        const normalizedPageUrl = normalizeUrl(pageUrl);
+        const matchingFocus = focusKeywords.find(fk => {
+          const normalizedFkUrl = normalizeUrl(fk.pageUrl);
+          return normalizedFkUrl === normalizedPageUrl;
+        });
+        if (matchingFocus) {
+          setPageFocusKeyword(matchingFocus.keyword);
+          setFocusKeywordSource(matchingFocus.source || "gsc-existing"); // Default to gsc-existing if no source
+        }
+      }
+
+      const response = await fetch("/api/gsc/page-keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          pageUrl,
+          dateRange: "28",
+          token: validToken,
+          siteUrl: gscData.siteUrl
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || "Failed to fetch keywords");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setKeywordData(data.keywords);
+      }
+    } catch (error) {
+      console.error("Error fetching keyword insights:", error);
+      toast.error("Failed to load keyword insights", {
+        description: error.message
+      });
+    } finally {
+      setIsLoadingKeywords(false);
+    }
+  };
+
+  // Helper to format delta with arrow
+  const formatDelta = (value, inverse = false) => {
+    if (value === 0 || value === undefined || value === null) {
+      return <span className="text-gray-500 flex items-center gap-1"><Minus className="w-3 h-3" /> 0</span>;
+    }
+    const isPositive = inverse ? value < 0 : value > 0;
+    const arrow = isPositive ? <ArrowUp className="w-3 h-3" /> : <ArrowDown className="w-3 h-3" />;
+    const color = isPositive ? "text-green-600" : "text-red-500";
+    const prefix = value > 0 ? "+" : "";
+    return <span className={`${color} flex items-center gap-1`}>{arrow} {prefix}{typeof value === 'number' && value % 1 !== 0 ? value.toFixed(1) : value}</span>;
+  };
+
+  // Check if keyword matches focus keyword (case-insensitive)
+  const isFocusKeyword = (keyword) => {
+    if (!pageFocusKeyword || !keyword) return false;
+    return keyword.toLowerCase() === pageFocusKeyword.toLowerCase();
+  };
 
   // Load saved data on component mount
   useEffect(() => {
@@ -33,7 +146,7 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
         const savedAuditResult = await getContentAuditResult(user.id, pageUrl);
         if (savedAuditResult) {
           setAuditResult(savedAuditResult);
-          setIsExpanded(true);
+          // Keep dropdown closed by default - user can expand if needed
         }
 
         // Load saved AI suggestions
@@ -207,6 +320,275 @@ const ContentAuditPanel = ({ pageUrl, pageData }) => {
               <p className="text-sm text-muted-foreground">
                 Content quality analysis and improvement suggestions
               </p>
+              {/* Keyword Insights Link */}
+              {implementationData && (
+                <Dialog open={isInsightsOpen} onOpenChange={(open) => {
+                  setIsInsightsOpen(open);
+                  if (open) fetchKeywordInsights();
+                }}>
+                  <DialogTrigger asChild>
+                    <button className="text-sm text-[#00BF63] hover:text-[#00a855] underline underline-offset-2 mt-1 flex items-center gap-1">
+                      <BarChart3 className="w-3 h-3" />
+                      Keyword Insights
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl max-h-[85vh]">
+                    <DialogHeader>
+                      <DialogTitle className="flex items-center gap-2">
+                        <BarChart3 className="w-5 h-5 text-[#00BF63]" />
+                        Keyword Insights
+                      </DialogTitle>
+                      <DialogDescription>
+                        {cleanUrl}
+                      </DialogDescription>
+                    </DialogHeader>
+                    
+                    <ScrollArea className="max-h-[65vh] pr-4">
+
+
+                      {/* Explanatory message at top */}
+                      <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                        <p className="text-xs text-amber-800 dark:text-amber-200">
+                          <strong>💡 Why are there so many keywords?</strong><br />
+                          Google may show your page for many related searches (keywords) based on your page content and location. The keywords below explain why your impressions and rankings moved.   <strong>You don’t need to optimize for all of them.</strong> Continuing to improve your <strong>Focus Keyword</strong> helps Google naturally narrow results over time.<br></br>
+                          <br></br><strong>We just wanted to give you a quick look behind the curtain so you can see what’s happening in the background (:</strong>
+                        </p>
+                      </div>
+                      {/* Current Stats Section */}
+                      {implementationData?.postStats && (
+                        <div className="mb-6">
+                          <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                            <TrendingUp className="w-4 h-4 text-blue-600" />
+                            Current Performance (Last 28 Days)
+                          </h4>
+                          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                              <p className="text-xs text-muted-foreground mb-1">Impressions</p>
+                              <p className="text-lg font-bold">{implementationData.postStats.impressions?.toLocaleString() || 0}</p>
+                              {implementationData.preStats && (
+                                <div className="text-xs mt-1">
+                                  {formatDelta(implementationData.postStats.impressions - implementationData.preStats.impressions)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                              <p className="text-xs text-muted-foreground mb-1">Clicks</p>
+                              <p className="text-lg font-bold">{implementationData.postStats.clicks || 0}</p>
+                              {implementationData.preStats && (
+                                <div className="text-xs mt-1">
+                                  {formatDelta(implementationData.postStats.clicks - implementationData.preStats.clicks)}
+                                </div>
+                              )}
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                              <p className="text-xs text-muted-foreground mb-1">CTR</p>
+                              <p className="text-lg font-bold">{((implementationData.postStats.ctr || 0) * 100).toFixed(1)}%</p>
+                              {implementationData.preStats && (
+                                <div className="text-xs mt-1">
+                                  {formatDelta(((implementationData.postStats.ctr - implementationData.preStats.ctr) * 100))}
+                                </div>
+                              )}
+                            </div>
+                            <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                              <p className="text-xs text-muted-foreground mb-1">Avg. Position</p>
+                              <p className="text-lg font-bold">{implementationData.postStats.position?.toFixed(1) || "—"}</p>
+                              {implementationData.preStats && (
+                                <div className="text-xs mt-1">
+                                  {formatDelta(implementationData.postStats.position - implementationData.preStats.position, true)}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+                      )}
+
+
+                      {/* Keywords Section */}
+                      <div className="space-y-4">
+                        {isLoadingKeywords ? (
+                          <div className="text-center py-8">
+                            <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                            <p className="text-sm text-muted-foreground">Loading keyword data...</p>
+                          </div>
+                        ) : keywordData ? (
+                          <>
+                            {/* Focus Keyword Highlight */}
+                            {pageFocusKeyword && (
+                              <div className={`mb-4 p-3 rounded-lg ${
+                                focusKeywordSource === "ai-generated"
+                                  ? "bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border border-purple-200 dark:border-purple-800"
+                                  : "bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border border-blue-200 dark:border-blue-800"
+                              }`}>
+                                <div className="flex items-center gap-2 mb-1">
+                                  {focusKeywordSource === "ai-generated" ? (
+                                    <>
+                                      <Sparkles className="w-4 h-4 text-purple-600" />
+                                      <span className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide">AI-Generated Focus Keyword</span>
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Search className="w-4 h-4 text-blue-600" />
+                                      <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">Focus Keyword</span>
+                                    </>
+                                  )}
+                                </div>
+                                <p className={`font-bold ${
+                                  focusKeywordSource === "ai-generated"
+                                    ? "text-purple-900 dark:text-purple-100"
+                                    : "text-blue-900 dark:text-blue-100"
+                                }`}>{pageFocusKeyword}</p>
+                              </div>
+                            )}
+
+                            {/* Top Performing Keywords */}
+                            {keywordData.topPerformers?.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                                  <Search className="w-4 h-4 text-[#00BF63]" />
+                                  Search Queries Google Tested
+                                  <Badge variant="secondary" className="text-xs">{keywordData.topPerformers.length}</Badge>
+                                </h4>
+                                <div className="space-y-2">
+                                  {keywordData.topPerformers.slice(0, 10).map((kw, idx) => {
+                                    const isMatch = isFocusKeyword(kw.keyword);
+                                    const isAiGenerated = focusKeywordSource === "ai-generated";
+                                    return (
+                                      <div 
+                                        key={idx} 
+                                        className={`flex items-center justify-between p-3 rounded-lg ${
+                                          isMatch 
+                                            ? isAiGenerated
+                                              ? "bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-950/40 dark:to-pink-950/40 border-2 border-purple-400 dark:border-purple-600 ring-2 ring-purple-200 dark:ring-purple-800"
+                                              : "bg-gradient-to-r from-blue-100 to-cyan-100 dark:from-blue-950/40 dark:to-cyan-950/40 border-2 border-blue-400 dark:border-blue-600 ring-2 ring-blue-200 dark:ring-blue-800"
+                                            : "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+                                        }`}
+                                      >
+                                        <div className="flex-1 min-w-0">
+                                          <div className="flex items-center gap-2">
+                                            <p className={`font-medium text-sm truncate ${
+                                              isMatch 
+                                                ? isAiGenerated 
+                                                  ? "text-purple-900 dark:text-purple-100" 
+                                                  : "text-blue-900 dark:text-blue-100"
+                                                : ""
+                                            }`}>
+                                              {kw.keyword}
+                                            </p>
+                                            {isMatch && (
+                                              <Badge className={`text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0 ${
+                                                isAiGenerated ? "bg-purple-600" : "bg-blue-600"
+                                              }`}>
+                                                {isAiGenerated && <Sparkles className="w-2.5 h-2.5 mr-0.5" />}
+                                                FOCUS
+                                              </Badge>
+                                            )}
+                                          </div>
+                                          <p className="text-xs text-muted-foreground">Position: {kw.position}</p>
+                                        </div>
+                                        <div className="flex items-center gap-4 text-xs">
+                                          <div className="text-center">
+                                            <p className="font-semibold">{kw.impressions}</p>
+                                            <p className="text-muted-foreground">impr.</p>
+                                          </div>
+                                          <div className="text-center">
+                                            <p className="font-semibold">{kw.clicks}</p>
+                                            <p className="text-muted-foreground">clicks</p>
+                                          </div>
+                                          <div className="text-center">
+                                            <p className="font-semibold">{kw.ctr}</p>
+                                            <p className="text-muted-foreground">CTR</p>
+                                          </div>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {keywordData.topPerformers.length > 10 && (
+                                    <p className="text-xs text-muted-foreground text-center py-1">
+                                      + {keywordData.topPerformers.length - 10} more top keywords
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Other Keywords (Testing) */}
+                            {keywordData.otherKeywords?.length > 0 && (
+                              <div>
+                                <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                                  <MousePointerClick className="w-4 h-4 text-gray-500" />
+                                  Other Queries
+                                  <Badge variant="outline" className="text-xs">{keywordData.otherKeywords.length}</Badge>
+                                </h4>
+
+                                <div className="space-y-1.5">
+                                  {keywordData.otherKeywords.slice(0, 15).map((kw, idx) => {
+                                    const isMatch = isFocusKeyword(kw.keyword);
+                                    const isAiGenerated = focusKeywordSource === "ai-generated";
+                                    return (
+                                      <div 
+                                        key={idx} 
+                                        className={`flex items-center justify-between p-2 rounded text-xs ${
+                                          isMatch
+                                            ? isAiGenerated
+                                              ? "bg-purple-100 dark:bg-purple-950/40 border-2 border-purple-400 dark:border-purple-600"
+                                              : "bg-blue-100 dark:bg-blue-950/40 border-2 border-blue-400 dark:border-blue-600"
+                                            : "bg-gray-50 dark:bg-gray-800 border border-gray-200 dark:border-gray-700"
+                                        }`}
+                                      >
+                                        <div className="truncate flex-1 flex items-center gap-1.5">
+                                          <span className={isMatch 
+                                            ? isAiGenerated 
+                                              ? "text-purple-900 dark:text-purple-100 font-medium" 
+                                              : "text-blue-900 dark:text-blue-100 font-medium"
+                                            : "text-muted-foreground"
+                                          }>
+                                            {kw.keyword}
+                                          </span>
+                                          {isMatch && (
+                                            <Badge className={`text-white text-[9px] px-1 py-0 h-3.5 ${
+                                              isAiGenerated ? "bg-purple-600" : "bg-blue-600"
+                                            }`}>
+                                              {isAiGenerated && <Sparkles className="w-2 h-2 mr-0.5" />}
+                                              FOCUS
+                                            </Badge>
+                                          )}
+                                        </div>
+                                        <div className="flex items-center gap-3 ml-2">
+                                          <span className="text-muted-foreground">{kw.impressions} impr.</span>
+                                          <span className="text-muted-foreground">pos. {kw.position}</span>
+                                        </div>
+                                      </div>
+                                    );
+                                  })}
+                                  {keywordData.otherKeywords.length > 15 && (
+                                    <p className="text-xs text-muted-foreground text-center py-1">
+                                      + {keywordData.otherKeywords.length - 15} more testing keywords
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            )}
+
+                            {/* Summary */}
+                            {keywordData.totals && (
+                              <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                                <div className="flex items-center justify-between text-sm">
+                                  <span className="text-muted-foreground">Total Keywords Ranking:</span>
+                                  <span className="font-semibold">{keywordData.totals.totalKeywords}</span>
+                                </div>
+                              </div>
+                            )}
+                          </>
+                        ) : (
+                          <div className="text-center py-8">
+                            <p className="text-sm text-muted-foreground">No keyword data available yet.</p>
+                          </div>
+                        )}
+                      </div>
+                    </ScrollArea>
+                  </DialogContent>
+                </Dialog>
+              )}
             </div>
           </div>
           <div className="flex items-center gap-2">

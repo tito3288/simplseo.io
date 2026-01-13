@@ -1,6 +1,6 @@
 "use client";
 
-import { Copy, ChevronDown } from "lucide-react";
+import { Copy, ChevronDown, History } from "lucide-react";
 import {
   Collapsible,
   CollapsibleContent,
@@ -57,6 +57,8 @@ const SeoRecommendationPanel = ({
   suggestedDescription = "",
   keywordSource = "gsc-existing", // "ai-generated" or "gsc-existing"
   focusKeyword = "",
+  keywordHistory = [], // Previously tried keywords for this page
+  keywordStatsHistory = [], // Stats history from previous keyword attempts
 }) => {
   const { user } = useAuth();
 
@@ -69,7 +71,8 @@ const SeoRecommendationPanel = ({
   const [pendingCheckboxValue, setPendingCheckboxValue] = useState(false);
   const [showRefreshButton, setShowRefreshButton] = useState(false);
   const [daysSinceImplementation, setDaysSinceImplementation] = useState(null);
-  const [thirtyDayProgress, setThirtyDayProgress] = useState(null);
+  const [fortyFiveDayProgress, setFortyFiveDayProgress] = useState(null);
+  const [totalDaysTarget, setTotalDaysTarget] = useState(45); // Default 45, can be extended (90, 135, etc.)
   const [currentH1, setCurrentH1] = useState(null);
   const [loadingH1, setLoadingH1] = useState(false);
   const [currentMetaTitle, setCurrentMetaTitle] = useState(null);
@@ -244,7 +247,11 @@ const SeoRecommendationPanel = ({
           (today - implementedDate) / (1000 * 60 * 60 * 24)
         );
         setDaysSinceImplementation(Math.min(totalDays, 7)); // already exists
-        setThirtyDayProgress(Math.min(totalDays, 30)); // 👈 new state to track 30-day progress
+        
+        // Check if user has extended the tracking period (clicked "Wait Another 45 Days")
+        const extendedTarget = data.extendedTotalDays || 45;
+        setTotalDaysTarget(extendedTarget);
+        setFortyFiveDayProgress(Math.min(totalDays, extendedTarget)); // 👈 cap at extended target (45, 90, 135, etc.)
 
         if (data.preStats && data.postStats) {
           setDelta({
@@ -262,7 +269,7 @@ const SeoRecommendationPanel = ({
           (1000 * 60 * 60 * 24);
         const zeroClicks = data?.postStats?.clicks === 0;
 
-        if (daysSince >= 30 && zeroClicks) {
+        if (daysSince >= 45 && zeroClicks) {
           setShowRefreshButton(true);
         }
       } catch (error) {
@@ -419,6 +426,35 @@ const SeoRecommendationPanel = ({
             )}
           </div>
 
+          {/* Previously Tried Keywords Section - Show when there's keyword history */}
+          {keywordHistory && keywordHistory.length > 0 && (
+            <div className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/20 p-3">
+              <div className="flex items-center gap-2 mb-2">
+                <History className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                <span className="text-sm font-medium text-amber-900 dark:text-amber-100">
+                  Previously Tried Keywords
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {keywordHistory.map((item, idx) => (
+                  <span
+                    key={idx}
+                    className="text-xs px-2 py-1 rounded bg-amber-100/80 dark:bg-amber-900/40 text-amber-700 dark:text-amber-300 line-through"
+                    title={`Tested on ${new Date(item.testedAt).toLocaleDateString()}`}
+                  >
+                    {item.keyword}
+                    {item.source === "ai-generated" && (
+                      <span className="ml-1 text-purple-600 dark:text-purple-400">✨</span>
+                    )}
+                  </span>
+                ))}
+              </div>
+              <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                These keywords were previously tested but didn&apos;t perform as expected after 45+ days.
+              </p>
+            </div>
+          )}
+
           {keywordSource === "ai-generated" && focusKeyword && (
             <div className="rounded-md border border-blue-200 dark:border-blue-900/40 bg-blue-50 dark:bg-blue-900/20 p-3 mb-4">
               <p className="text-sm font-medium text-blue-900 dark:text-blue-100 mb-1">
@@ -467,25 +503,44 @@ const SeoRecommendationPanel = ({
                   )}
                 </div>
 
-                {/* 30-Day Progress */}
-                {thirtyDayProgress !== null && (
+                {/* Progress to New Ideas */}
+                {fortyFiveDayProgress !== null && (
                   <div>
                     <div className="mb-1 flex justify-between text-xs text-muted-foreground">
-                      <span>Check Back for New Ideas (30 Days)</span>
-                      <span>{thirtyDayProgress}/30 days</span>
+                      <span>
+                        Check Back for New Ideas ({totalDaysTarget} Days)
+                        {totalDaysTarget > 45 && (
+                          <span className="ml-1 text-amber-500 dark:text-amber-400">
+                            (Extended)
+                          </span>
+                        )}
+                      </span>
+                      <span>{fortyFiveDayProgress}/{totalDaysTarget} days</span>
                     </div>
                     <div className="h-2 w-full rounded bg-muted/60">
                       <div
-                        className="h-2 rounded bg-primary/70 transition-all duration-500"
+                        className={`h-2 rounded transition-all duration-500 ${
+                          totalDaysTarget > 45 
+                            ? "bg-gradient-to-r from-primary/70 to-amber-500/70" 
+                            : "bg-primary/70"
+                        }`}
                         style={{
-                          width: `${(thirtyDayProgress / 30) * 100}%`,
+                          width: `${(fortyFiveDayProgress / totalDaysTarget) * 100}%`,
                         }}
                       />
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      No clicks after 30 days? You&apos;ll be able to refresh this
-                      recommendation and get updated suggestions tailored to
-                      your page
+                      {totalDaysTarget > 45 ? (
+                        <>
+                          You extended tracking to gather more data. We&apos;ll evaluate again at {totalDaysTarget} days.
+                        </>
+                      ) : (
+                        <>
+                          No clicks after {totalDaysTarget} days? You&apos;ll be able to refresh this
+                          recommendation and get updated suggestions tailored to
+                          your page
+                        </>
+                      )}
                     </p>
                   </div>
                 )}
@@ -506,7 +561,7 @@ const SeoRecommendationPanel = ({
                       </Button>
                     </TooltipTrigger>
                     <TooltipContent>
-                      No clicks after 30 days. Click to get fresh AI title and
+                      No clicks after 45 days. Click to get fresh AI title and
                       description.
                     </TooltipContent>
                   </Tooltip>

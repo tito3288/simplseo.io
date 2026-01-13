@@ -149,7 +149,19 @@ export default function Settings() {
   const [pendingChanges, setPendingChanges] = useState(null);
   const [isGscConnected, setIsGscConnected] = useState(false);
 
-  const normalizePageKey = (page) => page || "__unknown__";
+  // Must match normalizePage in FocusKeywordSelector.jsx for consistent lookups
+  const normalizePageKey = (page) => {
+    if (!page) return "__unknown__";
+    try {
+      const u = new URL(page);
+      // Remove trailing slash except for root, lowercase for consistency
+      const normalized = u.pathname === '/' ? u.origin : u.origin + u.pathname.replace(/\/$/, '');
+      return normalized.toLowerCase();
+    } catch {
+      // Fallback: just remove trailing slash and lowercase
+      return page.trim().replace(/\/$/, '').toLowerCase();
+    }
+  };
 
   // Normalize and validate manual URL (same as dashboard)
   const normalizeManualUrl = (value) => {

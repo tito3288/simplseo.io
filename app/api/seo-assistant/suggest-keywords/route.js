@@ -22,7 +22,15 @@ function normalizePageUrl(url) {
 
 export async function POST(request) {
   try {
-    const { pageUrl, userId, businessType = "", businessLocation = "" } = await request.json();
+    const { 
+      pageUrl, 
+      userId, 
+      businessType = "", 
+      businessLocation = "",
+      hybridMode = false, // New: hybrid keyword generation mode
+      currentRankingKeyword = "", // New: top ranking keyword to combine with
+      currentFocusKeyword = "", // New: current focus keyword for context
+    } = await request.json();
 
     if (!pageUrl || !userId) {
       return NextResponse.json(
@@ -31,7 +39,10 @@ export async function POST(request) {
       );
     }
 
-    console.log(`🤖 Generating AI keyword suggestions for: ${pageUrl}`);
+    console.log(`🤖 Generating ${hybridMode ? 'HYBRID' : 'AI'} keyword suggestions for: ${pageUrl}`);
+    if (hybridMode && currentRankingKeyword) {
+      console.log(`🔀 Hybrid mode: Combining with ranking keyword "${currentRankingKeyword}"`);
+    }
 
     // Check if OpenAI API key is available
     if (!process.env.OPENAI_API_KEY) {
@@ -235,7 +246,32 @@ export async function POST(request) {
     // Check if we have meaningful content
     const hasContent = pageContent.trim().length > 50 || pageTitle.trim().length > 0 || headings.length > 0;
     
-    const prompt = `Analyze this webpage and generate 3-5 SEO-focused keyword suggestions with confidence scores and detailed explanations.
+    // Build hybrid mode context if applicable
+    const hybridContext = hybridMode && currentRankingKeyword ? `
+HYBRID MODE ACTIVE:
+- Current Top Ranking Keyword: "${currentRankingKeyword}"
+- Previous Focus Keyword: "${currentFocusKeyword || 'none'}"
+
+SPECIAL INSTRUCTIONS FOR HYBRID MODE:
+- The user has been tracking this page for 45+ days but hasn't seen the expected results
+- Generate NEW keyword variations that COMBINE the semantic intent of the current ranking keyword with the page content
+- The goal is to find a better keyword angle that Google might respond to
+- Each suggestion should be a HYBRID that blends:
+  1. What Google is already showing this page for (the ranking keyword)
+  2. What the page content actually offers
+  3. The user's location/business type
+- Make keywords more specific and targeted than the current ranking keyword
+- Avoid repeating the exact current ranking keyword or previous focus keyword
+
+EXAMPLE HYBRID APPROACH:
+If ranking keyword is "website builders" and page is about "web design options":
+- BAD: "website builders" (too generic, same as ranking)
+- GOOD: "beginner website builder options [location]" (combines ranking + content angle)
+- GOOD: "best website builder comparison [location]" (specific + location)
+- GOOD: "web design platforms for beginners [location]" (content angle + specificity)
+` : '';
+    
+    const prompt = `${hybridMode ? 'HYBRID KEYWORD GENERATION:' : ''} Analyze this webpage and generate ${hybridMode ? '5' : '3-5'} SEO-focused keyword suggestions with confidence scores and detailed explanations.
 
 Page URL: ${pageUrl}
 Page Title: ${pageTitle || "(not available)"}
@@ -244,6 +280,7 @@ Page Content: ${hasContent ? contentPreview : "(Content not available - generate
 
 Business Type: ${businessType || "not specified"}
 Location: ${location || "extract from content if available"}
+${hybridContext}
 
 Requirements:
 - Format: "service/product location" (e.g., "group tour mexico city", "custom tour mexico city")
@@ -251,7 +288,7 @@ Requirements:
 - Make keywords specific and actionable
 - Avoid brand names
 - Focus on what customers would actually search for
-- Return a JSON array of objects with: keyword (string), confidence (number 0-1), reason (string)
+- Return a JSON array of objects with: keyword (string), confidence (number 0-1), reason (string)${hybridMode ? ', hybridNote (string explaining how this combines ranking + content)' : ''}
 - ALWAYS return valid JSON, even if content is limited. Use the URL structure and business type/location to generate suggestions.
 
 ${hasContent ? '' : 'NOTE: Page content is not available. Generate keywords based on the URL path structure and business type/location provided. For example, if URL is "/my-work" and location is "South Bend", generate keywords like "web design portfolio south bend" or "work examples south bend".'}
@@ -261,6 +298,7 @@ IMPORTANT for the "reason" field:
 - If content is not available, explain WHY based on URL structure and business type/location
 - Explain WHY this keyword fits based on what you see
 - Be specific about what supports this keyword
+${hybridMode ? '- Explain how this keyword improves upon the current ranking keyword' : ''}
 - Examples of good reasons:
   * "The page title, meta description, and content strongly emphasize [topic] in [location]"
   * "The URL path '/my-work' and business location suggest [service type] portfolio/work showcase in [location]"
@@ -270,9 +308,9 @@ IMPORTANT for the "reason" field:
 CRITICAL: You MUST return a valid JSON array. Never return error messages or explanations outside the JSON array.
 
 Example format: [
-  {"keyword": "web design south bend", "confidence": 0.95, "reason": "The URL path '/my-work' and business location suggest web design services portfolio in South Bend."},
-  {"keyword": "portfolio south bend", "confidence": 0.90, "reason": "The URL path indicates a portfolio/work showcase page for a business in South Bend."},
-  {"keyword": "website examples south bend", "confidence": 0.85, "reason": "The page showcases work examples for a web design business in South Bend."}
+  {"keyword": "web design south bend", "confidence": 0.95, "reason": "The URL path '/my-work' and business location suggest web design services portfolio in South Bend."${hybridMode ? ', "hybridNote": "Combines ranking keyword intent with specific service offering"' : ''}},
+  {"keyword": "portfolio south bend", "confidence": 0.90, "reason": "The URL path indicates a portfolio/work showcase page for a business in South Bend."${hybridMode ? ', "hybridNote": "Targets work showcase angle from content"' : ''}},
+  {"keyword": "website examples south bend", "confidence": 0.85, "reason": "The page showcases work examples for a web design business in South Bend."${hybridMode ? ', "hybridNote": "More specific than generic ranking keyword"' : ''}}
 ]`;
 
     const response = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -339,12 +377,17 @@ Example format: [
                 keyword: item.trim(),
                 confidence: 0.8,
                 reason: "AI-generated keyword suggestion based on page content",
+                ...(hybridMode ? { hybridNote: "Generated in hybrid mode" } : {}),
               };
             } else if (item && typeof item === "object" && item.keyword) {
               return {
                 keyword: item.keyword.trim(),
                 confidence: typeof item.confidence === "number" ? Math.max(0, Math.min(1, item.confidence)) : 0.8,
                 reason: item.reason || "AI-generated keyword suggestion based on page content",
+                ...(hybridMode ? { 
+                  hybridNote: item.hybridNote || "Combines ranking keyword intent with page content",
+                  isHybrid: true,
+                } : {}),
               };
             }
             return null;
@@ -432,11 +475,13 @@ Example format: [
       }
     }
 
-    console.log(`✅ Generated ${suggestions.length} AI keyword suggestions`);
+    console.log(`✅ Generated ${suggestions.length} ${hybridMode ? 'HYBRID' : 'AI'} keyword suggestions`);
 
     return NextResponse.json({
       success: true,
       suggestions,
+      hybridMode,
+      ...(hybridMode && currentRankingKeyword ? { basedOnKeyword: currentRankingKeyword } : {}),
     });
   } catch (error) {
     console.error("Failed to generate AI keyword suggestions:", error);

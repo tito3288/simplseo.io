@@ -94,9 +94,129 @@ export default function GenericKeywordsPage() {
   // Page type wireframe guide state
   const [selectedWireframe, setSelectedWireframe] = useState(null);
   
+  // Indexing help modal state
+  const [indexingHelpModal, setIndexingHelpModal] = useState({ open: false, pageUrl: null });
+  
   // Settling period constants
-  const SETTLING_DAYS_REQUIRED = 30;
+  const SETTLING_DAYS_REQUIRED = 60; // Increased from 30 to let new pages stabilize longer
   const SETTLING_IMPRESSIONS_REQUIRED = 50;
+  
+  // Boost visibility recommendation thresholds
+  const BOOST_VISIBILITY_DAYS_THRESHOLD = 30; // Show recommendation after 30 days
+  const BOOST_VISIBILITY_IMPRESSIONS_THRESHOLD = 25; // If less than 25 impressions at 30 days
+
+  // Smart navigation placement recommendation based on URL/slug
+  const getNavigationRecommendation = (pageUrl, keyword) => {
+    if (!pageUrl) return null;
+    
+    try {
+      const url = new URL(pageUrl);
+      const pathname = url.pathname.toLowerCase();
+      const slug = pathname.split('/').filter(Boolean).pop() || '';
+      const keywordLower = (keyword || '').toLowerCase();
+      
+      // Blog/Article patterns
+      if (
+        pathname.includes('/blog') || 
+        pathname.includes('/article') || 
+        pathname.includes('/post') ||
+        pathname.includes('/news') ||
+        pathname.includes('/guide') ||
+        pathname.includes('/how-to') ||
+        pathname.includes('/tips') ||
+        slug.includes('best-') ||
+        slug.includes('top-') ||
+        slug.includes('guide')
+      ) {
+        return {
+          placement: "Blog",
+          icon: "📝",
+          suggestion: "To help visitors (and Google) find this page, add it to your site’s header, blog, or resources menu",
+          reason: "Pages linked in your navigation are discovered and crawled more often"
+        };
+      }
+      
+      // Service patterns
+      if (
+        pathname.includes('/service') || 
+        pathname.includes('/pricing') ||
+        pathname.includes('/consultation') ||
+        pathname.includes('/package') ||
+        pathname.includes('/solution') ||
+        keywordLower.includes('service') ||
+        keywordLower.includes('pricing')
+      ) {
+        return {
+          placement: "Services",
+          icon: "🛠️",
+          suggestion: "Add this as a dropdown item under your Services menu",
+          reason: "This appears to be a service page that should be easily discoverable from your main navigation."
+        };
+      }
+      
+      // Location/Local patterns
+      if (
+        pathname.includes('/location') ||
+        pathname.includes('/area') ||
+        pathname.includes('/near-me') ||
+        pathname.includes('-in-') ||
+        slug.match(/\b(city|town|county|state)\b/) ||
+        keywordLower.includes('near me') ||
+        keywordLower.includes(' in ')
+      ) {
+        return {
+          placement: "Locations",
+          icon: "📍",
+          suggestion: "Add this to a Locations or Service Areas section",
+          reason: "This is a location-specific page. Consider creating a 'Service Areas' dropdown in your navigation."
+        };
+      }
+      
+      // About/Company patterns
+      if (
+        pathname.includes('/about') ||
+        pathname.includes('/team') ||
+        pathname.includes('/story') ||
+        pathname.includes('/mission')
+      ) {
+        return {
+          placement: "About",
+          icon: "ℹ️",
+          suggestion: "Link this from your About page or add to About dropdown",
+          reason: "This is company/brand content that should be accessible from your About section."
+        };
+      }
+      
+      // FAQ patterns
+      if (
+        pathname.includes('/faq') ||
+        pathname.includes('/question') ||
+        pathname.includes('/help')
+      ) {
+        return {
+          placement: "FAQ/Support",
+          icon: "❓",
+          suggestion: "Add this to a FAQ or Help section in your footer or main navigation",
+          reason: "FAQ content helps with SEO and customer trust. Make it easy to find."
+        };
+      }
+      
+      // Default - suggest footer or main nav
+      return {
+        placement: "Footer or Main Nav",
+        icon: "🔗",
+        suggestion: "Add this page to your footer navigation or as a main menu item",
+        reason: "More internal links to this page will help Google discover and rank it faster."
+      };
+    } catch {
+      return {
+        placement: "Footer",
+        icon: "🔗",
+        suggestion: "Add this page to your footer navigation",
+        reason: "Internal links help Google discover your content faster."
+      };
+    }
+  };
 
   // Page type wireframe configurations
   const pageTypeWireframes = {
@@ -1519,7 +1639,7 @@ export default function GenericKeywordsPage() {
                 return (
                   <div
                     key={story.id || index}
-                    className="bg-white dark:bg-gray-800 p-4 rounded-lg border border-green-200 dark:border-green-800"
+                    className="bg-background p-4 rounded-lg border border-green-200 dark:border-green-800"
                   >
                     <div className="flex items-start justify-between">
                       <div className="flex-1">
@@ -1633,6 +1753,40 @@ export default function GenericKeywordsPage() {
                                   {Math.round(overallProgress)}%
                                 </span>
                               </div>
+                              
+                              {/* Boost Visibility Recommendation - Shows after 30 days if impressions are low */}
+                              {story.daysSinceCreated >= BOOST_VISIBILITY_DAYS_THRESHOLD && 
+                               story.impressions < BOOST_VISIBILITY_IMPRESSIONS_THRESHOLD && (() => {
+                                const navRec = getNavigationRecommendation(story.pageUrl, story.keyword);
+                                if (!navRec) return null;
+                                
+                                return (
+                                  <div className="mt-3 p-3 bg-gradient-to-r from-blue-50 to-indigo-50 dark:from-blue-900/20 dark:to-indigo-900/20 rounded-lg border border-blue-200 dark:border-blue-800">
+                                    <div className="flex items-start gap-2">
+                                      <span className="text-lg">{navRec.icon}</span>
+                                      <div className="flex-1">
+                                        <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
+                                          💡 Not Getting Enough Impressions After 30+ Days: Add This <strong>"{navRec.placement}"</strong> Page to Your Navigation
+                                        </p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
+                                          {navRec.suggestion}
+                                        </p>
+                                        <p className="text-xs text-blue-600 dark:text-blue-400 italic">
+                                          {navRec.reason}
+                                        </p>
+                                        <div className="mt-2 flex items-center gap-2">
+                                          <Badge variant="outline" className="text-[10px] bg-blue-100 dark:bg-blue-900/40 text-blue-700 dark:text-blue-300 border-blue-300">
+                                            {story.impressions} impressions in {story.daysSinceCreated} days
+                                          </Badge>
+                                          {/* <span className="text-[10px] text-blue-600 dark:text-blue-400">
+                                            Internal links help Google crawl your page more often
+                                          </span> */}
+                                        </div>
+                                      </div>
+                                    </div>
+                                  </div>
+                                );
+                              })()}
                             </div>
                           )}
                         </div>
@@ -1713,8 +1867,14 @@ export default function GenericKeywordsPage() {
                               </span>
                             )}
                             {daysSinceCreated >= 14 && (
-                              <span className="text-xs text-orange-600 dark:text-orange-400">
+                              <span className="text-xs text-orange-600 dark:text-orange-400 flex items-center gap-1">
                                 • Check if page is indexed in Google
+                                <button
+                                  onClick={() => setIndexingHelpModal({ open: true, pageUrl: page.pageUrl })}
+                                  className="underline text-green-600 dark:text-green-400 hover:text-green-700 dark:hover:text-green-300 font-medium"
+                                >
+                                  (Need Help?)
+                                </button>
                               </span>
                             )}
                           </div>
@@ -2728,6 +2888,170 @@ ${contentOutline.internalLinks?.map(l => {
                 </>
               )}
             </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Indexing Help Modal */}
+      <Dialog open={indexingHelpModal.open} onOpenChange={(open) => {
+        if (!open) {
+          setIndexingHelpModal({ open: false, pageUrl: null });
+        }
+      }}>
+        <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Search className="w-5 h-5 text-orange-500" />
+              How to Get Your Page Indexed in Google
+            </DialogTitle>
+            <DialogDescription>
+              If your page isn&apos;t showing up in Google Search Console after 2+ weeks, follow these steps to request indexing.
+            </DialogDescription>
+          </DialogHeader>
+          
+          <div className="space-y-6 py-4">
+            {/* Step 1 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                  1
+                </div>
+                <h4 className="font-semibold">Check if the page is indexed</h4>
+              </div>
+              <div className="ml-8 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Search for your exact URL in Google to see if it&apos;s indexed:
+                </p>
+                {indexingHelpModal.pageUrl && (
+                  <a
+                    href={`https://www.google.com/search?q=site:${encodeURIComponent(indexingHelpModal.pageUrl)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                  >
+                    <ExternalLink className="w-3 h-3" />
+                    Search Google for: site:{indexingHelpModal.pageUrl?.replace(/^https?:\/\//, '').slice(0, 40)}...
+                  </a>
+                )}
+                <p className="text-xs text-muted-foreground">
+                  If no results appear, your page is not indexed yet.
+                </p>
+              </div>
+            </div>
+
+            {/* Step 2 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                  2
+                </div>
+                <h4 className="font-semibold">Use Google Search Console&apos;s URL Inspection Tool</h4>
+              </div>
+              <div className="ml-8 space-y-2">
+                <p className="text-sm text-muted-foreground">
+                  Go to Google Search Console and use the URL Inspection tool to request indexing:
+                </p>
+                <a
+                  href="https://search.google.com/search-console"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="inline-flex items-center gap-2 text-sm text-blue-600 hover:text-blue-700 dark:text-blue-400 dark:hover:text-blue-300 underline"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                  Open Google Search Console
+                </a>
+                <ol className="text-sm text-muted-foreground list-decimal list-inside space-y-1 mt-2">
+                  <li>Paste your page URL in the search bar at the top</li>
+                  <li>Click &quot;Request Indexing&quot; button</li>
+                  <li>Wait 1-7 days for Google to crawl your page</li>
+                </ol>
+              </div>
+            </div>
+
+            {/* Step 3 */}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2">
+                <div className="w-6 h-6 rounded-full bg-blue-100 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400 flex items-center justify-center text-sm font-bold">
+                  3
+                </div>
+                <h4 className="font-semibold">Add internal links to the page</h4>
+              </div>
+              <div className="ml-8">
+                <p className="text-sm text-muted-foreground">
+                  Link to your new page from other pages on your site. Google discovers new pages by following links. Add your new page to:
+                </p>
+                <ul className="text-sm text-muted-foreground list-disc list-inside mt-2 space-y-1">
+                  <li>Your site&apos;s navigation menu or footer</li>
+                  <li>Related blog posts or service pages</li>
+                  <li>Your sitemap.xml file</li>
+                </ul>
+              </div>
+            </div>
+
+            {/* Pro Tips */}
+            <div className="p-4 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800">
+              <h4 className="font-semibold text-amber-800 dark:text-amber-200 mb-2 flex items-center gap-2">
+                <Lightbulb className="w-4 h-4" />
+                Pro Tips
+              </h4>
+              <ul className="text-sm text-amber-700 dark:text-amber-300 space-y-1">
+                <li>• New pages can take 1-4 weeks to get indexed naturally</li>
+                <li>• Pages with more internal links get indexed faster</li>
+                <li>• Sharing your page on social media can speed up discovery</li>
+                <li>• Make sure your page isn&apos;t blocked by robots.txt</li>
+              </ul>
+            </div>
+
+            {/* Helpful Links */}
+            <div className="p-4 bg-muted/50 rounded-lg">
+              <h4 className="font-semibold text-sm mb-2">📚 Helpful Resources</h4>
+              <div className="flex flex-wrap gap-3">
+                <a
+                  href="https://support.google.com/webmasters/answer/9012289"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
+                >
+                  Google&apos;s URL Inspection Guide
+                </a>
+                <a
+                  href="https://developers.google.com/search/docs/crawling-indexing/ask-google-to-recrawl"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
+                >
+                  How to Ask Google to Recrawl
+                </a>
+                <a
+                  href="https://search.google.com/search-console/removals"
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-xs text-blue-600 hover:text-blue-700 dark:text-blue-400 underline"
+                >
+                  Check if URL is Blocked
+                </a>
+              </div>
+            </div>
+          </div>
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setIndexingHelpModal({ open: false, pageUrl: null })}
+            >
+              Close
+            </Button>
+            {indexingHelpModal.pageUrl && (
+              <Button
+                onClick={() => {
+                  window.open(`https://search.google.com/search-console`, '_blank');
+                }}
+                className="gap-2"
+              >
+                <ExternalLink className="w-4 h-4" />
+                Open Search Console
+              </Button>
+            )}
           </DialogFooter>
         </DialogContent>
       </Dialog>

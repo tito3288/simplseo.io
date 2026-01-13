@@ -32,6 +32,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import ContentAuditPanel from "../components/dashboard/ContentAuditPanel";
+import PivotOptionsPanel from "../components/dashboard/PivotOptionsPanel";
 import { Badge } from "@/components/ui/badge";
 import { getFocusKeywords } from "../lib/firestoreHelpers";
 import {
@@ -113,6 +114,7 @@ export default function LowCtrPage() {
   const [sitemapUrls, setSitemapUrls] = useState([]);
   const [implementedPages, setImplementedPages] = useState([]);
   const [pageImplementationDates, setPageImplementationDates] = useState({});
+  const [pivotedPagesData, setPivotedPagesData] = useState({}); // Track pivoted pages and their keyword history
   const [loading, setLoading] = useState(true);
   const [timePeriod, setTimePeriod] = useState(28); // Default to 28 days
   const shouldShowLoader = useMinimumLoading(loading, 3000);
@@ -126,6 +128,11 @@ export default function LowCtrPage() {
   const [gscKeywordRows, setGscKeywordRows] = useState([]);
   const [viewMode, setViewMode] = useState("raw");
   const [userHasToggledView, setUserHasToggledView] = useState(false);
+  
+  // Recovery state - temporary until keywords are restored
+  const [needsRecovery, setNeedsRecovery] = useState(false);
+  const [snapshotKeywordCount, setSnapshotKeywordCount] = useState(0);
+  const [isRestoring, setIsRestoring] = useState(false);
 
   useEffect(() => {
     const fetchGSCData = async () => {
@@ -256,20 +263,34 @@ export default function LowCtrPage() {
     const fetchImplementedPages = async () => {
       if (!user?.id) return;
 
-      const q = query(
+      // Fetch implemented pages
+      const implementedQuery = query(
         collection(db, "implementedSeoTips"),
         where("userId", "==", user.id),
         where("status", "==", "implemented")
       );
 
-      const snapshot = await getDocs(q);
+      // Also fetch pivoted pages to track their keyword history
+      const pivotedQuery = query(
+        collection(db, "implementedSeoTips"),
+        where("userId", "==", user.id),
+        where("status", "==", "pivoted")
+      );
+
+      const [implementedSnapshot, pivotedSnapshot] = await Promise.all([
+        getDocs(implementedQuery),
+        getDocs(pivotedQuery)
+      ]);
+      
       const now = Date.now();
-      const thirtyDaysInMs = 30 * 24 * 60 * 60 * 1000;
+      const fortyFiveDaysInMs = 45 * 24 * 60 * 60 * 1000;
 
       const pageData = {};
       const eligiblePages = [];
+      const pivotedData = {};
 
-      snapshot.docs.forEach(doc => {
+      // Process implemented pages
+      implementedSnapshot.docs.forEach(doc => {
         const data = doc.data();
         if (data.postStats && data.implementedAt && data.preStats) {
           const daysSince = (now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24);
@@ -286,11 +307,13 @@ export default function LowCtrPage() {
             newImpressions: newImpressions,
             currentPosition: currentPosition,
             preStats: data.preStats,
-            postStats: data.postStats
+            postStats: data.postStats,
+            keywordHistory: data.keywordHistory || [],
+            keywordStatsHistory: data.keywordStatsHistory || []
           };
 
-          // Content Audit eligibility: 30+ days AND 0 clicks AND 50+ new impressions AND position >= 15
-          const isEligible = daysSince >= 30 && 
+          // Content Audit eligibility: 45+ days AND 0 clicks AND 50+ new impressions AND position >= 15
+          const isEligible = daysSince >= 45 && 
                             data.postStats.clicks === 0 && 
                             newImpressions >= 50 && 
                             currentPosition >= 15;
@@ -301,8 +324,22 @@ export default function LowCtrPage() {
         }
       });
 
+      // Process pivoted pages - store their keyword history so we can show it in the SEO panel
+      pivotedSnapshot.docs.forEach(doc => {
+        const data = doc.data();
+        pivotedData[data.pageUrl] = {
+          isPivoted: true,
+          pivotedAt: data.pivotedAt,
+          keywordHistory: data.keywordHistory || [],
+          keywordStatsHistory: data.keywordStatsHistory || [],
+          pivotedToKeyword: data.pivotedToKeyword,
+          pivotedFromKeyword: data.pivotedFromKeyword
+        };
+      });
+
       setPageImplementationDates(pageData);
       setImplementedPages(eligiblePages);
+      setPivotedPagesData(pivotedData);
     };
 
     fetchImplementedPages();
@@ -345,6 +382,80 @@ export default function LowCtrPage() {
 
     fetchFocus();
   }, [user?.id]);
+
+  // Check if recovery is needed (snapshot has more keywords than current)
+  useEffect(() => {
+    const checkRecovery = async () => {
+      if (!user?.id) return;
+      
+      try {
+        const response = await fetch(`/api/focus-keywords/restore?userId=${encodeURIComponent(user.id)}`);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.hasSnapshot && data.snapshotKeywordsCount > data.currentKeywordsCount) {
+            setNeedsRecovery(true);
+            setSnapshotKeywordCount(data.snapshotKeywordsCount);
+          }
+        }
+      } catch (error) {
+        console.error("Failed to check recovery status:", error);
+      }
+    };
+    
+    checkRecovery();
+  }, [user?.id]);
+
+  // Handle keyword recovery from snapshot
+  const handleRecoverKeywords = async () => {
+    if (!user?.id) return;
+    
+    setIsRestoring(true);
+    try {
+      const response = await fetch("/api/focus-keywords/restore", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ userId: user.id }),
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || "Failed to restore keywords");
+      }
+      
+      const result = await response.json();
+      
+      // Refresh focus keywords state
+      const keywords = await getFocusKeywords(user.id);
+      if (Array.isArray(keywords) && keywords.length > 0) {
+        const keywordList = [];
+        const assignments = new Map();
+        const sources = new Map();
+        keywords.forEach(({ keyword, pageUrl, source }) => {
+          if (!keyword) return;
+          keywordList.push(keyword);
+          assignments.set(keyword.toLowerCase(), pageUrl || null);
+          if (pageUrl) {
+            const normalizedUrl = normalizeUrlForComparison(pageUrl);
+            if (normalizedUrl) {
+              sources.set(normalizedUrl, source || "gsc-existing");
+            }
+          }
+        });
+        setFocusKeywords(keywordList);
+        setFocusKeywordAssignments(assignments);
+        setFocusKeywordSourceByPage(sources);
+      }
+      
+      setNeedsRecovery(false);
+      alert(`✅ Restored ${result.keywords.length} keywords successfully! The page will now refresh.`);
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to restore keywords:", error);
+      alert(`❌ Failed to restore: ${error.message}`);
+    } finally {
+      setIsRestoring(false);
+    }
+  };
 
   // ✅ Memoized filtered sitemap pages
   const relevantPages = useMemo(
@@ -679,7 +790,7 @@ export default function LowCtrPage() {
 
 
   // Helper function to check if a page is eligible for Content Quality Audit
-  // Criteria: 30+ days AND 0 clicks AND 50+ new impressions AND position >= 15 (page 2+)
+  // Criteria: 45+ days AND 0 clicks AND 50+ new impressions AND position >= 15 (page 2+)
   const isPageEligibleForContentAudit = (pageUrl) => {
     const pageData = pageImplementationDates[pageUrl];
     if (!pageData) return false;
@@ -687,14 +798,61 @@ export default function LowCtrPage() {
     const { daysSince, hasZeroClicks, newImpressions, currentPosition } = pageData;
     
     // All conditions must be true:
-    // 1. 30+ days since implementation (Google had time to react)
+    // 1. 45+ days since implementation (Google had time to react)
     // 2. 0 clicks (CTR fixes didn't work)
     // 3. 50+ new impressions (enough exposure to evaluate)
     // 4. Position >= 15 (page 2+, not close to page 1)
-    return daysSince >= 30 && 
+    return daysSince >= 45 && 
            hasZeroClicks && 
            (newImpressions || 0) >= 50 && 
            (currentPosition || 0) >= 15;
+  };
+
+  // Helper function to check if a page needs Pivot Options
+  // Criteria: 45+ days BUT doesn't meet Content Audit criteria AND not already pivoted
+  const isPageEligibleForPivotOptions = (pageUrl) => {
+    // Check if the page has already been pivoted - if so, don't show pivot card
+    const normalizedUrl = normalizeUrlForComparison(pageUrl);
+    const isPivoted = Object.keys(pivotedPagesData).some(url => 
+      normalizeUrlForComparison(url) === normalizedUrl
+    );
+    
+    if (isPivoted) {
+      console.log("🔄 Page already pivoted, hiding pivot options:", pageUrl);
+      return false;
+    }
+    
+    const pageData = pageImplementationDates[pageUrl];
+    
+    // TEST FLAG: Force show for test page regardless of Content Audit criteria
+    // BUT still require 45+ days of tracking (like real pages)
+    // TODO: Remove after testing
+    const isTestPage = pageUrl?.toLowerCase().includes("best-website-builders");
+    if (isTestPage) {
+      // Still check if page has been tracking for 45+ days
+      if (!pageData || pageData.daysSince < 45) {
+        console.log("🧪 TEST: Test page not yet at 45 days, hiding pivot options:", pageUrl, "daysSince:", pageData?.daysSince);
+        return false;
+      }
+      console.log("🧪 TEST: Showing pivot options for test page (45+ days):", pageUrl);
+      return true;
+    }
+    
+    if (!pageData) return false;
+    
+    const { daysSince, hasZeroClicks, newImpressions, currentPosition } = pageData;
+    
+    // Must have 45+ days
+    if (daysSince < 45) return false;
+    
+    // Show pivot options if ANY of the Content Audit criteria are NOT met
+    // (but still has 45+ days)
+    const meetsContentAuditCriteria = 
+      hasZeroClicks && 
+      (newImpressions || 0) >= 50 && 
+      (currentPosition || 0) >= 15;
+    
+    return !meetsContentAuditCriteria;
   };
 
   const fetchLowCtrPages = async (siteUrl, token) => {
@@ -903,6 +1061,29 @@ export default function LowCtrPage() {
         This usually means your page titles and descriptions aren&apos;t compelling enough 
         to make people want to click. Try making them more attractive and keyword-focused!
       </p>
+
+      {/* Recovery Banner - Shows when keywords were accidentally wiped */}
+      {needsRecovery && (
+        <Alert className="mb-6 border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/20">
+          <AlertCircle className="h-4 w-4 text-red-600" />
+          <AlertTitle className="text-red-900 dark:text-red-100">
+            Focus Keywords Need Recovery
+          </AlertTitle>
+          <AlertDescription className="text-red-800 dark:text-red-200">
+            <p className="mb-3">
+              Your saved snapshot has {snapshotKeywordCount} keywords but only {focusKeywords.length} are currently active. 
+              Click below to restore your keywords from the backup.
+            </p>
+            <Button 
+              onClick={handleRecoverKeywords}
+              disabled={isRestoring}
+              className="bg-red-600 hover:bg-red-700 text-white"
+            >
+              {isRestoring ? "Restoring..." : `Restore ${snapshotKeywordCount} Keywords Now`}
+            </Button>
+          </AlertDescription>
+        </Alert>
+      )}
 
       {!isGscConnected && !loading && (
         <Card className="mb-6">
@@ -1188,6 +1369,45 @@ export default function LowCtrPage() {
                 .replace(/^https?:\/\//, "")
                 .replace(/\/$/, "");
               const titlePrefix = meta.focusKeyword ? "Focus" : "Fix";
+              
+              // Get keyword history for this page from either implemented or pivoted data
+              const normalizedPageUrl = normalizeUrlForComparison(meta.pageUrl);
+              
+              // Check implemented pages first
+              let pageKeywordHistory = [];
+              let pageKeywordStatsHistory = [];
+              
+              // Look in pageImplementationDates
+              const implDataEntry = Object.entries(pageImplementationDates).find(([url]) => 
+                normalizeUrlForComparison(url) === normalizedPageUrl
+              );
+              if (implDataEntry) {
+                pageKeywordHistory = implDataEntry[1].keywordHistory || [];
+                pageKeywordStatsHistory = implDataEntry[1].keywordStatsHistory || [];
+              }
+              
+              // Also check pivotedPagesData (may have more recent history)
+              const pivotDataEntry = Object.entries(pivotedPagesData).find(([url]) => 
+                normalizeUrlForComparison(url) === normalizedPageUrl
+              );
+              if (pivotDataEntry) {
+                // Merge keyword history from pivoted data if exists
+                const pivotHistory = pivotDataEntry[1].keywordHistory || [];
+                const pivotStatsHistory = pivotDataEntry[1].keywordStatsHistory || [];
+                
+                // Combine, avoiding duplicates
+                pivotHistory.forEach(item => {
+                  if (!pageKeywordHistory.some(h => h.keyword?.toLowerCase() === item.keyword?.toLowerCase())) {
+                    pageKeywordHistory.push(item);
+                  }
+                });
+                pivotStatsHistory.forEach(item => {
+                  if (!pageKeywordStatsHistory.some(h => h.keyword?.toLowerCase() === item.keyword?.toLowerCase())) {
+                    pageKeywordStatsHistory.push(item);
+                  }
+                });
+              }
+              
               return (
                 <SeoRecommendationPanel
                   key={idx}
@@ -1197,6 +1417,8 @@ export default function LowCtrPage() {
                   suggestedDescription={meta.description}
                   keywordSource={meta.source}
                   focusKeyword={meta.focusKeyword}
+                  keywordHistory={pageKeywordHistory}
+                  keywordStatsHistory={pageKeywordStatsHistory}
                 />
               );
             })
@@ -1233,7 +1455,7 @@ export default function LowCtrPage() {
         <>
           <Alert className="mb-6 border-primary/20 bg-primary/5">
             <AlertCircle className="h-4 w-4" />
-            <AlertTitle>Still No Clicks After 30 Days?</AlertTitle>
+            <AlertTitle>Still No Clicks After 45 Days?</AlertTitle>
             <AlertDescription>
               That&apos;s okay — it&apos;s totally normal. SEO takes time and a bit of trial
               and error. To improve your chances, try these additional tips
@@ -1261,23 +1483,24 @@ export default function LowCtrPage() {
                         No pages are eligible for Content Quality Audit yet.
                       </p>
                       <p className="text-sm text-muted-foreground">
-                        Pages become eligible when: 30+ days since implementation, 0 clicks, 50+ new impressions, and ranking on page 2 or beyond.
+                        Pages become eligible when: 45+ days since implementation, 0 clicks, 50+ new impressions, and ranking on page 2 or beyond.
                       </p>
                     </div>
                   );
                 }
                 
                 return eligiblePages.map((page) => {
-                  const pageData = pageImplementationDates[page.page];
+                  const implData = pageImplementationDates[page.page];
                   return (
                     <div key={page.page} className="mb-4">
                       <div className="text-sm text-muted-foreground mb-2">
-                        Implemented {Math.floor(pageData?.daysSince || 0)} days ago • 
-                        {pageData?.newImpressions || 0} new impressions • Position {Math.round(pageData?.currentPosition || 0)}
+                        Implemented {Math.floor(implData?.daysSince || 0)} days ago • 
+                        {implData?.newImpressions || 0} new impressions • Position {Math.round(implData?.currentPosition || 0)}
                       </div>
                       <ContentAuditPanel
                         pageUrl={page.page}
                         pageData={page}
+                        implementationData={implData}
                       />
                     </div>
                   );
@@ -1285,8 +1508,93 @@ export default function LowCtrPage() {
               })()}
             </CardContent>
           </Card>
+
         </>
       )}
+
+      {/* Pivot Options Card - For pages that reached 45 days but don't meet Content Audit criteria */}
+      {/* This is outside the implementedPages condition so it can show independently for testing */}
+      {(() => {
+        // Start with pages from lowCtrPages that are eligible
+        let pivotEligiblePages = lowCtrPages.filter((page) => isPageEligibleForPivotOptions(page.page));
+        
+        // TEST FLAG: Also check pageImplementationDates for test page
+        // This handles pages that aren't in lowCtrPages (low impressions)
+        // TODO: Remove after testing
+        const testPageUrl = "https://bryandevelops.com/best-website-builders/";
+        const testPageInList = pivotEligiblePages.some(p => 
+          p.page.toLowerCase().includes("best-website-builders")
+        );
+        
+        // Check if test page is already pivoted - if so, don't force-add it
+        const isTestPagePivoted = Object.keys(pivotedPagesData).some(url => 
+          url.toLowerCase().includes("best-website-builders")
+        );
+        
+        if (!testPageInList && !isTestPagePivoted) {
+          // Check if test page exists in pageImplementationDates AND has 45+ days
+          const testPageData = Object.entries(pageImplementationDates).find(([url]) => 
+            url.toLowerCase().includes("best-website-builders")
+          );
+          
+          if (testPageData && testPageData[1]?.daysSince >= 45) {
+            console.log("🧪 TEST: Adding test page to pivot options from implementationDates (45+ days)");
+            pivotEligiblePages = [...pivotEligiblePages, {
+              page: testPageData[0],
+              impressions: testPageData[1]?.postStats?.impressions || 0,
+              clicks: testPageData[1]?.postStats?.clicks || 0,
+              ctr: "0%",
+              keywords: [],
+            }];
+          } else {
+            // Don't force add test page if it doesn't have 45+ days
+            console.log("🧪 TEST: Test page not at 45 days yet, not adding to pivot options. Days:", testPageData?.[1]?.daysSince);
+          }
+        } else if (isTestPagePivoted) {
+          console.log("🔄 TEST: Test page already pivoted, not showing in pivot options");
+        }
+        
+        if (pivotEligiblePages.length === 0) return null;
+        
+        return (
+          <Card className="mb-6 border-amber-200 dark:border-amber-800">
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <span className="text-amber-600">🎯</span>
+                Pivot Your Strategy
+              </CardTitle>
+              <CardDescription>
+                These pages have been tracking for 45+ days but don&apos;t meet Content Audit criteria. 
+                Consider waiting for more data or trying a different keyword strategy.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {pivotEligiblePages.map((page) => {
+                const implData = pageImplementationDates[page.page];
+                const normalizedPageUrl = normalizeUrlForComparison(page.page);
+                const pageFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+                const pageKeywordSource = focusKeywordSourceByPage.get(normalizedPageUrl) || "gsc-existing";
+                
+                return (
+                  <div key={page.page} className="mb-4">
+                    <div className="text-sm text-muted-foreground mb-2">
+                      Implemented {Math.floor(implData?.daysSince || 0)} days ago • 
+                      {implData?.newImpressions || 0} new impressions • Position {Math.round(implData?.currentPosition || 0)}
+                    </div>
+                    <PivotOptionsPanel
+                      pageUrl={page.page}
+                      pageData={page}
+                      implementationData={implData}
+                      focusKeyword={pageFocusKeyword}
+                      keywordSource={pageKeywordSource}
+                    />
+                  </div>
+                );
+              })}
+            </CardContent>
+          </Card>
+        );
+      })()}
       </>
       )}
 
