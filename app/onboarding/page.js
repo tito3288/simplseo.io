@@ -942,7 +942,7 @@ const OnboardingWizard = () => {
                     
                     {/* Reassurance statement */}
                     <p className="text-foreground/80 leading-relaxed">
-                      We only use your website's data to give you accurate SEO insights. You are always in control.
+                      We only use your website&apos;s data to give you accurate SEO insights. You are always in control.
                     </p>
                     
 
