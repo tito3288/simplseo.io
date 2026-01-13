@@ -653,7 +653,7 @@ export default function Chatbot() {
           </div> */}
 
           {/* Chat History Panel */}
-          <div className={`flex-1 mb-4 mt-4 bg-muted rounded-lg border border-border transition-all duration-300 ${
+          <div className={`flex-1 flex flex-col mb-4 mt-4 bg-muted rounded-lg border border-border transition-all duration-300 ${
             isSidebarCollapsed ? 'mx-2 p-2' : 'mx-4 p-4'
           }`}>
             <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
@@ -666,17 +666,17 @@ export default function Chatbot() {
                   </>
                 )}
               </div>
-              {!isSidebarCollapsed && (
+              {/* {!isSidebarCollapsed && (
                 <button className="p-1 hover:bg-muted rounded">
                   <ChevronUp className="w-4 h-4 text-muted-foreground" />
                 </button>
-              )}
+              )} */}
             </div>
             
             {!isSidebarCollapsed && (
-              <>
+              <div className="flex-1 flex flex-col min-h-0">
                 {/* Search Bar */}
-                <div className="mb-3">
+                <div className="mb-3 flex-shrink-0">
                   <Input
                     placeholder="Search conversations..."
                     value={searchTerm}
@@ -692,7 +692,7 @@ export default function Chatbot() {
                     <p className="text-xs text-muted-foreground">Loading conversations...</p>
                   </div>
                 ) : conversations.length > 0 ? (
-                  <div className="space-y-1 max-h-64 overflow-y-auto">
+                  <div className="space-y-1 flex-1 overflow-y-auto">
                     {conversations.map((conversation) => (
                       <div 
                         key={conversation.id}
@@ -742,12 +742,12 @@ export default function Chatbot() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8">
+                  <div className="text-center py-8 flex-1 flex flex-col justify-center">
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
                     <p className="text-xs text-muted-foreground mt-1">Start chatting to see your history here!</p>
                   </div>
                 )}
-              </>
+              </div>
             )}
           </div>
 
@@ -767,7 +767,7 @@ export default function Chatbot() {
                   <div className="text-xs text-muted-foreground">SEO Assistant</div>
                 </div>
               )}
-              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
+              {/* {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />} */}
             </div>
           </div>
         </div>
@@ -806,7 +806,7 @@ export default function Chatbot() {
                   </div>
                   
                   {/* Input Field - Same layout as conversation */}
-                  <div className="mb-4 sm:mb-5 w-full">
+                  <div className="mb-1 w-full">
                     <div className="border border-border rounded-lg bg-card">
                       {/* Textarea */}
                       <Textarea
@@ -834,6 +834,11 @@ export default function Chatbot() {
                       </div>
                     </div>
                   </div>
+                  
+                  {/* AI Disclaimer */}
+                  <p className="text-xs text-muted-foreground mb-4">
+                    SimplSEO Mentor is AI and can make mistakes. Please double-check responses.
+                  </p>
 
                   {/* Action Buttons with Dropdowns */}
                   <div className="flex flex-row flex-wrap justify-center gap-2 sm:gap-4 px-4 relative">
@@ -1103,6 +1108,10 @@ export default function Chatbot() {
                       </div>
                     </div>
                   </div>
+                  {/* AI Disclaimer */}
+                  <p className="text-xs text-muted-foreground text-center mt-2">
+                    SimplSEO Mentor is AI and can make mistakes. Please double-check responses.
+                  </p>
                 </div>
               </div>
             )}

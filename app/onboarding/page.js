@@ -942,27 +942,18 @@ const OnboardingWizard = () => {
                     
                     {/* Reassurance statement */}
                     <p className="text-foreground/80 leading-relaxed">
-                      We only use your data to give you accurate SEO insights. We never modify your Google Search Console data, and you&apos;re always in control.
+                      We only use your website's data to give you accurate SEO insights. You are always in control.
                     </p>
                     
-                    {/* TL;DR Box */}
-                    <div className="p-3 bg-primary/10 rounded-md border border-primary/20">
-                      <p className="font-semibold text-foreground text-xs uppercase tracking-wide mb-2">TL;DR</p>
-                      <ul className="list-disc list-inside space-y-1 text-foreground/90">
-                        <li>We only use your data to help you</li>
-                        <li>Read-only access to Google Search Console</li>
-                        <li>We never sell your data</li>
-                        <li>You&apos;re free to delete everything anytime</li>
-                      </ul>
-                    </div>
+
                     
                     {/* 1. Privacy & Security (trust first) */}
                     <p className="font-medium mt-3">Privacy & Security:</p>
                     <ul className="list-disc list-inside space-y-1 ml-2">
                       <li>Your data is encrypted in transit and at rest</li>
-                      <li>We do NOT sell your data to third parties</li>
+                      {/* <li>We do NOT sell your data to third parties</li> */}
                       <li>You can delete your account and data at any time</li>
-                      <li>We do not track you across websites, apps, or devices</li>
+                      {/* <li>We do not track you across websites, apps, or devices</li> */}
                       <li>We only analyze data you choose to connect (like Google Search Console)</li>
                     </ul>
                     
@@ -980,6 +971,27 @@ const OnboardingWizard = () => {
                       <li>Used to provide personalized SEO recommendations</li>
                       <li>Read-only access — we cannot modify your GSC data</li>
                     </ul>
+
+                    {/* AI Recommendations Disclaimer */}
+                    <p className="font-medium mt-4">AI Recommendations & Website Changes:</p>
+                    <ul className="list-disc list-inside space-y-1 ml-2 text-sm">
+                      <li>
+                        <span className="font-bold">We strongly recommend backing up your website before applying any changes.</span>
+                      </li>
+                      <li>
+                        SimplSEO provides AI-generated SEO recommendations as guidance only and does not
+                        guarantee specific results.
+                      </li>
+                      <li>
+                        You are responsible for deciding whether to implement any recommendation and for
+                        making changes to your website.
+                      </li>
+
+                      <li>
+                        SimplSEO is not responsible for website errors, downtime, data loss, ranking
+                        changes, or other issues resulting from changes you choose to make.
+                      </li>
+                    </ul>
                     
                     {/* 4. AI Assistance (clarified, non-threatening) */}
                     <p className="font-medium mt-3">AI Assistance (How It Helps You):</p>
@@ -989,6 +1001,17 @@ const OnboardingWizard = () => {
                       <li>We do not use your private business data to train public AI models</li>
                       <li>Training data is anonymized (no names, no full conversations)</li>
                     </ul>
+
+                   {/* TL;DR Box */}
+                   <div className="p-3 bg-primary/10 rounded-md border border-primary/20">
+                      <p className="font-semibold text-foreground text-xs uppercase tracking-wide mb-2">TL;DR</p>
+                      <ul className="list-disc list-inside space-y-1 text-foreground/90">
+                        <li>We only use your data to help give you the best results</li>
+                        <li>Read-only access to Google Search Console</li>
+                        {/* <li>We never sell your data</li> */}
+                        <li>You&apos;re free to delete everything anytime</li>
+                      </ul>
+                    </div>
                     
                     {/* 5. Consent statement (softened) */}
                     <div className="mt-4 p-3 bg-muted rounded-md border border-border">
@@ -1014,7 +1037,7 @@ const OnboardingWizard = () => {
                   >
                     <span className="font-medium">I have read, understood, and agree to the </span>
                     <a href="/privacy" target="_blank" rel="noopener noreferrer" className="text-primary hover:underline">Privacy Policy</a>
-                    <span className="font-medium"> and consent to the collection and processing of my data as described therein.</span>
+                    <span className="font-medium"> and consent to the collection and processing of my data as described.</span>
                   </label>
                 </div>
               </div>
