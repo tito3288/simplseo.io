@@ -130,7 +130,7 @@ export default function GenericKeywordsPage() {
       ) {
         return {
           placement: "Blog",
-          icon: "📝",
+          icon: "",
           suggestion: "To help visitors (and Google) find this page, add it to your site’s header, blog, or resources menu",
           reason: "Pages linked in your navigation are discovered and crawled more often"
         };
@@ -661,7 +661,7 @@ export default function GenericKeywordsPage() {
   const fetchGSCKeywords = async (siteUrl, token) => {
     const today = new Date();
     const start = new Date(today);
-    start.setDate(today.getDate() - 28); // 28 days like Low CTR page
+    start.setDate(today.getDate() - 90); // 90 days (3 months) for Success Stories to match settling period
 
     const format = (d) => d.toISOString().split("T")[0];
     const from = format(start);
@@ -715,7 +715,7 @@ export default function GenericKeywordsPage() {
   const checkPageExistsInGSC = async (siteUrl, token, pageUrl) => {
     const today = new Date();
     const start = new Date(today);
-    start.setDate(today.getDate() - 28);
+    start.setDate(today.getDate() - 90); // 90 days to match Success Stories data window
 
     const format = (d) => d.toISOString().split("T")[0];
     const from = format(start);
@@ -1613,7 +1613,7 @@ export default function GenericKeywordsPage() {
           <CardHeader>
             <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
               <CheckCircle className="w-5 h-5" />
-              🎉 Success Stories - Your Pages Are Ranking!
+               Success Stories - Your Pages Are Ranking!
             </CardTitle>
             <CardDescription className="text-green-700 dark:text-green-300">
               Pages you created are now appearing in Google Search Console

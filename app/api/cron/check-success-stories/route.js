@@ -130,7 +130,7 @@ const createTransporter = () => {
 async function fetchGSCKeywords(siteUrl, token) {
   const today = new Date();
   const start = new Date(today);
-  start.setDate(today.getDate() - 28); // Last 28 days
+  start.setDate(today.getDate() - 90); // Last 90 days (3 months) to match Success Stories settling period
 
   const format = (d) => d.toISOString().split("T")[0];
   const from = format(start);
@@ -175,6 +175,116 @@ async function fetchGSCKeywords(siteUrl, token) {
     console.error("Error fetching GSC keywords:", error);
     return [];
   }
+}
+
+// Check if a specific page URL exists in GSC (for pages with low impressions not in top 1000)
+async function checkPageExistsInGSC(siteUrl, token, pageUrl) {
+  const today = new Date();
+  const start = new Date(today);
+  start.setDate(today.getDate() - 90); // 90 days to match Success Stories data window
+
+  const format = (d) => d.toISOString().split("T")[0];
+  const from = format(start);
+  const to = format(today);
+
+  // Try both with and without trailing slash
+  const urlsToTry = [
+    pageUrl,
+    pageUrl.endsWith('/') ? pageUrl.slice(0, -1) : pageUrl + '/'
+  ];
+
+  for (const urlToCheck of urlsToTry) {
+    try {
+      const res = await fetch(
+        `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+          siteUrl
+        )}/searchAnalytics/query`,
+        {
+          method: "POST",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            startDate: from,
+            endDate: to,
+            dimensions: ["page"],
+            dimensionFilterGroups: [{
+              filters: [{
+                dimension: "page",
+                operator: "equals",
+                expression: urlToCheck
+              }]
+            }],
+            rowLimit: 1,
+          }),
+        }
+      );
+
+      const json = await res.json();
+      
+      if (json.rows && json.rows.length > 0) {
+        const row = json.rows[0];
+        return {
+          exists: true,
+          impressions: row.impressions,
+          clicks: row.clicks,
+          ctr: `${(row.ctr * 100).toFixed(1)}%`,
+          position: Math.round(row.position)
+        };
+      }
+    } catch (error) {
+      console.error(`Error checking page ${urlToCheck}:`, error);
+    }
+  }
+  
+  // Also try a "contains" search as a fallback
+  try {
+    const pathname = new URL(pageUrl).pathname.replace(/\/$/, '');
+    
+    const res = await fetch(
+      `https://searchconsole.googleapis.com/webmasters/v3/sites/${encodeURIComponent(
+        siteUrl
+      )}/searchAnalytics/query`,
+      {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          startDate: from,
+          endDate: to,
+          dimensions: ["page"],
+          dimensionFilterGroups: [{
+            filters: [{
+              dimension: "page",
+              operator: "contains",
+              expression: pathname
+            }]
+          }],
+          rowLimit: 10,
+        }),
+      }
+    );
+
+    const json = await res.json();
+    
+    if (json.rows && json.rows.length > 0) {
+      const row = json.rows[0];
+      return {
+        exists: true,
+        impressions: row.impressions,
+        clicks: row.clicks,
+        ctr: `${(row.ctr * 100).toFixed(1)}%`,
+        position: Math.round(row.position)
+      };
+    }
+  } catch (error) {
+    console.error(`Error in contains search for ${pageUrl}:`, error);
+  }
+  
+  return { exists: false };
 }
 
 // Normalize URL to extract pathname only (not full URL with domain)
@@ -344,12 +454,46 @@ export async function GET(req) {
             continue;
           }
 
-          // Check if this opportunity's URL matches any GSC page
+          // Check if this opportunity's URL matches any GSC page in top 1000 results
           const matchingKw = gscKeywords.find((kw) =>
             urlsMatch(opportunity.pageUrl, kw.page)
           );
 
+          let gscMetrics = null;
+
           if (matchingKw) {
+            // Found in top 1000 results
+            gscMetrics = {
+              position: matchingKw.position,
+              impressions: matchingKw.impressions,
+              clicks: matchingKw.clicks,
+              ctr: matchingKw.ctr,
+            };
+            console.log(`✅ Found "${opportunity.keyword}" in top 1000 GSC results`);
+          } else {
+            // Not in top 1000 - do a direct check for this specific URL
+            // This catches low-impression pages that wouldn't appear in the top 1000
+            console.log(`🔍 "${opportunity.keyword}" not in top 1000, doing direct check...`);
+            const directCheck = await checkPageExistsInGSC(
+              gscData.siteUrl,
+              validToken,
+              opportunity.pageUrl
+            );
+
+            if (directCheck.exists) {
+              gscMetrics = {
+                position: directCheck.position,
+                impressions: directCheck.impressions,
+                clicks: directCheck.clicks,
+                ctr: directCheck.ctr,
+              };
+              console.log(`✅ Found "${opportunity.keyword}" via direct check: ${directCheck.impressions} impressions`);
+            } else {
+              console.log(`❌ "${opportunity.keyword}" not found in GSC yet`);
+            }
+          }
+
+          if (gscMetrics) {
             matchesFound++;
 
             // Update opportunity with GSC metrics
@@ -360,10 +504,10 @@ export async function GET(req) {
               .doc(opportunity.id)
               .update({
                 firstRankedAt: new Date().toISOString(),
-                position: matchingKw.position,
-                impressions: matchingKw.impressions,
-                clicks: matchingKw.clicks,
-                ctr: matchingKw.ctr,
+                position: gscMetrics.position,
+                impressions: gscMetrics.impressions,
+                clicks: gscMetrics.clicks,
+                ctr: gscMetrics.ctr,
                 notificationSentAt: new Date().toISOString(),
               });
 
@@ -371,10 +515,10 @@ export async function GET(req) {
             const emailSent = await sendSuccessNotification(userEmail, {
               keyword: opportunity.keyword,
               pageUrl: opportunity.pageUrl,
-              position: matchingKw.position,
-              impressions: matchingKw.impressions,
-              clicks: matchingKw.clicks,
-              ctr: matchingKw.ctr,
+              position: gscMetrics.position,
+              impressions: gscMetrics.impressions,
+              clicks: gscMetrics.clicks,
+              ctr: gscMetrics.ctr,
             });
 
             if (emailSent) {

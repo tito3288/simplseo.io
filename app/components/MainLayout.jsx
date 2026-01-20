@@ -245,10 +245,10 @@ const MainLayout = ({
           </nav>
 
           <div className="flex items-center gap-2">
-            {/* Dark Mode Toggle */}
+            {/* Dark Mode Toggle - Mobile Only (hidden on md and above) */}
             <button
               onClick={toggleTheme}
-              className="relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
+              className="md:hidden relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2"
               style={{
                 backgroundColor: isDarkMode ? '#9ca3af' : '#000000'
               }}
@@ -332,6 +332,37 @@ const MainLayout = ({
           </div>
         )}
       </main>
+
+      {/* Floating Dark Mode Toggle - Desktop Only */}
+      {!isPublicPage && (
+        <div className="hidden md:block fixed bottom-6 left-6 z-50">
+          <button
+            onClick={toggleTheme}
+            className="relative inline-flex h-7 w-14 items-center rounded-full transition-colors focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2 shadow-lg"
+            style={{
+              backgroundColor: isDarkMode ? '#9ca3af' : '#000000'
+            }}
+            title={isDarkMode ? "Switch to light mode" : "Switch to dark mode"}
+          >
+            {/* Sun Icon (Light Mode) - Always visible */}
+            <div className="absolute left-1.5 flex items-center justify-center z-10">
+              <Sun className="w-3.5 h-3.5 text-white" />
+            </div>
+            
+            {/* Moon Icon (Dark Mode) - Always visible */}
+            <div className="absolute right-1.5 flex items-center justify-center z-10">
+              <Moon className="w-3.5 h-3.5 text-white" />
+            </div>
+            
+            {/* Toggle Knob */}
+            <span
+              className={`inline-block h-5 w-5 transform rounded-full bg-white shadow-lg transition-transform duration-300 ease-in-out z-20 ${
+                isDarkMode ? 'translate-x-7' : 'translate-x-1'
+              }`}
+            />
+          </button>
+        </div>
+      )}
 
       {/* Chat Assistant */}
       {showChat && (

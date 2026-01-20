@@ -653,10 +653,10 @@ export default function Chatbot() {
           </div> */}
 
           {/* Chat History Panel */}
-          <div className={`flex-1 flex flex-col mb-4 mt-4 bg-muted rounded-lg border border-border transition-all duration-300 ${
+          <div className={`flex-1 mb-4 mt-4 bg-muted rounded-lg border border-border transition-all duration-300 flex flex-col min-h-0 ${
             isSidebarCollapsed ? 'mx-2 p-2' : 'mx-4 p-4'
           }`}>
-            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4`}>
+            <div className={`flex items-center ${isSidebarCollapsed ? 'justify-center' : 'justify-between'} mb-4 flex-shrink-0`}>
               <div className="flex items-center space-x-2">
                 <MessageSquare className="w-5 h-5 text-muted-foreground flex-shrink-0" />
                 {!isSidebarCollapsed && (
@@ -666,15 +666,10 @@ export default function Chatbot() {
                   </>
                 )}
               </div>
-              {/* {!isSidebarCollapsed && (
-                <button className="p-1 hover:bg-muted rounded">
-                  <ChevronUp className="w-4 h-4 text-muted-foreground" />
-                </button>
-              )} */}
             </div>
             
             {!isSidebarCollapsed && (
-              <div className="flex-1 flex flex-col min-h-0">
+              <div className="flex flex-col flex-1 min-h-0">
                 {/* Search Bar */}
                 <div className="mb-3 flex-shrink-0">
                   <Input
@@ -687,12 +682,12 @@ export default function Chatbot() {
 
                 {/* Conversations List */}
                 {isLoadingConversations ? (
-                  <div className="text-center py-4">
+                  <div className="text-center py-4 flex-shrink-0">
                     <div className="w-4 h-4 border-2 border-green-500 border-t-transparent rounded-full animate-spin mx-auto mb-2"></div>
                     <p className="text-xs text-muted-foreground">Loading conversations...</p>
                   </div>
                 ) : conversations.length > 0 ? (
-                  <div className="space-y-1 flex-1 overflow-y-auto">
+                  <div className="space-y-1 flex-1 overflow-y-auto min-h-0 chat-history-scroll">
                     {conversations.map((conversation) => (
                       <div 
                         key={conversation.id}
@@ -742,7 +737,7 @@ export default function Chatbot() {
                     ))}
                   </div>
                 ) : (
-                  <div className="text-center py-8 flex-1 flex flex-col justify-center">
+                  <div className="text-center py-8 flex-1 flex flex-col items-center justify-center">
                     <p className="text-sm text-muted-foreground">No conversations yet</p>
                     <p className="text-xs text-muted-foreground mt-1">Start chatting to see your history here!</p>
                   </div>
@@ -767,7 +762,7 @@ export default function Chatbot() {
                   <div className="text-xs text-muted-foreground">SEO Assistant</div>
                 </div>
               )}
-              {/* {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />} */}
+              {!isSidebarCollapsed && <ChevronDown className="w-4 h-4 text-muted-foreground" />}
             </div>
           </div>
         </div>
@@ -806,7 +801,7 @@ export default function Chatbot() {
                   </div>
                   
                   {/* Input Field - Same layout as conversation */}
-                  <div className="mb-1 w-full">
+                  <div className="mb-4 sm:mb-5 w-full">
                     <div className="border border-border rounded-lg bg-card">
                       {/* Textarea */}
                       <Textarea
@@ -834,11 +829,6 @@ export default function Chatbot() {
                       </div>
                     </div>
                   </div>
-                  
-                  {/* AI Disclaimer */}
-                  <p className="text-xs text-muted-foreground mb-4">
-                    SimplSEO Mentor is AI and can make mistakes. Please double-check responses.
-                  </p>
 
                   {/* Action Buttons with Dropdowns */}
                   <div className="flex flex-row flex-wrap justify-center gap-2 sm:gap-4 px-4 relative">
@@ -1089,7 +1079,7 @@ export default function Chatbot() {
                       value={input}
                       onChange={(e) => setInput(e.target.value)}
                       onKeyDown={handleKeyDown}
-                      placeholder={`How can I help you today ${data?.name?.split(' ')[0] || 'there'}?`}
+                      placeholder="Ask away, I'm warmed up now..."
                       className="w-full min-h-[60px] sm:min-h-[60px] max-h-[200px] resize-none text-base border-0 focus:ring-0 focus-visible:ring-0 rounded-none transition-all duration-200"
                       disabled={isThinking}
                     />
@@ -1119,6 +1109,19 @@ export default function Chatbot() {
         </div>
       </div>
       <style jsx global>{`
+        .chat-history-scroll::-webkit-scrollbar {
+          width: 6px;
+        }
+        .chat-history-scroll::-webkit-scrollbar-track {
+          background: transparent;
+        }
+        .chat-history-scroll::-webkit-scrollbar-thumb {
+          background: rgba(107, 114, 128, 0.5);
+          border-radius: 3px;
+        }
+        .chat-history-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(107, 114, 128, 0.7);
+        }
         .chatbot-bounce-wrapper div div {
           animation: chatbotBounce 8s infinite ease-in-out !important;
         }
