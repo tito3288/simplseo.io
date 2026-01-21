@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { db } from "../../lib/firebaseConfig";
 import { collection, query, where, getDocs } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
@@ -62,6 +62,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const [pendingData, setPendingData] = useState([]); // Items waiting for 7-day results
   const [implementedCount, setImplementedCount] = useState(0);
   const [expandedRows, setExpandedRows] = useState(new Set());
+  const expandedContentRefs = useRef(new Map());
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedItemHistory, setSelectedItemHistory] = useState(null);
 
@@ -223,6 +224,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       newExpanded.add(index);
     }
     setExpandedRows(newExpanded);
+  };
+
+  const getExpandedContentRef = (index) => {
+    if (!expandedContentRefs.current.has(index)) {
+      expandedContentRefs.current.set(index, { current: null });
+    }
+    return expandedContentRefs.current.get(index);
   };
 
   const handleRefresh = async () => {
@@ -389,6 +397,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         <CardHeader>
           <div className="flex items-center justify-between">
             <CardTitle>SEO Progress</CardTitle>
+            {/* Refresh Data button - hidden for now
             <Button
               onClick={handleRefresh}
               disabled={refreshing || loading}
@@ -399,6 +408,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
               <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
               {refreshing ? 'Refreshing...' : 'Refresh Data'}
             </Button>
+            */}
           </div>
         </CardHeader>
         <CardContent>
@@ -537,6 +547,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       <CardHeader>
         <div className="flex items-center justify-between">
           <CardTitle>SEO Progress</CardTitle>
+          {/* Refresh Data button - hidden for now
           <Button
             onClick={handleRefresh}
             disabled={refreshing || loading}
@@ -547,6 +558,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
             {refreshing ? 'Refreshing...' : 'Refresh Data'}
           </Button>
+          */}
         </div>
       </CardHeader>
       <CardContent>
@@ -592,6 +604,9 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
               .replace(/^https?:\/\//, "")
               .replace(/\/$/, "");
             const isExpanded = expandedRows.has(idx);
+            const expandedRef = getExpandedContentRef(idx);
+            // Use a large fixed value to ensure all content is visible
+            const expandedMaxHeight = isExpanded ? "2000px" : "0px";
 
             const renderDelta = (label, value, invert = false) => {
               const isImprovement = invert ? value < 0 : value > 0;
@@ -664,8 +679,19 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                 </div>
 
                 {/* Expanded Details - Show Before/After Comparison */}
-                {isExpanded && (
-                  <div className="border-t bg-muted/30 p-4 space-y-3">
+                <div
+                  className={cn(
+                    "overflow-hidden bg-muted/30 transition-[max-height,opacity,padding] duration-300 ease-in-out",
+                    isExpanded ? "border-t" : "border-t border-transparent"
+                  )}
+                  style={{
+                    maxHeight: expandedMaxHeight,
+                    opacity: isExpanded ? 1 : 0,
+                    padding: isExpanded ? "1rem" : "0px",
+                    pointerEvents: isExpanded ? "auto" : "none",
+                  }}
+                >
+                  <div ref={(el) => { expandedRef.current = el; }} className="space-y-3">
                     <h4 className="text-sm font-medium text-muted-foreground mb-3">
                        Detailed Metrics Comparison
                     </h4>
@@ -785,7 +811,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                       </Button>
                     )}
                   </div>
-                )}
+                </div>
               </div>
             );
           })}
@@ -915,7 +941,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             </DialogHeader>
             
             {selectedItemHistory && (
-              <div className="overflow-y-auto flex-1 pr-2 space-y-4">
+              <div 
+                className="overflow-y-auto flex-1 pr-2 space-y-4"
+                style={{
+                  scrollbarWidth: 'thin',
+                  scrollbarColor: 'rgba(155, 155, 155, 0.5) transparent',
+                }}
+              >
                 {/* Timeline of snapshots - LATEST first */}
                 <div className="relative">
                   <h4 className="text-sm font-medium text-muted-foreground mb-3">

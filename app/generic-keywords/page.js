@@ -83,6 +83,7 @@ export default function GenericKeywordsPage() {
   // Skipped keywords state
   const [skippedKeywords, setSkippedKeywords] = useState([]);
   const [showSkipped, setShowSkipped] = useState(false);
+  const [openActionItems, setOpenActionItems] = useState({});
   
   // Track which success stories have been added to focus keywords
   const [addedToFocusKeywords, setAddedToFocusKeywords] = useState(new Set());
@@ -148,7 +149,7 @@ export default function GenericKeywordsPage() {
       ) {
         return {
           placement: "Services",
-          icon: "🛠️",
+          icon: "",
           suggestion: "Add this as a dropdown item under your Services menu",
           reason: "This appears to be a service page that should be easily discoverable from your main navigation."
         };
@@ -166,7 +167,7 @@ export default function GenericKeywordsPage() {
       ) {
         return {
           placement: "Locations",
-          icon: "📍",
+          icon: "",
           suggestion: "Add this to a Locations or Service Areas section",
           reason: "This is a location-specific page. Consider creating a 'Service Areas' dropdown in your navigation."
         };
@@ -181,7 +182,7 @@ export default function GenericKeywordsPage() {
       ) {
         return {
           placement: "About",
-          icon: "ℹ️",
+          icon: "",
           suggestion: "Link this from your About page or add to About dropdown",
           reason: "This is company/brand content that should be accessible from your About section."
         };
@@ -195,7 +196,7 @@ export default function GenericKeywordsPage() {
       ) {
         return {
           placement: "FAQ/Support",
-          icon: "❓",
+          icon: "",
           suggestion: "Add this to a FAQ or Help section in your footer or main navigation",
           reason: "FAQ content helps with SEO and customer trust. Make it easy to find."
         };
@@ -211,7 +212,7 @@ export default function GenericKeywordsPage() {
     } catch {
       return {
         placement: "Footer",
-        icon: "🔗",
+        icon: "",
         suggestion: "Add this page to your footer navigation",
         reason: "Internal links help Google discover your content faster."
       };
@@ -1411,7 +1412,12 @@ export default function GenericKeywordsPage() {
 
           {/* Recommended Actions */}
           {opportunity.actionItems?.length > 0 && (
-            <Collapsible>
+            <Collapsible
+              open={!!openActionItems[key]}
+              onOpenChange={(open) =>
+                setOpenActionItems((prev) => ({ ...prev, [key]: open }))
+              }
+            >
               <CollapsibleTrigger asChild>
                 <Button variant="ghost" size="sm" className="w-full justify-between">
                   <div className="flex items-center gap-2">
@@ -1421,8 +1427,18 @@ export default function GenericKeywordsPage() {
                   <ChevronDown className="w-4 h-4" />
                 </Button>
               </CollapsibleTrigger>
-              <CollapsibleContent>
-                <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg mt-2">
+              <CollapsibleContent
+                forceMount
+                className="overflow-hidden"
+                style={{
+                  maxHeight: openActionItems[key] ? "1200px" : "0px",
+                  opacity: openActionItems[key] ? 1 : 0,
+                  marginTop: openActionItems[key] ? "0.5rem" : "0px",
+                  pointerEvents: openActionItems[key] ? "auto" : "none",
+                  transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                }}
+              >
+                <div className="bg-purple-50 dark:bg-purple-900/20 p-3 rounded-lg">
                   <ul className="text-sm text-foreground space-y-2">
                     {opportunity.actionItems.map((action, idx) => (
                       <li key={idx} className="flex items-start gap-2">
@@ -1525,24 +1541,6 @@ export default function GenericKeywordsPage() {
           </p>
         </div>
         <div className="flex items-center gap-2">
-          <Button
-            onClick={() => fetchGenericOpportunitiesFromDashboard(true)}
-            disabled={isRefreshing || loading}
-            variant="outline"
-            className="gap-2"
-          >
-            {isRefreshing ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                Refreshing...
-              </>
-            ) : (
-              <>
-                <RefreshCw className="w-4 h-4" />
-                Refresh Keywords
-              </>
-            )}
-          </Button>
           <Button onClick={() => window.history.back()} variant="outline">
             Back to Dashboard
           </Button>
@@ -2135,36 +2133,43 @@ export default function GenericKeywordsPage() {
                   </Button>
                 </div>
               </CardHeader>
-              {showSkipped && (
-                <CardContent>
-                  <div className="space-y-2">
-                    {skippedKeywords.map((skipped, index) => (
-                      <div
-                        key={skipped.id || index}
-                        className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
-                      >
-                        <div>
-                          <p className="font-medium text-gray-700 dark:text-gray-300">
-                            {skipped.keyword}
-                          </p>
-                          <p className="text-xs text-gray-500 dark:text-gray-400">
-                            Skipped {new Date(skipped.skippedAt).toLocaleDateString()}
-                          </p>
-                        </div>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleRestoreKeyword(skipped.keyword)}
-                          className="gap-2"
-                        >
-                          <RotateCcw className="w-4 h-4" />
-                          Restore
-                        </Button>
+              <CardContent
+                className="overflow-hidden"
+                style={{
+                  maxHeight: showSkipped ? "1200px" : "0px",
+                  opacity: showSkipped ? 1 : 0,
+                  padding: showSkipped ? "1rem" : "0px",
+                  pointerEvents: showSkipped ? "auto" : "none",
+                  transition: "max-height 300ms ease, opacity 300ms ease, padding 300ms ease",
+                }}
+              >
+                <div className="space-y-2">
+                  {skippedKeywords.map((skipped, index) => (
+                    <div
+                      key={skipped.id || index}
+                      className="flex items-center justify-between p-3 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700"
+                    >
+                      <div>
+                        <p className="font-medium text-gray-700 dark:text-gray-300">
+                          {skipped.keyword}
+                        </p>
+                        <p className="text-xs text-gray-500 dark:text-gray-400">
+                          Skipped {new Date(skipped.skippedAt).toLocaleDateString()}
+                        </p>
                       </div>
-                    ))}
-                  </div>
-                </CardContent>
-              )}
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleRestoreKeyword(skipped.keyword)}
+                        className="gap-2"
+                      >
+                        <RotateCcw className="w-4 h-4" />
+                        Restore
+                      </Button>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
             </Card>
           )}
 
@@ -2220,37 +2225,15 @@ export default function GenericKeywordsPage() {
                 ))}
               </div>
               
-              {/* Cache Status Indicator and Refresh Button */}
-              <div className="flex items-center justify-between mt-4 pt-4 border-t border-border">
-                {fromCache && (
-                  <div className="flex items-center gap-2 text-sm text-muted-foreground">
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <span>
-                      Cached data loaded {cacheAge ? `(${cacheAge} hours old)` : ''}
-                    </span>
-                  </div>
-                )}
-                {!fromCache && <div />}
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => fetchGenericOpportunitiesFromDashboard(true)}
-                  disabled={isRefreshing || loading}
-                  className="gap-2"
-                >
-                  {isRefreshing ? (
-                    <>
-                      <Loader2 className="w-4 h-4 animate-spin" />
-                      Refreshing...
-                    </>
-                  ) : (
-                    <>
-                      <RefreshCw className="w-4 h-4" />
-                      Refresh Keywords
-                    </>
-                  )}
-                </Button>
-              </div>
+              {/* Cache Status Indicator */}
+              {fromCache && (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground mt-4 pt-4 border-t border-border">
+                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                  <span>
+                    Cached data loaded {cacheAge ? `(${cacheAge} hours old)` : ''}
+                  </span>
+                </div>
+              )}
             </CardContent>
           </Card>
 
@@ -2300,7 +2283,18 @@ export default function GenericKeywordsPage() {
                               </div>
                             </button>
                           </CollapsibleTrigger>
-                          <CollapsibleContent className="px-4 pb-4 pt-2 space-y-4">
+                          <CollapsibleContent
+                            forceMount
+                            className="overflow-hidden px-4 pb-0 pt-0"
+                            style={{
+                              maxHeight: openCategories[category] ? "2000px" : "0px",
+                              opacity: openCategories[category] ? 1 : 0,
+                              paddingTop: openCategories[category] ? "0.5rem" : "0px",
+                              paddingBottom: openCategories[category] ? "1rem" : "0px",
+                              pointerEvents: openCategories[category] ? "auto" : "none",
+                              transition: "max-height 300ms ease, opacity 300ms ease, padding 300ms ease",
+                            }}
+                          >
                             {items.map((opportunity, index) =>
                               renderOpportunityCard(
                                 opportunity,

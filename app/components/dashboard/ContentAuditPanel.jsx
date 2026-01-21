@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -27,6 +27,8 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData }) => {
   const [aiSuggestions, setAiSuggestions] = useState(null);
   const [isGeneratingSuggestions, setIsGeneratingSuggestions] = useState(false);
   const [isLoadingSavedData, setIsLoadingSavedData] = useState(true);
+  const expandedContentRef = useRef(null);
+  const [expandedMaxHeight, setExpandedMaxHeight] = useState("0px");
   
   // Keyword Insights Modal state
   const [isInsightsOpen, setIsInsightsOpen] = useState(false);
@@ -36,6 +38,20 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData }) => {
   const [focusKeywordSource, setFocusKeywordSource] = useState(null); // "ai-generated" or "gsc-existing"
 
   const cleanUrl = pageUrl.replace(/^https?:\/\//, "").replace(/\/$/, "");
+
+  useEffect(() => {
+    if (isExpanded && expandedContentRef.current) {
+      // Use a large fixed value to ensure all content is visible
+      setExpandedMaxHeight("2000px");
+    } else {
+      setExpandedMaxHeight("0px");
+    }
+  }, [
+    isExpanded,
+    auditResult,
+    aiSuggestions,
+    isGeneratingSuggestions,
+  ]);
 
   // Normalize URL for comparison
   const normalizeUrl = (url) => {
@@ -650,8 +666,13 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData }) => {
             </div>
 
             {/* Detailed Analysis */}
-            {isExpanded && (
-              <div className="space-y-4">
+            <div
+              className="overflow-hidden"
+              style={{
+                display: isExpanded ? "block" : "none",
+              }}
+            >
+              <div ref={expandedContentRef} className="space-y-4 pt-4">
                 <h4 className="font-medium text-gray-900 dark:text-gray-100">Content Analysis</h4>
                 
                 {/* Content Length */}
@@ -824,7 +845,7 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData }) => {
                   </div>
                 )}
               </div>
-            )}
+            </div>
           </>
         )}
       </CardContent>

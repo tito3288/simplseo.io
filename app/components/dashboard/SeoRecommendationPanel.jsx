@@ -80,6 +80,10 @@ const SeoRecommendationPanel = ({
   const [loadingMetaTags, setLoadingMetaTags] = useState(false);
   const fetchedPageUrlRef = useRef(null);
   const [metaTagsExpanded, setMetaTagsExpanded] = useState(false); // For collapsing meta tags when implemented
+  const detailsContentRef = useRef(null);
+  const [detailsMaxHeight, setDetailsMaxHeight] = useState("0px");
+  const metaTagsContentRef = useRef(null);
+  const [metaTagsMaxHeight, setMetaTagsMaxHeight] = useState("0px");
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -286,6 +290,49 @@ const SeoRecommendationPanel = ({
     fetchExisting();
   }, [user, pageUrl]);
 
+  useEffect(() => {
+    if (isOpen && detailsContentRef.current) {
+      // Use a large fixed value to ensure all content is visible (especially nested collapsibles)
+      setDetailsMaxHeight("3000px");
+    } else {
+      setDetailsMaxHeight("0px");
+    }
+  }, [
+    isOpen,
+    isImplemented,
+    keywordHistory?.length,
+    keywordSource,
+    focusKeyword,
+    daysSinceImplementation,
+    fortyFiveDayProgress,
+    totalDaysTarget,
+    showRefreshButton,
+    loadingMetaTags,
+    currentMetaTitle,
+    currentMetaDescription,
+    loadingH1,
+    currentH1,
+    metaTagsExpanded,
+  ]);
+
+  useEffect(() => {
+    if (metaTagsExpanded && metaTagsContentRef.current) {
+      // Use a large fixed value to ensure all content is visible
+      setMetaTagsMaxHeight("2000px");
+    } else {
+      setMetaTagsMaxHeight("0px");
+    }
+  }, [
+    metaTagsExpanded,
+    keywordSource,
+    focusKeyword,
+    loadingMetaTags,
+    currentMetaTitle,
+    currentMetaDescription,
+    loadingH1,
+    currentH1,
+  ]);
+
   // Fetch H1 from pageContentCache for AI-generated keywords
   useEffect(() => {
     const fetchH1 = async () => {
@@ -416,15 +463,27 @@ const SeoRecommendationPanel = ({
           </div>
         </CollapsibleTrigger>
 
-        <CollapsibleContent className="space-y-4 rounded-lg border bg-card p-4 shadow-sm">
-          <div className="flex items-center justify-between">
+        <CollapsibleContent
+          forceMount
+          className="rounded-lg border bg-card shadow-sm overflow-hidden"
+          style={{
+            maxHeight: detailsMaxHeight,
+            opacity: isOpen ? 1 : 0,
+            padding: isOpen ? "1rem" : "0px",
+            pointerEvents: isOpen ? "auto" : "none",
+            display: "block",
+            transition: "max-height 300ms ease, opacity 300ms ease, padding 300ms ease",
+          }}
+        >
+          <div ref={detailsContentRef} className="space-y-4">
+            <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Fix this SEO issue</h3>
             {keywordSource === "ai-generated" && (
               <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
                 AI Suggested Keyword
               </span>
             )}
-          </div>
+            </div>
 
           {/* Previously Tried Keywords Section - Show when there's keyword history */}
           {keywordHistory && keywordHistory.length > 0 && (
@@ -553,6 +612,7 @@ const SeoRecommendationPanel = ({
                   </div>
                 )}
 
+                {/* Try New Suggestions button - hidden for now
                 {showRefreshButton && (
                   <Tooltip>
                     <TooltipTrigger asChild>
@@ -566,6 +626,7 @@ const SeoRecommendationPanel = ({
                     </TooltipContent>
                   </Tooltip>
                 )}
+                */}
               </div>
             )}
 
@@ -578,8 +639,20 @@ const SeoRecommendationPanel = ({
                   </div>
                   <ChevronDown className={`h-4 w-4 text-green-600 dark:text-green-400 transition-transform ${metaTagsExpanded ? 'rotate-180' : ''}`} />
                 </CollapsibleTrigger>
-                <CollapsibleContent className="mt-3 space-y-4">
-                  <div>
+                <CollapsibleContent
+                  forceMount
+                  className="overflow-hidden"
+                  style={{
+                    maxHeight: metaTagsMaxHeight,
+                    opacity: metaTagsExpanded ? 1 : 0,
+                    marginTop: metaTagsExpanded ? "0.75rem" : "0px",
+                    pointerEvents: metaTagsExpanded ? "auto" : "none",
+                    display: "block",
+                    transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                  }}
+                >
+                  <div ref={metaTagsContentRef} className="space-y-4">
+                    <div>
                     <Label className="mb-2 flex items-center gap-2">
                       <span className="w-2 h-2 rounded-full bg-green-500"></span>
                       {keywordSource === "ai-generated" ? "Step 1: Optimize Meta Tags" : "Optimize Meta Tags"}
@@ -679,9 +752,9 @@ const SeoRecommendationPanel = ({
                     </div>
                   </div>
 
-                  {/* H1 Replacement Section for AI-generated keywords (inside collapsible when implemented) */}
-                  {keywordSource === "ai-generated" && focusKeyword && (
-                    <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
+                    {/* H1 Replacement Section for AI-generated keywords (inside collapsible when implemented) */}
+                    {keywordSource === "ai-generated" && focusKeyword && (
+                      <div className="rounded-md border border-primary/30 bg-primary/5 p-4">
                       <Label className="mb-3 block font-semibold flex items-center gap-2">
                         <span className="w-2 h-2 rounded-full bg-green-500"></span>
                         Step 2: Update Page Content
@@ -750,7 +823,8 @@ const SeoRecommendationPanel = ({
                         💡 <strong>Why:</strong> This keyword isn&apos;t ranking yet. Adding it to your H1 helps Google understand what this page is about.
                       </p>
                     </div>
-                  )}
+                    )}
+                  </div>
                 </CollapsibleContent>
               </Collapsible>
             ) : (
@@ -949,6 +1023,7 @@ const SeoRecommendationPanel = ({
               </div>
             )}
           </div>
+        </div>
         </CollapsibleContent>
       </Collapsible>
 

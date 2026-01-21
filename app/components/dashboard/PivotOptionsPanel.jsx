@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Button } from "@/components/ui/button";
 import { 
   Clock, 
@@ -108,6 +108,8 @@ const PivotOptionsPanel = ({
   const [pendingKeywordSource, setPendingKeywordSource] = useState(null); // Source of pending keyword
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizingMeta, setIsOptimizingMeta] = useState(false); // For "Optimize Meta Only" action
+  const contentRef = useRef(null);
+  const [contentMaxHeight, setContentMaxHeight] = useState("0px");
 
   // Check CTR Benchmark fail
   const ctrBenchmarkFail = implementationData ? checkCtrBenchmarkFail(
@@ -702,6 +704,29 @@ const PivotOptionsPanel = ({
 
   const cleanUrl = pageUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "";
 
+  useEffect(() => {
+    if (isExpanded && contentRef.current) {
+      // Use a large fixed value to ensure all content is visible
+      setContentMaxHeight("2000px");
+    } else {
+      setContentMaxHeight("0px");
+    }
+  }, [
+    isExpanded,
+    showKeywordSelection,
+    hybridKeywords.length,
+    currentRankingKeywords.length,
+    keywordHistory.length,
+    waitAnotherCycle,
+    pendingKeyword,
+    pendingKeywordSource,
+    selectedKeyword,
+    loadingHybridKeywords,
+    loadingRankingKeywords,
+    isSaving,
+    isOptimizingMeta,
+  ]);
+
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
       <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 overflow-hidden">
@@ -725,8 +750,15 @@ const PivotOptionsPanel = ({
           )}
         </CollapsibleTrigger>
 
-        <CollapsibleContent>
-          <div className="p-4 pt-0 space-y-4">
+        <CollapsibleContent
+          forceMount
+          className="overflow-hidden"
+          style={{
+            display: isExpanded ? "block" : "none",
+            padding: isExpanded ? "1rem" : "0px",
+          }}
+        >
+          <div ref={contentRef} className="space-y-4">
             {/* Explanation */}
             <div className="bg-white/50 dark:bg-gray-800/30 rounded-lg p-3">
               <p className="text-sm text-amber-800 dark:text-amber-200 mb-2">

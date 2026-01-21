@@ -57,11 +57,14 @@ export default function Chatbot() {
   const [conversations, setConversations] = useState([]);
   const [currentConversationId, setCurrentConversationId] = useState(null);
   const [isLoadingConversations, setIsLoadingConversations] = useState(false);
+  const [isLoadingConversation, setIsLoadingConversation] = useState(false); // Loading specific conversation
   const [searchTerm, setSearchTerm] = useState("");
   const messagesEndRef = useRef(null);
+  const messagesContainerRef = useRef(null); // Ref for scroll container
   const textareaRef = useRef(null);
   const [completedTypingMessages, setCompletedTypingMessages] = useState(new Set());
   const isSavingRef = useRef(false); // Prevent duplicate saves
+  const isLoadingHistoryRef = useRef(false); // Track if loading from history
 
   // ✅ NEW: Chatbot-specific data states
   const [chatbotData, setChatbotData] = useState(null);
@@ -117,21 +120,47 @@ export default function Chatbot() {
   };
 
   const loadConversation = async (conversationId) => {
+    setIsLoadingConversation(true);
+    isLoadingHistoryRef.current = true; // Flag to prevent auto-scroll to bottom
+    
+    const startTime = Date.now();
+    const minimumLoadingTime = 1500; // Show loading for at least 800ms
+    
     try {
       const response = await fetch(`/api/conversations/${conversationId}`);
       const data = await response.json();
       
       if (data.success) {
         const loadedMessages = data.conversation.messages;
+        
+        // Calculate remaining time to meet minimum loading duration
+        const elapsedTime = Date.now() - startTime;
+        const remainingTime = Math.max(0, minimumLoadingTime - elapsedTime);
+        
+        // Wait for remaining time before showing the conversation
+        await new Promise(resolve => setTimeout(resolve, remainingTime));
+        
         setMessages(loadedMessages);
         // Mark all loaded messages as completed (skip typing animation)
         setCompletedTypingMessages(new Set(loadedMessages.map(msg => msg.id)));
         setCurrentConversationId(conversationId);
+        
+        // Scroll to top after a brief delay to let messages render
+        setTimeout(() => {
+          if (messagesContainerRef.current) {
+            messagesContainerRef.current.scrollTop = 0;
+          }
+          isLoadingHistoryRef.current = false;
+        }, 100);
+        
         toast.success("Conversation loaded!");
       }
     } catch (error) {
       console.error("Error loading conversation:", error);
       toast.error("Failed to load conversation");
+      isLoadingHistoryRef.current = false;
+    } finally {
+      setIsLoadingConversation(false);
     }
   };
 
@@ -285,7 +314,10 @@ export default function Chatbot() {
   }, [user]);
 
   useEffect(() => {
-    scrollToBottom();
+    // Only scroll to bottom for new messages, not when loading history
+    if (!isLoadingHistoryRef.current && messages.length > 0) {
+      scrollToBottom();
+    }
   }, [messages]);
 
   useEffect(() => {
@@ -1011,7 +1043,20 @@ export default function Chatbot() {
               </div>
             ) : (
               /* Messages Display - When conversation exists */
-              <div className="flex-1 overflow-y-auto px-4 sm:px-6 py-4">
+              <div ref={messagesContainerRef} className="flex-1 overflow-y-auto px-4 sm:px-6 py-4 messages-scroll relative">
+                {/* Loading overlay when switching conversations */}
+                {isLoadingConversation && (
+                  <div className="absolute inset-0 bg-background/80 backdrop-blur-sm z-10 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="flex space-x-1 justify-center mb-3">
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce"></div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "150ms" }}></div>
+                        <div className="w-2 h-2 bg-green-500 rounded-full animate-bounce" style={{ animationDelay: "300ms" }}></div>
+                      </div>
+                      <p className="text-sm text-muted-foreground">Loading conversation...</p>
+                    </div>
+                  </div>
+                )}
                 <div className="max-w-4xl mx-auto">
                   <div className="space-y-6">
                     {messages.map((message) => (
@@ -1109,18 +1154,27 @@ export default function Chatbot() {
         </div>
       </div>
       <style jsx global>{`
-        .chat-history-scroll::-webkit-scrollbar {
+        .chat-history-scroll::-webkit-scrollbar,
+        .messages-scroll::-webkit-scrollbar {
           width: 6px;
         }
-        .chat-history-scroll::-webkit-scrollbar-track {
+        .chat-history-scroll::-webkit-scrollbar-track,
+        .messages-scroll::-webkit-scrollbar-track {
           background: transparent;
         }
-        .chat-history-scroll::-webkit-scrollbar-thumb {
-          background: rgba(107, 114, 128, 0.5);
+        .chat-history-scroll::-webkit-scrollbar-thumb,
+        .messages-scroll::-webkit-scrollbar-thumb {
+          background: rgba(107, 114, 128, 0.3);
           border-radius: 3px;
         }
-        .chat-history-scroll::-webkit-scrollbar-thumb:hover {
-          background: rgba(107, 114, 128, 0.7);
+        .chat-history-scroll::-webkit-scrollbar-thumb:hover,
+        .messages-scroll::-webkit-scrollbar-thumb:hover {
+          background: rgba(107, 114, 128, 0.5);
+        }
+        /* Firefox scrollbar styling */
+        .messages-scroll {
+          scrollbar-width: thin;
+          scrollbar-color: rgba(107, 114, 128, 0.3) transparent;
         }
         .chatbot-bounce-wrapper div div {
           animation: chatbotBounce 8s infinite ease-in-out !important;
