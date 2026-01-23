@@ -159,7 +159,7 @@ const SeoRecommendationPanel = ({
           { merge: true }
         );
 
-        toast.success("✅ SEO tip marked as implemented.");
+        toast.success("SEO tip marked as implemented.");
       } catch (err) {
         console.error("Failed to save implementation:", err);
         toast.error("❌ Failed to save to Firestore.");
@@ -199,7 +199,7 @@ const SeoRecommendationPanel = ({
       await deleteDoc(doc(db, "seoMetaTitles", encodedCacheKey));
       await deleteDoc(doc(db, "seoMetaDescriptions", encodedCacheKey));
 
-      toast.success("✨ New AI suggestions will appear on next refresh.");
+      toast.success("New AI suggestions will appear on next refresh.");
     } catch (err) {
       console.error("Error refreshing suggestions:", err);
       toast.error("❌ Failed to refresh suggestions.");
@@ -503,7 +503,7 @@ const SeoRecommendationPanel = ({
                   >
                     {item.keyword}
                     {item.source === "ai-generated" && (
-                      <span className="ml-1 text-purple-600 dark:text-purple-400">✨</span>
+                      <span className="ml-1 text-purple-600 dark:text-purple-400">(AI)</span>
                     )}
                   </span>
                 ))}
@@ -546,7 +546,7 @@ const SeoRecommendationPanel = ({
                   {daysSinceImplementation >= 7 ? (
                     <div className="mt-2 p-2 rounded-md bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800">
                       <p className="text-sm text-green-700 dark:text-green-300 font-medium">
-                        🎉 7 days have passed! Your SEO progress is now available.
+                        7 days have passed! Your SEO progress is now available.
                       </p>
                       <p className="text-xs text-green-600 dark:text-green-400 mt-1">
                         Check the <strong>SEO Progress</strong> section below to see how your changes are performing.

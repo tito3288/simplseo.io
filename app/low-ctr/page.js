@@ -689,6 +689,22 @@ export default function LowCtrPage() {
       console.log(`🔍 [LOW-CTR requestAiMeta] pageUrl: ${pageUrl}`);
       console.log(`🔍 [LOW-CTR requestAiMeta] focusKeywordArg: ${focusKeywordArg || 'NULL'}`);
       
+      // Fetch previous meta optimization attempts for AI learning
+      let previousAttempts = [];
+      try {
+        const docId = createSafeDocId(user.id, pageUrl);
+        const seoTipDoc = await getDoc(doc(db, "implementedSeoTips", docId));
+        if (seoTipDoc.exists()) {
+          const data = seoTipDoc.data();
+          previousAttempts = data.metaOptimizationHistory || [];
+          if (previousAttempts.length > 0) {
+            console.log(`🧠 [LOW-CTR requestAiMeta] Found ${previousAttempts.length} previous meta attempt(s) for AI learning`);
+          }
+        }
+      } catch (historyError) {
+        console.warn("Could not fetch meta optimization history:", historyError);
+      }
+      
       const payload = {
         pageUrl,
         userId: user?.id, // ✅ Add userId so API can fetch onboarding data
@@ -697,9 +713,14 @@ export default function LowCtrPage() {
           ...(focusKeywordArg ? { focusKeyword: focusKeywordArg } : {}),
         },
         ...(focusKeywordArg ? { focusKeywords: [focusKeywordArg] } : {}),
+        // Include previous attempts for AI learning (if any exist)
+        ...(previousAttempts.length > 0 ? { previousAttempts } : {}),
       };
       
       console.log(`🔍 [LOW-CTR requestAiMeta] payload.focusKeywords:`, payload.focusKeywords || 'NOT SET');
+      if (previousAttempts.length > 0) {
+        console.log(`🔍 [LOW-CTR requestAiMeta] payload.previousAttempts:`, previousAttempts.length, 'attempts');
+      }
 
       // Cache params for both title and description
       const cacheParams = {
@@ -808,8 +829,28 @@ export default function LowCtrPage() {
            (currentPosition || 0) >= 15;
   };
 
+  // Helper: Get expected CTR by position (industry averages)
+  const getExpectedCTR = (position) => {
+    if (position <= 1) return 0.28;  // 28%
+    if (position <= 2) return 0.15;  // 15%
+    if (position <= 3) return 0.10;  // 10%
+    if (position <= 4) return 0.07;  // 7%
+    if (position <= 5) return 0.05;  // 5%
+    if (position <= 10) return 0.025; // 2.5%
+    if (position <= 15) return 0.01;  // 1%
+    return 0.005; // 0.5% for position 16+
+  };
+
+  // Helper: Check if page is performing well (Success Detection)
+  const isPageSuccessful = (position, impressions, clicks) => {
+    if (impressions < 20) return false; // Not enough data
+    const actualCTR = impressions > 0 ? clicks / impressions : 0;
+    const expectedCTR = getExpectedCTR(position);
+    return actualCTR >= expectedCTR; // Success if CTR >= 100% of expected
+  };
+
   // Helper function to check if a page needs Pivot Options
-  // Criteria: 45+ days BUT doesn't meet Content Audit criteria AND not already pivoted
+  // Criteria: 45+ days BUT doesn't meet Content Audit criteria AND not already pivoted AND not successful
   const isPageEligibleForPivotOptions = (pageUrl) => {
     // Check if the page has already been pivoted - if so, don't show pivot card
     const normalizedUrl = normalizeUrlForComparison(pageUrl);
@@ -840,10 +881,20 @@ export default function LowCtrPage() {
     
     if (!pageData) return false;
     
-    const { daysSince, hasZeroClicks, newImpressions, currentPosition } = pageData;
+    const { daysSince, hasZeroClicks, newImpressions, currentPosition, postStats } = pageData;
     
     // Must have 45+ days
     if (daysSince < 45) return false;
+    
+    // SUCCESS DETECTION: If page is performing well, don't show Pivot card
+    const clicks = postStats?.clicks || 0;
+    const impressions = postStats?.impressions || newImpressions || 0;
+    const position = currentPosition || 100;
+    
+    if (isPageSuccessful(position, impressions, clicks)) {
+      console.log("✅ Page is successful, hiding pivot options:", pageUrl, `CTR: ${((clicks/impressions)*100).toFixed(1)}% at position ${Math.round(position)}`);
+      return false;
+    }
     
     // Show pivot options if ANY of the Content Audit criteria are NOT met
     // (but still has 45+ days)
@@ -1491,6 +1542,10 @@ export default function LowCtrPage() {
                 
                 return eligiblePages.map((page) => {
                   const implData = pageImplementationDates[page.page];
+                  const normalizedPageUrl = normalizeUrlForComparison(page.page);
+                  const pageFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+                  const pageKeywordSource = focusKeywordSourceByPage.get(normalizedPageUrl) || "gsc-existing";
+                  
                   return (
                     <div key={page.page} className="mb-4">
                       <div className="text-sm text-muted-foreground mb-2">
@@ -1501,6 +1556,8 @@ export default function LowCtrPage() {
                         pageUrl={page.page}
                         pageData={page}
                         implementationData={implData}
+                        focusKeyword={pageFocusKeyword}
+                        keywordSource={pageKeywordSource}
                       />
                     </div>
                   );
@@ -1559,10 +1616,7 @@ export default function LowCtrPage() {
         return (
           <Card className="mb-6 border-amber-200 dark:border-amber-800">
             <CardHeader>
-              <CardTitle className="flex items-center gap-2">
-                <span className="text-amber-600">🎯</span>
-                Pivot Your Strategy
-              </CardTitle>
+              <CardTitle>Pivot Your Strategy</CardTitle>
               <CardDescription>
                 These pages have been tracking for 45+ days but don&apos;t meet Content Audit criteria. 
                 Consider waiting for more data or trying a different keyword strategy.

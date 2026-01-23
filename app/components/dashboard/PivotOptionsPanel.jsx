@@ -45,22 +45,75 @@ const getExpectedCTR = (position) => {
   if (position <= 4) return 0.07;  // 7%
   if (position <= 5) return 0.05;  // 5%
   if (position <= 10) return 0.025; // 2.5%
-  return 0.01; // 1%
+  if (position <= 15) return 0.01;  // 1% (top of page 2)
+  return 0.005; // 0.5% for position 16+
 };
 
-// Check if page meets CTR Benchmark fail criteria
+// Check if page is performing well (Success Detection)
+const isPageSuccessful = (position, impressions, clicks) => {
+  // Need minimum data to evaluate
+  if (impressions < 20) return false;
+  
+  const actualCTR = impressions > 0 ? clicks / impressions : 0;
+  const expectedCTR = getExpectedCTR(position);
+  
+  // Success if CTR >= 100% of expected
+  return actualCTR >= expectedCTR;
+};
+
+// Check for low impressions (possible indexing issue)
+const getLowImpressionsGuidance = (impressions, daysSince) => {
+  if (impressions >= 50) return null;
+  
+  if (impressions < 20) {
+    return {
+      type: "indexing-check",
+      severity: "warning",
+      message: `Very low visibility (only ${impressions} impressions in ${daysSince || 45}+ days). Your page may not be properly indexed in Google.`,
+      action: "Check if your page is indexed in Google Search Console. If not, request indexing.",
+      icon: ""
+    };
+  }
+  
+  // 20-49 impressions
+  return {
+    type: "wait-for-data",
+    severity: "info",
+    message: `Only ${impressions} impressions so far. This isn't enough data to evaluate CTR performance accurately.`,
+    action: "Wait for more impressions before making changes. SEO takes time!",
+    icon: ""
+  };
+};
+
+// Check if page meets CTR Benchmark fail criteria (EXPANDED: positions 1-15)
 const checkCtrBenchmarkFail = (position, impressions, clicks) => {
-  if (position > 5) return null; // Only check for top 5 positions
+  // EXPANDED: Check positions 1-15 (was 1-5)
+  if (position > 15) return null;
   if (impressions < 50) return null; // Need enough impressions to judge
   
   const expectedCTR = getExpectedCTR(position);
   const expectedClicks = Math.round(impressions * expectedCTR);
   const actualCTR = impressions > 0 ? clicks / impressions : 0;
   
-  // CTR Benchmark Fail: Position is good but clicks are way below expected
-  if (clicks === 0 && expectedClicks >= 5) {
+  // CRITICAL: 0 clicks when expecting at least 1
+  if (clicks === 0 && expectedClicks >= 1) {
     return {
       isFail: true,
+      severity: "critical",
+      position: Math.round(position),
+      impressions,
+      expectedClicks: Math.max(1, expectedClicks),
+      actualClicks: clicks,
+      expectedCTR: (expectedCTR * 100).toFixed(1),
+      actualCTR: (actualCTR * 100).toFixed(2)
+    };
+  }
+  
+  // UNDERPERFORMING: Has some clicks but CTR < 50% of expected (NEW)
+  if (clicks > 0 && actualCTR < expectedCTR * 0.5 && expectedClicks >= 2) {
+    return {
+      isFail: true,
+      severity: "underperforming",
       position: Math.round(position),
       impressions,
       expectedClicks,
@@ -70,10 +123,11 @@ const checkCtrBenchmarkFail = (position, impressions, clicks) => {
     };
   }
   
-  // Also fail if actual CTR is less than 20% of expected CTR
-  if (actualCTR < expectedCTR * 0.2 && expectedClicks >= 3) {
+  // POOR: CTR < 20% of expected (severe underperformance)
+  if (actualCTR < expectedCTR * 0.2 && expectedClicks >= 2) {
     return {
       isFail: true,
+      severity: "poor",
       position: Math.round(position),
       impressions,
       expectedClicks,
@@ -111,12 +165,29 @@ const PivotOptionsPanel = ({
   const contentRef = useRef(null);
   const [contentMaxHeight, setContentMaxHeight] = useState("0px");
 
-  // Check CTR Benchmark fail
-  const ctrBenchmarkFail = implementationData ? checkCtrBenchmarkFail(
-    implementationData.currentPosition || 100,
-    implementationData.postStats?.impressions || implementationData.newImpressions || 0,
-    implementationData.postStats?.clicks || 0
+  // Get current metrics for checks
+  const currentPosition = implementationData?.currentPosition || 100;
+  const currentImpressions = implementationData?.postStats?.impressions || implementationData?.newImpressions || 0;
+  const currentClicks = implementationData?.postStats?.clicks || 0;
+  const daysSinceImpl = implementationData?.daysSince || 45;
+
+  // Check if page is performing well (Success Detection)
+  const pageIsSuccessful = implementationData ? isPageSuccessful(
+    currentPosition,
+    currentImpressions,
+    currentClicks
+  ) : false;
+
+  // Check for low impressions guidance
+  const lowImpressionsGuidance = implementationData ? getLowImpressionsGuidance(
+    currentImpressions,
+    daysSinceImpl
   ) : null;
+
+  // Check CTR Benchmark fail (only if not successful and has enough impressions)
+  const ctrBenchmarkFail = (implementationData && !pageIsSuccessful && !lowImpressionsGuidance) 
+    ? checkCtrBenchmarkFail(currentPosition, currentImpressions, currentClicks) 
+    : null;
 
   // Calculate reasons why Content Audit isn't available
   const pivotReasons = [];
@@ -144,20 +215,64 @@ const PivotOptionsPanel = ({
       return { action: "wait", confidence: "low", reason: "Not enough data to make a recommendation." };
     }
 
-    const { newImpressions, currentPosition, hasZeroClicks, postStats } = implementationData;
+    const { newImpressions, hasZeroClicks, postStats } = implementationData;
     const clicks = postStats?.clicks || 0;
     const impressions = postStats?.impressions || newImpressions || 0;
     const position = currentPosition || 100;
     const keywordsTried = keywordHistory.length;
 
-    // CTR BENCHMARK FAIL - Top position but no clicks (critical!)
-    // Check this FIRST as it's a special case
+    // SUCCESS DETECTION - Page is performing well!
+    if (pageIsSuccessful) {
+      const actualCTR = impressions > 0 ? ((clicks / impressions) * 100).toFixed(1) : 0;
+      const expectedCTR = (getExpectedCTR(position) * 100).toFixed(1);
+      return {
+        action: "success",
+        confidence: "high",
+        reason: `Your page is performing well! CTR of ${actualCTR}% meets or exceeds the expected ${expectedCTR}% for position ${Math.round(position)}. No changes needed - keep monitoring!`,
+        icon: ""
+      };
+    }
+
+    // LOW IMPRESSIONS - Not enough data
+    if (lowImpressionsGuidance) {
+      return {
+        action: lowImpressionsGuidance.type === "indexing-check" ? "check-indexing" : "wait",
+        confidence: lowImpressionsGuidance.type === "indexing-check" ? "high" : "medium",
+        reason: `${lowImpressionsGuidance.icon} ${lowImpressionsGuidance.message} ${lowImpressionsGuidance.action}`,
+        icon: lowImpressionsGuidance.icon
+      };
+    }
+
+    // CTR BENCHMARK FAIL - Position 1-15 with CTR issues
     if (ctrBenchmarkFail) {
+      const pageNum = Math.ceil(ctrBenchmarkFail.position / 10);
+      const positionDesc = ctrBenchmarkFail.position <= 10 ? "page 1" : `top of page ${pageNum}`;
+      
+      // Different messaging based on severity
+      if (ctrBenchmarkFail.severity === "critical") {
+        return {
+          action: "optimize-meta",
+          confidence: "high",
+          reason: `Critical CTR Fail: You're in position ${ctrBenchmarkFail.position} (${positionDesc}) with ${ctrBenchmarkFail.impressions} impressions but 0 clicks. You should have ~${ctrBenchmarkFail.expectedClicks} click${ctrBenchmarkFail.expectedClicks > 1 ? 's' : ''} at this position! Your keyword IS working - Google sees your content as relevant. The problem is your Meta Title isn't compelling enough. Don't change your keyword - just rewrite your Meta Title and Description!`,
+          icon: ""
+        };
+      }
+      
+      if (ctrBenchmarkFail.severity === "underperforming") {
+        return {
+          action: "optimize-meta",
+          confidence: "high",
+          reason: `Underperforming CTR: You're getting some clicks (${ctrBenchmarkFail.actualClicks}) at position ${ctrBenchmarkFail.position}, but your CTR of ${ctrBenchmarkFail.actualCTR}% is below the expected ${ctrBenchmarkFail.expectedCTR}% for this position. Your keyword is working, but your Meta Title could be more compelling. Try refreshing your Meta Title and Description!`,
+          icon: ""
+        };
+      }
+      
+      // Poor severity
       return {
         action: "optimize-meta",
         confidence: "high",
-        reason: `🚨 Critical CTR Fail: You're in position ${ctrBenchmarkFail.position} (top of page 1) with ${ctrBenchmarkFail.impressions} impressions but only ${ctrBenchmarkFail.actualClicks} clicks. You should have ~${ctrBenchmarkFail.expectedClicks} clicks at this position! Your keyword IS working - Google loves your content. The problem is your Meta Title isn't compelling enough to beat competitors. Don't change your keyword - just rewrite your Meta Title and Description!`,
-        icon: "🚨"
+        reason: `Poor CTR Performance: At position ${ctrBenchmarkFail.position} with ${ctrBenchmarkFail.impressions} impressions, you should be getting more clicks. Your current CTR of ${ctrBenchmarkFail.actualCTR}% is well below the expected ${ctrBenchmarkFail.expectedCTR}%. Consider optimizing your Meta Title and Description.`,
+        icon: ""
       };
     }
 
@@ -172,8 +287,8 @@ const PivotOptionsPanel = ({
         return {
           action: "wait",
           confidence: "high",
-          reason: `🌟 Rising Star! Your visibility has grown by ${Math.round(growthPercent)}% since implementation (${baselineImpressions} → ${impressions} impressions). Google is starting to trust this page—give it 45 more days to stabilize before making changes.`,
-          icon: "🚀"
+          reason: `Rising Star! Your visibility has grown by ${Math.round(growthPercent)}% since implementation (${baselineImpressions} → ${impressions} impressions). Google is starting to trust this page—give it 45 more days to stabilize before making changes.`,
+          icon: ""
         };
       }
       
@@ -182,19 +297,19 @@ const PivotOptionsPanel = ({
         return {
           action: "wait",
           confidence: "medium",
-          reason: `📈 Momentum Building! Impressions grew ${Math.round(growthPercent)}% since implementation (${baselineImpressions} → ${impressions}). Google is noticing this page—wait for the trend to continue.`,
-          icon: "📈"
+          reason: `Momentum Building! Impressions grew ${Math.round(growthPercent)}% since implementation (${baselineImpressions} → ${impressions}). Google is noticing this page—wait for the trend to continue.`,
+          icon: ""
         };
       }
     }
 
-    // Strong indicators to WAIT
-    if (clicks > 0) {
+    // Strong indicators to WAIT (only if not caught by CTR benchmark)
+    if (clicks > 0 && !ctrBenchmarkFail) {
       return {
         action: "wait",
         confidence: "high",
         reason: `You're getting clicks (${clicks})! Your CTR optimizations are working. Give it more time to build momentum.`,
-        icon: "✅"
+        icon: ""
       };
     }
 
@@ -204,7 +319,7 @@ const PivotOptionsPanel = ({
         action: "wait",
         confidence: "high", 
         reason: `You're ranking in position ${Math.round(position)} (top of page 1)! You're very close to breakthrough. Keep your current strategy.`,
-        icon: "🎯"
+        icon: ""
       };
     }
 
@@ -213,7 +328,7 @@ const PivotOptionsPanel = ({
         action: "wait",
         confidence: "medium",
         reason: `Only ${impressions} impressions so far. Google hasn't shown your page enough yet to judge performance. Wait for more exposure.`,
-        icon: "👀"
+        icon: ""
       };
     }
 
@@ -222,7 +337,7 @@ const PivotOptionsPanel = ({
         action: "wait",
         confidence: "medium",
         reason: `Position ${Math.round(position)} is on the edge of page 1. A small content tweak might push you over. Consider waiting.`,
-        icon: "📈"
+        icon: ""
       };
     }
 
@@ -232,7 +347,7 @@ const PivotOptionsPanel = ({
         action: "pivot",
         confidence: "high",
         reason: `Position ${Math.round(position)} with ${impressions} impressions but 0 clicks suggests Google isn't connecting this keyword to your content. Try a different keyword.`,
-        icon: "🔄"
+        icon: ""
       };
     }
 
@@ -241,7 +356,7 @@ const PivotOptionsPanel = ({
         action: "pivot",
         confidence: "high",
         reason: `You've already tried ${keywordsTried} keywords. Consider using AI-generated hybrid keywords to find a fresh angle.`,
-        icon: "✨"
+        icon: ""
       };
     }
 
@@ -250,7 +365,7 @@ const PivotOptionsPanel = ({
         action: "pivot",
         confidence: "medium",
         reason: `High impressions (${impressions}) but no clicks at position ${Math.round(position)} indicates a keyword-content mismatch. A new keyword might help.`,
-        icon: "🔀"
+        icon: ""
       };
     }
 
@@ -260,7 +375,7 @@ const PivotOptionsPanel = ({
         action: "either",
         confidence: "low",
         reason: `Position ${Math.round(position)} with ${impressions} impressions is in the "watch zone". You could wait for more data or try a new keyword - both are reasonable choices.`,
-        icon: "⚖️"
+        icon: ""
       };
     }
 
@@ -269,7 +384,7 @@ const PivotOptionsPanel = ({
       action: "either",
       confidence: "low",
       reason: "Your metrics are mixed. Consider your content quality and whether the current keyword truly matches your page's topic.",
-      icon: "🤔"
+      icon: ""
     };
   };
 
@@ -446,6 +561,8 @@ const PivotOptionsPanel = ({
           daysTracked: currentData.implementedAt 
             ? Math.floor((Date.now() - new Date(currentData.implementedAt).getTime()) / (1000 * 60 * 60 * 24))
             : 0,
+          // Track where the pivot was triggered from
+          pivotSource: "pivot-card",
         });
       }
 
@@ -522,7 +639,7 @@ const PivotOptionsPanel = ({
 
       // Re-crawl the page to get fresh content for new AI suggestions
       // This ensures the AI uses the current H1, content, etc. when generating new title/meta
-      toast.info("🔄 Re-crawling page for fresh content...");
+      toast.info("Re-crawling page for fresh content...");
       try {
         const recrawlRes = await fetch("/api/recrawl-page", {
           method: "POST",
@@ -548,7 +665,7 @@ const PivotOptionsPanel = ({
       setSelectedKeyword(pendingKeyword);
       setPendingKeyword(null);
       setPendingKeywordSource(null);
-      toast.success(`🔄 Keyword pivoted to "${pendingKeyword}"! Page content refreshed - new suggestions will be generated. Refreshing...`);
+      toast.success(`Keyword pivoted to "${pendingKeyword}"! Page content refreshed - new suggestions will be generated. Refreshing...`);
       
       // Auto-refresh the page after a short delay so user sees the new suggestions
       setTimeout(() => {
@@ -602,6 +719,8 @@ const PivotOptionsPanel = ({
           daysTracked: currentData.implementedAt 
             ? Math.floor((Date.now() - new Date(currentData.implementedAt).getTime()) / (1000 * 60 * 60 * 24))
             : 0,
+          // Track where the optimization was triggered from
+          optimizationSource: "pivot-card",
         });
       }
 
@@ -629,7 +748,7 @@ const PivotOptionsPanel = ({
       );
 
       // Re-crawl the page to get fresh content for new AI suggestions
-      toast.info("🔄 Re-crawling page for fresh meta suggestions...");
+      toast.info("Re-crawling page for fresh meta suggestions...");
       try {
         const recrawlRes = await fetch("/api/recrawl-page", {
           method: "POST",
@@ -736,7 +855,7 @@ const PivotOptionsPanel = ({
             <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
             <div className="text-left">
               <h4 className="font-semibold text-amber-900 dark:text-amber-100">
-                🎯 Time to Pivot: {cleanUrl}
+                Time to Pivot: {cleanUrl}
               </h4>
               <p className="text-xs text-amber-700 dark:text-amber-300">
                 {focusKeyword ? `Current keyword: "${focusKeyword}"` : "No focus keyword set"}
@@ -773,31 +892,39 @@ const PivotOptionsPanel = ({
 
             {/* AI Recommendation */}
             <div className={`rounded-lg p-4 border-2 ${
-              recommendation.action === "wait" 
+              recommendation.action === "success"
+                ? "bg-emerald-50 dark:bg-emerald-950/30 border-emerald-300 dark:border-emerald-700"
+                : recommendation.action === "wait" 
                 ? "bg-green-50 dark:bg-green-950/30 border-green-300 dark:border-green-700" 
+                : recommendation.action === "check-indexing"
+                ? "bg-amber-50 dark:bg-amber-950/30 border-amber-300 dark:border-amber-700"
                 : recommendation.action === "pivot"
                 ? "bg-purple-50 dark:bg-purple-950/30 border-purple-300 dark:border-purple-700"
                 : recommendation.action === "optimize-meta"
                 ? "bg-red-50 dark:bg-red-950/30 border-red-300 dark:border-red-700"
                 : "bg-blue-50 dark:bg-blue-950/30 border-blue-300 dark:border-blue-700"
             }`}>
-              <div className="flex items-start gap-3">
-                <span className="text-2xl">{recommendation.icon}</span>
-                <div className="flex-1">
-                  <div className="flex items-center gap-2 mb-1 flex-wrap">
+              <div className="flex-1">
+                <div className="flex items-center gap-2 mb-1 flex-wrap">
                     <span className={`text-sm font-semibold ${
-                      recommendation.action === "wait"
+                      recommendation.action === "success"
+                        ? "text-emerald-800 dark:text-emerald-200"
+                        : recommendation.action === "wait"
                         ? "text-green-800 dark:text-green-200"
+                        : recommendation.action === "check-indexing"
+                        ? "text-amber-800 dark:text-amber-200"
                         : recommendation.action === "pivot"
                         ? "text-purple-800 dark:text-purple-200"
                         : recommendation.action === "optimize-meta"
                         ? "text-red-800 dark:text-red-200"
                         : "text-blue-800 dark:text-blue-200"
                     }`}>
-                      {recommendation.action === "wait" && "🎯 Recommended: Wait Another 45 Days"}
-                      {recommendation.action === "pivot" && "🔄 Recommended: Select a New Keyword"}
-                      {recommendation.action === "optimize-meta" && "⚡ Recommended: Optimize Meta Title & Description Only"}
-                      {recommendation.action === "either" && "⚖️ Either Option Works"}
+                      {recommendation.action === "success" && "Great News: Your Page is Performing Well!"}
+                      {recommendation.action === "wait" && "Recommended: Wait Another 45 Days"}
+                      {recommendation.action === "check-indexing" && "Action Needed: Check Page Indexing"}
+                      {recommendation.action === "pivot" && "Recommended: Select a New Keyword"}
+                      {recommendation.action === "optimize-meta" && "Recommended: Optimize Meta Title & Description Only"}
+                      {recommendation.action === "either" && "Either Option Works"}
                     </span>
                     <span className={`text-[10px] uppercase px-1.5 py-0.5 rounded font-medium ${
                       recommendation.confidence === "high"
@@ -810,8 +937,12 @@ const PivotOptionsPanel = ({
                     </span>
                   </div>
                   <p className={`text-sm ${
-                    recommendation.action === "wait"
+                    recommendation.action === "success"
+                      ? "text-emerald-700 dark:text-emerald-300"
+                      : recommendation.action === "wait"
                       ? "text-green-700 dark:text-green-300"
+                      : recommendation.action === "check-indexing"
+                      ? "text-amber-700 dark:text-amber-300"
                       : recommendation.action === "pivot"
                       ? "text-purple-700 dark:text-purple-300"
                       : recommendation.action === "optimize-meta"
@@ -821,7 +952,6 @@ const PivotOptionsPanel = ({
                     {recommendation.reason}
                   </p>
                 </div>
-              </div>
             </div>
 
             {/* Action Buttons - Initial State */}

@@ -17,6 +17,7 @@ export async function POST(req) {
     context = {},
     focusKeywords = "",
     userId,
+    previousAttempts = [], // Array of previous meta optimization attempts with performance data
   } = await req.json();
 
   const normalizeFocusKeywordList = (value) => {
@@ -104,6 +105,56 @@ Context: ${JSON.stringify(context)}
 ---
 
 **CRITICAL:** If a Business Name is provided, use it EXACTLY as written — no modifications, abbreviations, or guesses.`;
+
+  // Include previous attempts if available - helps AI learn from what didn't work
+  if (previousAttempts && previousAttempts.length > 0) {
+    prompt += `\n\n**PREVIOUS ATTEMPT ANALYSIS - LEARN FROM FAILURES:**\n`;
+    prompt += `The following meta description(s) were tried before but FAILED to generate clicks:\n\n`;
+    
+    previousAttempts.forEach((attempt, index) => {
+      const impressions = attempt.finalStats?.impressions || attempt.preStats?.impressions || 0;
+      const clicks = attempt.finalStats?.clicks ?? 0;
+      const position = Math.round(attempt.finalStats?.position || attempt.preStats?.position || 0);
+      const daysTracked = attempt.daysTracked || 0;
+      const descText = attempt.description || "[Description not recorded]";
+      
+      // Convert position to page number for context
+      const pageNumber = position <= 10 ? "Page 1" : position <= 20 ? "Page 2" : position <= 30 ? "Page 3" : "Page 4+";
+      
+      prompt += `**Attempt #${index + 1}:**\n`;
+      prompt += `Description: "${descText}"\n`;
+      prompt += `Results: ${impressions} impressions, ${clicks} clicks, Position ${position} (${pageNumber}), tracked for ${daysTracked} days\n\n`;
+      
+      prompt += `What this means:\n`;
+      prompt += `- Users SAW this description in search results (${impressions} times)\n`;
+      prompt += `- Users CHOSE NOT TO CLICK (${clicks} clicks = ${impressions > 0 ? ((clicks/impressions)*100).toFixed(1) : 0}% CTR)\n`;
+      prompt += `- The description likely didn't convince them or match their intent\n\n`;
+    });
+    
+    prompt += `**Your task:** Create a NEW description with a COMPLETELY DIFFERENT approach.
+
+Consider why users might have skipped the previous description(s):
+- Was the CTA weak? → Use stronger action verbs (Get, Discover, See, Start)
+- Was it too generic? → Add specific details, numbers, or outcomes
+- Did it address pain points? → Speak to what users are struggling with
+- Was it too long/cluttered? → Make it scannable with clear value prop
+- Did it match search intent? → Info-seekers want different things than buyers
+
+Try one of these structural changes:
+- If previous was passive → Try direct address ("You'll discover..." or "Get your...")
+- If previous had weak CTA → Try urgency ("Start today", "See why ${new Date().getFullYear()} is different")
+- If previous was feature-list → Try benefit-focused (outcomes, not features)
+- If previous was long → Try shorter with one clear promise
+- If previous was formal → Try conversational and relatable
+
+**STRATEGIC GOAL:**
+- KEEP the target keyword "${focusKeywordsString || 'main keyword'}" naturally included for ranking stability
+- CHANGE everything else: phrasing, CTA, structure, hook, value proposition
+
+The previous description(s) maintained ranking but failed to generate clicks. Your job is to make it click-worthy while preserving keyword relevance.
+
+**CRITICAL:** Do NOT use similar phrasing, CTAs, structure, or hooks as ANY of the previous attempts. Make it genuinely different.\n`;
+  }
 
   // Include playbook examples if available
   if (playbookStrategies.length > 0) {

@@ -16,6 +16,7 @@ export async function POST(req) {
     context = {},
     focusKeywords = "",
     userId,
+    previousAttempts = [], // Array of previous meta optimization attempts with performance data
   } = await req.json();
 
   const normalizeFocusKeywordList = (value) => {
@@ -123,6 +124,56 @@ Context (Impressions, CTR, etc): ${JSON.stringify(context)}
 - If a Business Name is provided, use it EXACTLY as written — no modifications, abbreviations, or guesses.
 - Lead with the focus keyword or a compelling hook, then add the brand name at the end.
 - Make every word earn its place — no filler words.`;
+
+  // Include previous attempts if available - helps AI learn from what didn't work
+  if (previousAttempts && previousAttempts.length > 0) {
+    prompt += `\n\n**PREVIOUS ATTEMPT ANALYSIS - LEARN FROM FAILURES:**\n`;
+    prompt += `The following meta title(s) were tried before but FAILED to generate clicks:\n\n`;
+    
+    previousAttempts.forEach((attempt, index) => {
+      const impressions = attempt.finalStats?.impressions || attempt.preStats?.impressions || 0;
+      const clicks = attempt.finalStats?.clicks ?? 0;
+      const position = Math.round(attempt.finalStats?.position || attempt.preStats?.position || 0);
+      const daysTracked = attempt.daysTracked || 0;
+      const titleText = attempt.title || "[Title not recorded]";
+      
+      // Convert position to page number for context
+      const pageNumber = position <= 10 ? "Page 1" : position <= 20 ? "Page 2" : position <= 30 ? "Page 3" : "Page 4+";
+      
+      prompt += `**Attempt #${index + 1}:**\n`;
+      prompt += `Title: "${titleText}"\n`;
+      prompt += `Results: ${impressions} impressions, ${clicks} clicks, Position ${position} (${pageNumber}), tracked for ${daysTracked} days\n\n`;
+      
+      prompt += `What this means:\n`;
+      prompt += `- Users SAW this title in search results (${impressions} times)\n`;
+      prompt += `- Users CHOSE NOT TO CLICK (${clicks} clicks = ${impressions > 0 ? ((clicks/impressions)*100).toFixed(1) : 0}% CTR)\n`;
+      prompt += `- The title likely didn't match their intent or wasn't compelling enough\n\n`;
+    });
+    
+    prompt += `**Your task:** Create a NEW title with a COMPLETELY DIFFERENT approach.
+
+Consider why users might have skipped the previous title(s):
+- Was it too generic? → Be more specific
+- Was it too vague? → Add concrete details (numbers, outcomes, specifics)
+- Did it match search intent? → Check if users want info, comparison, how-to, or solution
+- Was it boring? → Try a stronger emotional hook or power word
+- Was the brand placement wrong? → Try leading with benefit instead
+
+Try one of these structural changes:
+- If previous was a statement → Try a question format
+- If previous was generic → Try adding [${new Date().getFullYear()}] or specific numbers
+- If previous was feature-focused → Try benefit-focused
+- If previous was long → Try shorter and punchier
+- If previous had weak verbs → Try action verbs (Get, Discover, Build, Create)
+
+**STRATEGIC GOAL:**
+- KEEP the target keyword "${focusKeywordsString || 'main keyword'}" prominently placed for ranking stability
+- CHANGE everything else: phrasing, structure, hook, angle, brand placement
+
+The previous title(s) maintained ranking but failed to generate clicks. Your job is to make it click-worthy while preserving keyword relevance.
+
+**CRITICAL:** Do NOT use similar phrasing, structure, hooks, or word patterns as ANY of the previous attempts. Make it genuinely different.\n`;
+  }
 
   // Include playbook examples if available
   if (playbookStrategies.length > 0) {

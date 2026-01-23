@@ -205,7 +205,7 @@ export default function GenericKeywordsPage() {
       // Default - suggest footer or main nav
       return {
         placement: "Footer or Main Nav",
-        icon: "🔗",
+        icon: "",
         suggestion: "Add this page to your footer navigation or as a main menu item",
         reason: "More internal links to this page will help Google discover and rank it faster."
       };
@@ -961,15 +961,15 @@ export default function GenericKeywordsPage() {
   const getIntentIcon = (intent) => {
     switch (intent) {
       case 'Transactional':
-        return "🛒";
+        return "";
       case 'Commercial':
-        return "🔍";
+        return "";
       case 'Informational':
-        return "📚";
+        return "";
       case 'Navigational':
-        return "🧭";
+        return "";
       default:
-        return "🔍";
+        return "";
     }
   };
 
@@ -1552,7 +1552,7 @@ export default function GenericKeywordsPage() {
         <CardHeader>
           <CardTitle className="flex items-center gap-2 text-green-800 dark:text-green-200">
             <CheckCircle className="w-5 h-5" />
-            🎉 Success Stories - Your Pages Are Ranking!
+            Success Stories - Your Pages Are Ranking!
           </CardTitle>
           <CardDescription className="text-green-700 dark:text-green-300">
             Pages you created are now appearing in Google Search Console
@@ -1764,7 +1764,7 @@ export default function GenericKeywordsPage() {
                                       <span className="text-lg">{navRec.icon}</span>
                                       <div className="flex-1">
                                         <p className="text-sm font-medium text-blue-800 dark:text-blue-200 mb-1">
-                                          💡 Not Getting Enough Impressions After 30+ Days: Add This <strong>&quot;{navRec.placement}&quot;</strong> Page to Your Navigation
+                                          Not Getting Enough Impressions After 30+ Days: Add This <strong>&quot;{navRec.placement}&quot;</strong> Page to Your Navigation
                                         </p>
                                         <p className="text-xs text-blue-700 dark:text-blue-300 mb-2">
                                           {navRec.suggestion}
@@ -2349,7 +2349,7 @@ export default function GenericKeywordsPage() {
               {/* Focus Keyword */}
               <div className="space-y-2">
                 <Label className="text-sm font-semibold flex items-center justify-between">
-                  🎯 Focus Keyword
+                  Focus Keyword
                   <Button
                     variant="ghost"
                     size="sm"
@@ -2496,7 +2496,7 @@ export default function GenericKeywordsPage() {
                 {contentOutline.wordCount && (
                   <div className="p-4 bg-indigo-50 dark:bg-indigo-900/20 rounded-lg border border-indigo-200 dark:border-indigo-800">
                     <Label className="text-sm font-semibold text-indigo-800 dark:text-indigo-200 mb-2 block">
-                      📝 Recommended Word Count
+                      Recommended Word Count
                     </Label>
                     <p className="text-lg font-bold text-indigo-700 dark:text-indigo-300">{contentOutline.wordCount}</p>
                   </div>
@@ -2507,7 +2507,7 @@ export default function GenericKeywordsPage() {
               {contentOutline.internalLinks?.length > 0 && (
                 <div className="p-4 bg-cyan-50 dark:bg-cyan-900/20 rounded-lg border border-cyan-200 dark:border-cyan-800">
                   <Label className="text-sm font-semibold text-cyan-800 dark:text-cyan-200 mb-2 block">
-                    🔗 Internal Linking Suggestions
+                    Internal Linking Suggestions
                   </Label>
                   <ul className="text-sm space-y-2">
                     {contentOutline.internalLinks.map((link, idx) => (
@@ -2543,7 +2543,7 @@ export default function GenericKeywordsPage() {
               {contentOutline.additionalTips?.length > 0 && (
                 <div className="p-4 bg-emerald-50 dark:bg-emerald-900/20 rounded-lg border border-emerald-200 dark:border-emerald-800">
                   <Label className="text-sm font-semibold text-emerald-800 dark:text-emerald-200 mb-2 block">
-                    💡 Pro Tips
+                    Pro Tips
                   </Label>
                   <ul className="text-sm space-y-2">
                     {contentOutline.additionalTips.map((tip, idx) => (
@@ -2564,7 +2564,7 @@ export default function GenericKeywordsPage() {
                   </div>
                   <div>
                     <p className="text-sm font-semibold text-violet-800 dark:text-violet-200 mb-1">
-                      💡 Next Step: Use SEO Mentor
+                      Next Step: Use SEO Mentor
                     </p>
                     <p className="text-sm text-violet-700 dark:text-violet-300">
                       Click <span className="font-semibold">&quot;Copy Full Outline&quot;</span> below, then paste it into the <span className="font-semibold">SEO Mentor</span> to get AI-powered help writing your content!
@@ -2576,7 +2576,7 @@ export default function GenericKeywordsPage() {
               {/* AI Disclaimer */}
               <div className="p-3 bg-amber-50 dark:bg-amber-900/20 rounded-lg border border-amber-200 dark:border-amber-800 mt-2">
                 <p className="text-xs text-amber-700 dark:text-amber-300 text-center">
-                  ⚠️ <span className="font-medium">Quick heads up:</span> AI can sometimes get things wrong specially at the beginning. When you get your content from SEO Mentor, give it a quick read and feel free to tweak anything that doesn&apos;t sound right for your business!
+                  <span className="font-medium">Quick heads up:</span> AI can sometimes get things wrong specially at the beginning. When you get your content from SEO Mentor, give it a quick read and feel free to tweak anything that doesn&apos;t sound right for your business!
                 </p>
               </div>
             </div>
@@ -2625,9 +2625,9 @@ export default function GenericKeywordsPage() {
                     const outlineText = `
 **IMPORTANT: Start your FIRST response ONLY with this exact message (do NOT include this reminder in any follow-up responses):**
 
-"⚠️ **Quick Reminder:** Give this content a quick read before using it. Feel free to edit anything that doesn't quite fit your business. The more you use SEO Mentor, the smarter it gets. 🚀
+"**Quick Reminder:** Give this content a quick read before using it. Feel free to edit anything that doesn't quite fit your business. The more you use SEO Mentor, the smarter it gets.
 
-📄 **Page Type: ${opportunity?.pageType?.type || 'Service Page'}** - This content is structured as a ${opportunity?.pageType?.type || 'Service Page'}."
+**Page Type: ${opportunity?.pageType?.type || 'Service Page'}** - This content is structured as a ${opportunity?.pageType?.type || 'Service Page'}."
 
 ---
 
@@ -2765,7 +2765,7 @@ ${contentOutline.internalLinks?.map(l => {
               />
               {markAsCreatedDialog.opportunity && (
                 <p className="text-xs text-muted-foreground">
-                  💡 Suggested: <code className="bg-muted px-1 rounded">/{markAsCreatedDialog.opportunity.keyword.toLowerCase().replace(/\s+/g, '-')}</code>
+                  Suggested: <code className="bg-muted px-1 rounded">/{markAsCreatedDialog.opportunity.keyword.toLowerCase().replace(/\s+/g, '-')}</code>
                 </p>
               )}
             </div>
@@ -2844,7 +2844,7 @@ ${contentOutline.internalLinks?.map(l => {
                   
                   // Show success message with crawl status
                   if (result.pageCrawled) {
-                    toast.success("Page marked as created! 🎉", {
+                    toast.success("Page marked as created!", {
                       description: "Page content added to SEO Mentor's knowledge. We'll track when it starts ranking.",
                     });
                   } else {
@@ -2998,7 +2998,7 @@ ${contentOutline.internalLinks?.map(l => {
 
             {/* Helpful Links */}
             <div className="p-4 bg-muted/50 rounded-lg">
-              <h4 className="font-semibold text-sm mb-2">📚 Helpful Resources</h4>
+              <h4 className="font-semibold text-sm mb-2">Helpful Resources</h4>
               <div className="flex flex-wrap gap-3">
                 <a
                   href="https://support.google.com/webmasters/answer/9012289"

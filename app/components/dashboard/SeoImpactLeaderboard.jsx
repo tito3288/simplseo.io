@@ -65,6 +65,20 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const expandedContentRefs = useRef(new Map());
   const [historyModalOpen, setHistoryModalOpen] = useState(false);
   const [selectedItemHistory, setSelectedItemHistory] = useState(null);
+  
+  // History section expand states for modal
+  const [keywordHistoryExpanded, setKeywordHistoryExpanded] = useState(false);
+  const [metaHistoryExpanded, setMetaHistoryExpanded] = useState(false);
+  const [contentHistoryExpanded, setContentHistoryExpanded] = useState(false);
+
+  // Reset expand states when modal closes or item changes
+  useEffect(() => {
+    if (!historyModalOpen) {
+      setKeywordHistoryExpanded(false);
+      setMetaHistoryExpanded(false);
+      setContentHistoryExpanded(false);
+    }
+  }, [historyModalOpen]);
 
   // CSV Download function
   const downloadHistoryCSV = () => {
@@ -158,7 +172,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       const deltas = docs
         .filter((doc) => doc.preStats && doc.postStats)
         .map((doc) => {
-          const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory } = doc;
+          const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory, rewriteHistory } = doc;
           return {
             pageUrl,
             implementedAt,
@@ -170,6 +184,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             postStatsHistory: postStatsHistory || [], // Include history array
             keywordStatsHistory: keywordStatsHistory || [], // Include previous keyword attempts
             metaOptimizationHistory: metaOptimizationHistory || [], // Include previous meta optimization history
+            rewriteHistory: rewriteHistory || [], // Include previous content improvement attempts
             impressionsDelta: postStats.impressions - preStats.impressions,
             clicksDelta: postStats.clicks - preStats.clicks,
             ctrDelta: postStats.ctr - preStats.ctr,
@@ -275,7 +290,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         const deltas = docs
           .filter((doc) => doc.preStats && doc.postStats)
           .map((doc) => {
-            const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory } = doc;
+            const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory, rewriteHistory } = doc;
             return {
               pageUrl,
               implementedAt,
@@ -287,6 +302,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
               postStatsHistory: postStatsHistory || [], // Include history array
               keywordStatsHistory: keywordStatsHistory || [], // Include previous keyword attempts
               metaOptimizationHistory: metaOptimizationHistory || [], // Include previous meta optimization history
+              rewriteHistory: rewriteHistory || [], // Include previous content improvement attempts
               impressionsDelta: postStats.impressions - preStats.impressions,
               clicksDelta: postStats.clicks - preStats.clicks,
               ctrDelta: postStats.ctr - preStats.ctr,
@@ -330,7 +346,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
 
       await fetchLeaderboardData();
       
-      alert("✅ Data refreshed successfully!");
+      alert("Data refreshed successfully!");
       
     } catch (error) {
       console.error("❌ Refresh failed:", error);
@@ -1082,14 +1098,33 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                 {/* Previous Keyword Attempts - show history of pivoted keywords */}
                 {selectedItemHistory.keywordStatsHistory && selectedItemHistory.keywordStatsHistory.length > 0 && (
                   <div className="mt-6 pt-4 border-t border-amber-200 dark:border-amber-800">
-                    <h4 className="text-sm font-medium text-amber-600 dark:text-amber-400 mb-3 flex items-center gap-2">
-                      🔄 Previous Keyword Attempts
-                    </h4>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      These keywords were tried before pivoting to the current strategy.
-                    </p>
-                    <div className="space-y-4">
-                      {selectedItemHistory.keywordStatsHistory.map((attempt, idx) => {
+                    <button
+                      onClick={() => setKeywordHistoryExpanded(!keywordHistoryExpanded)}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          Previous Keyword Attempts ({selectedItemHistory.keywordStatsHistory.length})
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-amber-600 dark:text-amber-400 transition-transform duration-300 ${keywordHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div
+                      className="overflow-hidden"
+                      style={{
+                        maxHeight: keywordHistoryExpanded ? "2000px" : "0px",
+                        opacity: keywordHistoryExpanded ? 1 : 0,
+                        marginTop: keywordHistoryExpanded ? "0.75rem" : "0px",
+                        pointerEvents: keywordHistoryExpanded ? "auto" : "none",
+                        transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                      }}
+                    >
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These keywords were tried before pivoting to the current strategy.
+                      </p>
+                      <div className="space-y-4">
+                        {selectedItemHistory.keywordStatsHistory.map((attempt, idx) => {
                         const finalStats = attempt.postStats || attempt.preStats;
                         const hasProgress = attempt.postStats && attempt.preStats;
                         const impressionsDelta = hasProgress ? attempt.postStats.impressions - attempt.preStats.impressions : 0;
@@ -1111,7 +1146,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                                     ? "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
                                     : "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
                                 )}>
-                                  {attempt.source === "ai-generated" ? "✨ AI" : "🔍 GSC"}
+                                  {attempt.source === "ai-generated" ? "AI" : "GSC"}
                                 </span>
                               </div>
                               <span className="text-xs text-muted-foreground">
@@ -1166,12 +1201,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                             {/* Show why it was pivoted */}
                             {attempt.postStats && attempt.postStats.clicks === 0 && (
                               <div className="mt-2 text-xs text-amber-600 dark:text-amber-400">
-                                ⚠️ Pivoted due to 0 clicks after {attempt.daysTracked} days
+                                Pivoted due to 0 clicks after {attempt.daysTracked} days
                               </div>
                             )}
                           </div>
                         );
                       })}
+                      </div>
                     </div>
                   </div>
                 )}
@@ -1179,17 +1215,36 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                 {/* Previous Meta Optimization History - show history from "Optimize Meta Only" */}
                 {selectedItemHistory.metaOptimizationHistory && selectedItemHistory.metaOptimizationHistory.length > 0 && (
                   <div className="mt-6 pt-4 border-t border-red-200 dark:border-red-800">
-                    <h4 className="text-sm font-medium text-red-600 dark:text-red-400 mb-3 flex items-center gap-2">
-                      ⚡ Previous Meta Title/Description Attempts
-                    </h4>
-                    <p className="text-xs text-muted-foreground mb-4">
-                      These are the results from previous meta title &amp; description changes (same keyword, different copy).
-                    </p>
-                    <div className="space-y-4">
-                      {selectedItemHistory.metaOptimizationHistory
-                        .slice()
-                        .sort((a, b) => new Date(b.optimizedAt) - new Date(a.optimizedAt))
-                        .map((attempt, idx) => {
+                    <button
+                      onClick={() => setMetaHistoryExpanded(!metaHistoryExpanded)}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-red-200 dark:border-red-700 bg-red-50 dark:bg-red-900/20 hover:bg-red-100 dark:hover:bg-red-900/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-red-600 dark:text-red-400" />
+                        <span className="text-sm font-medium text-red-700 dark:text-red-300">
+                          Previous Meta Title/Description Attempts ({selectedItemHistory.metaOptimizationHistory.length})
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-red-600 dark:text-red-400 transition-transform duration-300 ${metaHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div
+                      className="overflow-hidden"
+                      style={{
+                        maxHeight: metaHistoryExpanded ? "2000px" : "0px",
+                        opacity: metaHistoryExpanded ? 1 : 0,
+                        marginTop: metaHistoryExpanded ? "0.75rem" : "0px",
+                        pointerEvents: metaHistoryExpanded ? "auto" : "none",
+                        transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                      }}
+                    >
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These are the results from previous meta title &amp; description changes (same keyword, different copy).
+                      </p>
+                      <div className="space-y-4">
+                        {selectedItemHistory.metaOptimizationHistory
+                          .slice()
+                          .sort((a, b) => new Date(b.optimizedAt) - new Date(a.optimizedAt))
+                          .map((attempt, idx) => {
                           const finalStats = attempt.finalStats || attempt.preStats;
                           const hasProgress = attempt.finalStats && attempt.preStats;
                           const impressionsDelta = hasProgress ? attempt.finalStats.impressions - attempt.preStats.impressions : 0;
@@ -1201,10 +1256,21 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                               key={idx} 
                               className="rounded-lg border border-red-200 dark:border-red-800 bg-red-50/50 dark:bg-red-900/10 p-3"
                             >
-                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs px-2 py-0.5 rounded bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300">
-                                    {attempt.type === "ctr-benchmark" ? "⚡ CTR Benchmark" : "📝 Meta Optimization"}
+                                  <span className={cn(
+                                    "text-xs px-2 py-0.5 rounded",
+                                    attempt.type === "ctr-benchmark" 
+                                      ? "bg-red-100 dark:bg-red-900/30 text-red-700 dark:text-red-300"
+                                      : attempt.type === "e1-content-audit"
+                                      ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                      : "bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300"
+                                  )}>
+                                    {attempt.type === "ctr-benchmark" 
+                                      ? "CTR Benchmark Fail" 
+                                      : attempt.type === "e1-content-audit"
+                                      ? "E1 Content Audit"
+                                      : "Meta Optimization"}
                                   </span>
                                   {attempt.keyword && (
                                     <span className="text-xs text-muted-foreground">
@@ -1295,12 +1361,118 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                               {/* Show CTR benchmark fail indicator */}
                               {attempt.type === "ctr-benchmark" && attempt.finalStats?.clicks === 0 && (
                                 <div className="text-xs text-red-600 dark:text-red-400 bg-red-100/80 dark:bg-red-900/30 rounded px-2 py-1">
-                                  🚨 CTR Benchmark Fail: Good position but 0 clicks - meta title wasn&apos;t compelling enough
+                                  CTR Benchmark Fail: Good position but 0 clicks - meta title wasn&apos;t compelling enough
                                 </div>
                               )}
                             </div>
                           );
                         })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Previous Content Improvement Attempts - show history from E2 Content Gap changes */}
+                {selectedItemHistory.rewriteHistory && selectedItemHistory.rewriteHistory.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-teal-200 dark:border-teal-800">
+                    <button
+                      onClick={() => setContentHistoryExpanded(!contentHistoryExpanded)}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-teal-200 dark:border-teal-700 bg-teal-50 dark:bg-teal-900/20 hover:bg-teal-100 dark:hover:bg-teal-900/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-teal-600 dark:text-teal-400" />
+                        <span className="text-sm font-medium text-teal-700 dark:text-teal-300">
+                          Previous Content Improvement Attempts ({selectedItemHistory.rewriteHistory.length})
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-teal-600 dark:text-teal-400 transition-transform duration-300 ${contentHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div
+                      className="overflow-hidden"
+                      style={{
+                        maxHeight: contentHistoryExpanded ? "2000px" : "0px",
+                        opacity: contentHistoryExpanded ? 1 : 0,
+                        marginTop: contentHistoryExpanded ? "0.75rem" : "0px",
+                        pointerEvents: contentHistoryExpanded ? "auto" : "none",
+                        transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                      }}
+                    >
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These stats are from before content gap improvements were implemented (same keyword, deeper content).
+                      </p>
+                      <div className="space-y-4">
+                        {selectedItemHistory.rewriteHistory
+                          .slice()
+                          .sort((a, b) => new Date(b.rewriteStartedAt) - new Date(a.rewriteStartedAt))
+                          .map((attempt, idx) => {
+                          const finalStats = attempt.postStats || attempt.preStats;
+                          const hasProgress = attempt.postStats && attempt.preStats;
+                          const impressionsDelta = hasProgress ? attempt.postStats.impressions - attempt.preStats.impressions : 0;
+                          const clicksDelta = hasProgress ? attempt.postStats.clicks - attempt.preStats.clicks : 0;
+                          const positionDelta = hasProgress ? attempt.postStats.position - attempt.preStats.position : 0;
+                          
+                          return (
+                            <div 
+                              key={idx} 
+                              className="rounded-lg border border-teal-200 dark:border-teal-800 bg-teal-50/50 dark:bg-teal-900/10 p-3"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
+                                    Content Improvement
+                                  </span>
+                                  {attempt.keyword && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Keyword: &quot;{attempt.keyword}&quot;
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {attempt.daysTracked} days tracked
+                                </span>
+                              </div>
+                              
+                              <div className="text-xs text-muted-foreground mb-3">
+                                Content improvement started: {new Date(attempt.rewriteStartedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </div>
+                              
+                              {/* Stats at time of content improvement */}
+                              <div className="bg-white/50 dark:bg-gray-800/30 rounded p-3 mb-2">
+                                <h6 className="text-xs font-medium text-muted-foreground mb-2">Stats Before Content Improvement</h6>
+                                <div className="grid grid-cols-4 gap-3 text-xs">
+                                  <div>
+                                    <span className="text-muted-foreground">Impressions</span>
+                                    <p className="font-semibold text-sm">{attempt.preStats?.impressions || finalStats?.impressions || 0}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Clicks</span>
+                                    <p className="font-semibold text-sm">{attempt.preStats?.clicks || finalStats?.clicks || 0}</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">CTR</span>
+                                    <p className="font-semibold text-sm">{((attempt.preStats?.ctr || finalStats?.ctr || 0) * 100).toFixed(2)}%</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Position</span>
+                                    <p className="font-semibold text-sm">{(attempt.position || attempt.preStats?.position || finalStats?.position || 0).toFixed(1)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Show what triggered the content improvement */}
+                              {attempt.impressions && attempt.position && (
+                                <div className="text-xs text-teal-600 dark:text-teal-400 bg-teal-100/80 dark:bg-teal-900/30 rounded px-2 py-1">
+                                  Triggered at: Position {attempt.position.toFixed(1)} with {attempt.impressions} impressions
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
                     </div>
                   </div>
                 )}
