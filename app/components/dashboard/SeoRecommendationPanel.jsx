@@ -84,6 +84,10 @@ const SeoRecommendationPanel = ({
   const [detailsMaxHeight, setDetailsMaxHeight] = useState("0px");
   const metaTagsContentRef = useRef(null);
   const [metaTagsMaxHeight, setMetaTagsMaxHeight] = useState("0px");
+  
+  // Content Audit tracking states
+  const [isContentAuditTracking, setIsContentAuditTracking] = useState(false);
+  const [implementationType, setImplementationType] = useState(null); // "e1-meta", "e2-content-gap", etc.
 
   const copyToClipboard = async (text, type) => {
     try {
@@ -169,25 +173,52 @@ const SeoRecommendationPanel = ({
 
   const handleRefreshSuggestions = async () => {
     try {
+      // Fetch previous meta optimization attempts for AI learning (with full stats)
+      let previousAttempts = [];
+      try {
+        const docId = createSafeDocId(user.id, pageUrl);
+        const seoTipDoc = await getDoc(doc(db, "implementedSeoTips", docId));
+        if (seoTipDoc.exists()) {
+          const data = seoTipDoc.data();
+          const rawHistory = data.metaOptimizationHistory || [];
+          // Map to include full stats for smarter AI recommendations
+          previousAttempts = rawHistory.slice(-3).map(attempt => ({
+            title: attempt.title,
+            description: attempt.description,
+            outcome: attempt.outcome || "unknown",
+            // Include full stats for AI learning
+            preStats: attempt.preStats || null,
+            postStats: attempt.postStats || attempt.finalStats || null,
+            daysTracked: attempt.daysTracked || 0,
+            keyword: attempt.keyword || attempt.previousKeyword || null,
+            type: attempt.type || "meta-optimization",
+          }));
+          if (previousAttempts.length > 0) {
+            console.log(`🧠 Found ${previousAttempts.length} previous meta attempt(s) with full stats for AI learning`);
+          }
+        }
+      } catch (historyError) {
+        console.warn("Could not fetch meta optimization history:", historyError);
+      }
+
+      const payload = {
+        pageUrl,
+        userId: user?.id,
+        // ✅ Pass focus keyword to generate consistent cache key
+        ...(focusKeyword ? { focusKeywords: [focusKeyword] } : {}),
+        // Include previous attempts for AI learning (with full stats)
+        ...(previousAttempts.length > 0 ? { previousAttempts } : {}),
+      };
+
       const titleRes = await fetch("/api/seo-assistant/meta-title", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          pageUrl,
-          userId: user?.id,
-          // ✅ Pass focus keyword to generate consistent cache key
-          ...(focusKeyword ? { focusKeywords: [focusKeyword] } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
       const descRes = await fetch("/api/seo-assistant/meta-description", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ 
-          pageUrl,
-          userId: user?.id,
-          // ✅ Pass focus keyword to generate consistent cache key
-          ...(focusKeyword ? { focusKeywords: [focusKeyword] } : {}),
-        }),
+        body: JSON.stringify(payload),
       });
 
       // Build the correct cache key (with focus keyword if available)
@@ -230,15 +261,35 @@ const SeoRecommendationPanel = ({
         const data = snapshot.data();
         console.log(`🔍 [${pageUrl}] Document data:`, data);
         
-        // Check if document exists and has the right status
-        if (!data || !data.status || data.status !== "implemented") {
-          console.log(`🔍 [${pageUrl}] Document doesn&apos;t exist or status is not &apos;implemented&apos;`);
+        // Check if document exists and has a valid tracking status
+        // Valid statuses: "implemented", "e1-tracking", "e2-tracking", etc.
+        const validTrackingStatuses = ["implemented", "e1-tracking", "e2-tracking", "content-improving"];
+        if (!data || !data.status || !validTrackingStatuses.includes(data.status)) {
+          console.log(`🔍 [${pageUrl}] Document doesn't exist or status is not a valid tracking status`);
           return;
         }
         
-        console.log(`✅ [${pageUrl}] Document found and status is 'implemented'`);
+        console.log(`✅ [${pageUrl}] Document found with status: '${data.status}'`);
 
         setIsImplemented(true);
+        
+        // Check if this is a Content Audit tracking page
+        // Can be detected by status OR implementationType field
+        const isAuditTracking = 
+          data.status === "e1-tracking" || 
+          data.status === "e2-tracking" || 
+          data.status === "content-improving" ||
+          data.implementationType === "e1-meta" ||
+          data.implementationType === "e2-content-gap" ||
+          data.implementationType === "e3-rewrite" ||
+          data.implementationType === "e3-pivot" ||
+          data.implementationType === "wait-extension";
+          
+        if (isAuditTracking) {
+          setIsContentAuditTracking(true);
+          setImplementationType(data.implementationType || data.status);
+          console.log(`🎯 [${pageUrl}] Content Audit tracking detected: ${data.implementationType || data.status}`);
+        }
 
         const implementedDate = new Date(data.implementedAt);
         const today = new Date();
@@ -476,9 +527,32 @@ const SeoRecommendationPanel = ({
           }}
         >
           <div ref={detailsContentRef} className="space-y-4">
+            {/* Content Audit Tracking Label - Show when tracking E1/E2 implementation */}
+            {isContentAuditTracking && (
+              <div className="rounded-lg border-2 border-purple-300 dark:border-purple-700 bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/30 dark:to-pink-900/30 p-3 mb-2">
+                <div className="flex items-center gap-2">
+                  <div className="h-3 w-3 rounded-full bg-purple-500 animate-pulse" />
+                  <span className="text-sm font-semibold text-purple-800 dark:text-purple-200">
+                    {implementationType === "e1-meta" && "Content Audit Meta Implementation - Tracking Progress"}
+                    {implementationType === "e2-content-gap" && "Content Gap Implementation - Tracking Progress"}
+                    {implementationType === "e3-rewrite" && "Content Rewrite - Tracking Progress"}
+                    {implementationType === "e3-pivot" && "Keyword Pivot - Tracking Progress"}
+                    {implementationType === "wait-extension" && "Wait Extension - Tracking Progress"}
+                    {implementationType === "e1-tracking" && "Content Audit Meta Implementation - Tracking Progress"}
+                    {implementationType === "e2-tracking" && "Content Gap Implementation - Tracking Progress"}
+                    {implementationType === "content-improving" && "Content Improvement - Tracking Progress"}
+                    {!["e1-meta", "e2-content-gap", "e3-rewrite", "e3-pivot", "wait-extension", "e1-tracking", "e2-tracking", "content-improving"].includes(implementationType) && "Content Audit - Tracking Progress"}
+                  </span>
+                </div>
+                <p className="text-xs text-purple-600 dark:text-purple-400 mt-1 ml-5">
+                  Your implementation is being tracked. Check back in 7 days for initial results.
+                </p>
+              </div>
+            )}
+            
             <div className="flex items-center justify-between">
             <h3 className="text-lg font-semibold">Fix this SEO issue</h3>
-            {keywordSource === "ai-generated" && (
+            {keywordSource === "ai-generated" && !isContentAuditTracking && (
               <span className="text-xs bg-purple-100 dark:bg-purple-900/30 text-purple-700 dark:text-purple-300 px-2 py-1 rounded">
                 AI Suggested Keyword
               </span>

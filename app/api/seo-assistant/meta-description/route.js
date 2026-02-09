@@ -117,18 +117,35 @@ Context: ${JSON.stringify(context)}
       const position = Math.round(attempt.finalStats?.position || attempt.preStats?.position || 0);
       const daysTracked = attempt.daysTracked || 0;
       const descText = attempt.description || "[Description not recorded]";
+      const attemptKeyword = attempt.keyword || attempt.previousKeyword || null;
+      const attemptType = attempt.type || "meta-optimization";
       
       // Convert position to page number for context
       const pageNumber = position <= 10 ? "Page 1" : position <= 20 ? "Page 2" : position <= 30 ? "Page 3" : "Page 4+";
       
       prompt += `**Attempt #${index + 1}:**\n`;
       prompt += `Description: "${descText}"\n`;
+      
+      // Add keyword context if it was a pivot
+      if (attemptKeyword) {
+        prompt += `Target Keyword: "${attemptKeyword}"`;
+        if (attemptType === "pivot-keyword-change" && attempt.newKeyword) {
+          prompt += ` → Pivoted to: "${attempt.newKeyword}"`;
+        }
+        prompt += `\n`;
+      }
+      
       prompt += `Results: ${impressions} impressions, ${clicks} clicks, Position ${position} (${pageNumber}), tracked for ${daysTracked} days\n\n`;
       
       prompt += `What this means:\n`;
       prompt += `- Users SAW this description in search results (${impressions} times)\n`;
       prompt += `- Users CHOSE NOT TO CLICK (${clicks} clicks = ${impressions > 0 ? ((clicks/impressions)*100).toFixed(1) : 0}% CTR)\n`;
-      prompt += `- The description likely didn't convince them or match their intent\n\n`;
+      if (attemptType === "pivot-keyword-change") {
+        prompt += `- This was a KEYWORD PIVOT - the keyword itself may not match user intent\n`;
+      } else {
+        prompt += `- The description likely didn't convince them or match their intent\n`;
+      }
+      prompt += `\n`;
     });
     
     prompt += `**Your task:** Create a NEW description with a COMPLETELY DIFFERENT approach.

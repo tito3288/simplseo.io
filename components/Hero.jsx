@@ -185,7 +185,7 @@ const Hero = () => {
                 See how it works
               </Button>
             </div>
-            <p className="text-sm text-muted-foreground">No credit card required</p>
+            {/* <p className="text-sm text-muted-foreground">No credit card required</p> */}
           </div>
         </div>
       </section>

@@ -428,14 +428,88 @@ exports.testPostStatsUpdate = functions.https.onRequest(async (req, res) => {
 // ⏰ Daily cron job to check SEO progress with per-document 7-day cycles
 // Runs every day at 1:00 AM ET - each tip has its own individual 7-day update schedule
 // ✅ FIXED: Per-document scheduling - tips implemented on different days update on their own 7-day cycles
+// ✅ NEW: Creates/refreshes dayFortyFiveSnapshot for pages at 45+ days
+// ✅ NEW: Monitors dismissed pages and resurfaces on significant decline
 exports.checkSeoTipProgress = pubsub
   .schedule("every day 01:00")
   .timeZone("America/New_York")
   .onRun(async (context) => {
-    const snapshot = await db
+    // ============================================
+    // HELPER FUNCTIONS FOR 45-DAY SNAPSHOT SYSTEM
+    // ============================================
+    
+    // Helper: Get expected CTR by position (industry averages)
+    const getExpectedCTR = (position) => {
+      if (position <= 1) return 0.28;  // 28%
+      if (position <= 2) return 0.15;  // 15%
+      if (position <= 3) return 0.10;  // 10%
+      if (position <= 4) return 0.07;  // 7%
+      if (position <= 5) return 0.05;  // 5%
+      if (position <= 10) return 0.02; // 2%
+      if (position <= 15) return 0.01; // 1%
+      return 0.005; // 0.5% for position 16+
+    };
+
+    // Helper: Check if page is performing well (Success Detection)
+    const isPageSuccessful = (position, impressions, clicks) => {
+      if (impressions < 20) return false; // Not enough data
+      const actualCTR = impressions > 0 ? clicks / impressions : 0;
+      const expectedCTR = getExpectedCTR(position);
+      return actualCTR >= expectedCTR; // Success if CTR >= 100% of expected
+    };
+
+    // Helper: Determine card type based on metrics for 45-day snapshot
+    const determineCardType = (metrics, preStats) => {
+      const clicks = metrics.clicks || 0;
+      const impressions = metrics.impressions || 0;
+      const position = metrics.position || 100;
+
+      // Calculate new impressions since implementation
+      const newImpressions = impressions - (preStats?.impressions || 0);
+      const hasZeroClicks = clicks === 0;
+
+      // Content Audit criteria: 0 clicks AND 50+ new impressions AND position >= 15
+      if (hasZeroClicks && newImpressions >= 50 && position >= 15) {
+        return "content-audit";
+      }
+
+      // Success criteria: CTR meets or exceeds expected for position
+      if (isPageSuccessful(position, impressions, clicks)) {
+        return "success";
+      }
+
+      // Default to pivot
+      return "pivot";
+    };
+
+    // Helper: Check if snapshot needs refresh (7 days have passed)
+    const needsSnapshotRefresh = (snapshot) => {
+      if (!snapshot?.capturedAt) return true;
+      const daysSinceSnapshot = (Date.now() - new Date(snapshot.capturedAt).getTime()) / (1000 * 60 * 60 * 24);
+      return daysSinceSnapshot >= 7;
+    };
+
+    // ============================================
+    // QUERY BOTH IMPLEMENTED AND PASSIVE MONITORING PAGES
+    // ============================================
+    
+    // Query for implemented pages
+    const implementedSnapshot = await db
       .collection("implementedSeoTips")
       .where("status", "==", "implemented")
       .get();
+
+    // Query for passive monitoring pages (dismissed but watching for decline)
+    const passiveSnapshot = await db
+      .collection("implementedSeoTips")
+      .where("passiveMonitoring", "==", true)
+      .get();
+
+    // Combine both queries (using Map to deduplicate by doc ID)
+    const allDocsMap = new Map();
+    implementedSnapshot.docs.forEach(doc => allDocsMap.set(doc.id, doc));
+    passiveSnapshot.docs.forEach(doc => allDocsMap.set(doc.id, doc));
+    const allDocs = Array.from(allDocsMap.values());
 
     const now = Date.now();
     const nowISO = new Date().toISOString();
@@ -445,10 +519,13 @@ exports.checkSeoTipProgress = pubsub
     let createdCount = 0;
     let updatedCount = 0;
     let notDueYetCount = 0;
+    let snapshotCreatedCount = 0;
+    let snapshotRefreshedCount = 0;
+    let resurfacedCount = 0;
 
-    for (const doc of snapshot.docs) {
+    for (const doc of allDocs) {
       const data = doc.data();
-      const { implementedAt, pageUrl, userId, preStats, postStats, nextUpdateDue } = data;
+      const { implementedAt, pageUrl, userId, preStats, postStats, nextUpdateDue, passiveMonitoring, dismissedMetrics, dayFortyFiveSnapshot } = data;
 
       console.log(`🔍 Processing document: ${doc.id}`);
       console.log(`📅 Implemented at: ${implementedAt}`);
@@ -465,6 +542,87 @@ exports.checkSeoTipProgress = pubsub
         (now - new Date(implementedAt).getTime()) / (1000 * 60 * 60 * 24);
 
       console.log(`📅 Days since implementation: ${daysSince.toFixed(1)}`);
+      console.log(`🔄 Passive monitoring: ${passiveMonitoring || false}`);
+
+      // ============================================
+      // PASSIVE MONITORING: Check for decline in dismissed pages
+      // ============================================
+      if (passiveMonitoring && dismissedMetrics) {
+        console.log(`👁️ Checking passive monitoring for ${pageUrl}`);
+        
+        // Get fresh access token
+        const { token, siteUrl } = await getValidAccessToken(userId);
+        if (!token || !siteUrl) {
+          console.log(`❌ Skipping passive check for ${doc.id} - no valid GSC token`);
+          continue;
+        }
+
+        // Fetch current metrics
+        try {
+          const passiveRes = await fetch(
+            "https://simplseo-io.vercel.app/api/gsc/page-metrics",
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ token, siteUrl, pageUrl }),
+            }
+          );
+
+          if (passiveRes.ok) {
+            const currentMetrics = await passiveRes.json();
+            
+            // Check for significant decline
+            const ctrDropPercent = dismissedMetrics.ctr > 0 
+              ? ((dismissedMetrics.ctr - currentMetrics.ctr) / dismissedMetrics.ctr) * 100 
+              : 0;
+            const positionDrop = currentMetrics.position - dismissedMetrics.position;
+
+            console.log(`📊 Passive monitoring metrics - CTR drop: ${ctrDropPercent.toFixed(1)}%, Position drop: ${positionDrop.toFixed(1)}`);
+
+            // Resurface if CTR drops 50%+ OR position drops 10+
+            if (ctrDropPercent >= 50 || positionDrop >= 10) {
+              console.log(`⚠️ Resurfacing ${pageUrl} due to decline`);
+              const declineReason = ctrDropPercent >= 50 ? "ctr-drop" : "position-drop";
+              const cardType = determineCardType(currentMetrics, preStats);
+              
+              updates.push(
+                doc.ref.set(
+                  {
+                    passiveMonitoring: false,
+                    dayFortyFiveSnapshot: {
+                      impressions: currentMetrics.impressions,
+                      clicks: currentMetrics.clicks,
+                      position: currentMetrics.position,
+                      ctr: currentMetrics.ctr,
+                      capturedAt: new Date().toISOString(),
+                      cardType: cardType,
+                      previousCardType: "dismissed",
+                      declineDetected: true,
+                      declineReason: declineReason,
+                      declineDetails: {
+                        ctrDropPercent: ctrDropPercent,
+                        positionDrop: positionDrop,
+                        previousCtr: dismissedMetrics.ctr,
+                        previousPosition: dismissedMetrics.position,
+                      }
+                    },
+                    postStats: currentMetrics,
+                    updatedAt: new Date().toISOString(),
+                    nextUpdateDue: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+                  },
+                  { merge: true }
+                )
+              );
+              resurfacedCount++;
+            } else {
+              console.log(`✅ ${pageUrl} still performing well, staying in passive monitoring`);
+            }
+          }
+        } catch (err) {
+          console.error(`❌ Error checking passive monitoring for ${pageUrl}:`, err);
+        }
+        continue; // Skip normal processing for passive monitoring pages
+      }
 
       // Per-document scheduling logic:
       // 1. If nextUpdateDue exists, check if it's time to update
@@ -585,6 +743,41 @@ exports.checkSeoTipProgress = pubsub
         // Get existing history array (or empty array if none)
         const existingHistory = data.postStatsHistory || [];
 
+        // ============================================
+        // 45-DAY SNAPSHOT: Create/refresh for pages at 45+ days
+        // ============================================
+        let snapshotUpdate = {};
+        if (daysSince >= 45) {
+          const existingSnapshot = dayFortyFiveSnapshot;
+          const shouldCreateOrRefresh = needsSnapshotRefresh(existingSnapshot);
+
+          if (shouldCreateOrRefresh) {
+            const cardType = determineCardType(newPostStats, preStats);
+            snapshotUpdate = {
+              dayFortyFiveSnapshot: {
+                impressions: newPostStats.impressions,
+                clicks: newPostStats.clicks,
+                position: newPostStats.position,
+                ctr: newPostStats.ctr,
+                capturedAt: currentDate,
+                cardType: cardType,
+                previousCardType: existingSnapshot?.cardType || null,
+                declineDetected: false,
+              }
+            };
+            
+            if (existingSnapshot) {
+              console.log(`🔄 Refreshing 45-day snapshot for ${pageUrl} (cardType: ${cardType})`);
+              snapshotRefreshedCount++;
+            } else {
+              console.log(`📸 Creating 45-day snapshot for ${pageUrl} (cardType: ${cardType})`);
+              snapshotCreatedCount++;
+            }
+          } else {
+            console.log(`⏳ 45-day snapshot still fresh for ${pageUrl} (cardType: ${existingSnapshot?.cardType})`);
+          }
+        }
+
         if (!postStats) {
           // First time - create postStats (even if zeros, it's the first attempt)
           // Also start the history array with this first entry
@@ -600,7 +793,8 @@ exports.checkSeoTipProgress = pubsub
                 postStatsHistory: [firstHistoryEntry],
                 updatedAt: currentDate,
                 lastUpdated: currentDate,
-                nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
+                nextUpdateDue: nextUpdateDueDate,
+                ...snapshotUpdate, // Include 45-day snapshot if applicable
               },
               { merge: true }
             )
@@ -622,7 +816,8 @@ exports.checkSeoTipProgress = pubsub
                 postStatsHistory: updatedHistory,
                 updatedAt: currentDate,
                 lastUpdated: currentDate,
-                nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
+                nextUpdateDue: nextUpdateDueDate,
+                ...snapshotUpdate, // Include 45-day snapshot if applicable
               },
               { merge: true }
             )
@@ -636,7 +831,8 @@ exports.checkSeoTipProgress = pubsub
           updates.push(
             doc.ref.set(
               {
-                nextUpdateDue: nextUpdateDueDate, // Still schedule next check
+                nextUpdateDue: nextUpdateDueDate,
+                ...snapshotUpdate, // Include 45-day snapshot if applicable
               },
               { merge: true }
             )
@@ -660,7 +856,8 @@ exports.checkSeoTipProgress = pubsub
                 postStatsHistory: updatedHistory,
                 updatedAt: currentDate,
                 lastUpdated: currentDate,
-                nextUpdateDue: nextUpdateDueDate, // Schedule next 7-day update
+                nextUpdateDue: nextUpdateDueDate,
+                ...snapshotUpdate, // Include 45-day snapshot if applicable
               },
               { merge: true }
             )
@@ -680,5 +877,8 @@ exports.checkSeoTipProgress = pubsub
     console.log(`   - Updated (refreshed): ${updatedCount}`);
     console.log(`   - Skipped (protected good data): ${skippedCount}`);
     console.log(`   - Not due yet: ${notDueYetCount}`);
+    console.log(`   - 45-day snapshots created: ${snapshotCreatedCount}`);
+    console.log(`   - 45-day snapshots refreshed: ${snapshotRefreshedCount}`);
+    console.log(`   - Resurfaced (passive monitoring decline): ${resurfacedCount}`);
     return null;
   });

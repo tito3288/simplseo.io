@@ -70,6 +70,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const [keywordHistoryExpanded, setKeywordHistoryExpanded] = useState(false);
   const [metaHistoryExpanded, setMetaHistoryExpanded] = useState(false);
   const [contentHistoryExpanded, setContentHistoryExpanded] = useState(false);
+  const [waitExtensionHistoryExpanded, setWaitExtensionHistoryExpanded] = useState(false);
 
   // Reset expand states when modal closes or item changes
   useEffect(() => {
@@ -77,6 +78,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       setKeywordHistoryExpanded(false);
       setMetaHistoryExpanded(false);
       setContentHistoryExpanded(false);
+      setWaitExtensionHistoryExpanded(false);
     }
   }, [historyModalOpen]);
 
@@ -172,7 +174,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       const deltas = docs
         .filter((doc) => doc.preStats && doc.postStats)
         .map((doc) => {
-          const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory, rewriteHistory } = doc;
+          const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory, rewriteHistory, waitExtensionHistory } = doc;
           return {
             pageUrl,
             implementedAt,
@@ -185,6 +187,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
             keywordStatsHistory: keywordStatsHistory || [], // Include previous keyword attempts
             metaOptimizationHistory: metaOptimizationHistory || [], // Include previous meta optimization history
             rewriteHistory: rewriteHistory || [], // Include previous content improvement attempts
+            waitExtensionHistory: waitExtensionHistory || [], // Include previous wait extension attempts
             impressionsDelta: postStats.impressions - preStats.impressions,
             clicksDelta: postStats.clicks - preStats.clicks,
             ctrDelta: postStats.ctr - preStats.ctr,
@@ -290,7 +293,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
         const deltas = docs
           .filter((doc) => doc.preStats && doc.postStats)
           .map((doc) => {
-            const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory, rewriteHistory } = doc;
+            const { preStats, postStats, pageUrl, implementedAt, lastUpdated, updatedAt, postStatsHistory, nextUpdateDue, keywordStatsHistory, metaOptimizationHistory, rewriteHistory, waitExtensionHistory } = doc;
             return {
               pageUrl,
               implementedAt,
@@ -303,6 +306,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
               keywordStatsHistory: keywordStatsHistory || [], // Include previous keyword attempts
               metaOptimizationHistory: metaOptimizationHistory || [], // Include previous meta optimization history
               rewriteHistory: rewriteHistory || [], // Include previous content improvement attempts
+              waitExtensionHistory: waitExtensionHistory || [], // Include previous wait extension attempts
               impressionsDelta: postStats.impressions - preStats.impressions,
               clicksDelta: postStats.clicks - preStats.clicks,
               ctrDelta: postStats.ctr - preStats.ctr,
@@ -1411,6 +1415,13 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                           const clicksDelta = hasProgress ? attempt.postStats.clicks - attempt.preStats.clicks : 0;
                           const positionDelta = hasProgress ? attempt.postStats.position - attempt.preStats.position : 0;
                           
+                          // Determine the type label based on the type field
+                          const typeLabel = attempt.type === "e2-content-gap" 
+                            ? "E2 Content Gap + Links" 
+                            : attempt.type === "e3-rewrite" 
+                              ? "E3 Content Rewrite" 
+                              : "Content Improvement";
+                          
                           return (
                             <div 
                               key={idx} 
@@ -1418,8 +1429,12 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                             >
                               <div className="flex items-center justify-between mb-2">
                                 <div className="flex items-center gap-2">
-                                  <span className="text-xs px-2 py-0.5 rounded bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300">
-                                    Content Improvement
+                                  <span className={`text-xs px-2 py-0.5 rounded ${
+                                    attempt.type === "e2-content-gap" 
+                                      ? "bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300"
+                                      : "bg-teal-100 dark:bg-teal-900/30 text-teal-700 dark:text-teal-300"
+                                  }`}>
+                                    {typeLabel}
                                   </span>
                                   {attempt.keyword && (
                                     <span className="text-xs text-muted-foreground">
@@ -1432,8 +1447,15 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                                 </span>
                               </div>
                               
+                              {/* Show reason if available */}
+                              {attempt.reason && (
+                                <div className="text-xs text-muted-foreground mb-2 italic">
+                                  {attempt.reason}
+                                </div>
+                              )}
+                              
                               <div className="text-xs text-muted-foreground mb-3">
-                                Content improvement started: {new Date(attempt.rewriteStartedAt).toLocaleDateString('en-US', {
+                                {attempt.type === "e2-content-gap" ? "Content gap improvements" : "Content improvement"} started: {new Date(attempt.rewriteStartedAt).toLocaleDateString('en-US', {
                                   month: 'short',
                                   day: 'numeric',
                                   year: 'numeric'
@@ -1467,6 +1489,133 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                               {attempt.impressions && attempt.position && (
                                 <div className="text-xs text-teal-600 dark:text-teal-400 bg-teal-100/80 dark:bg-teal-900/30 rounded px-2 py-1">
                                   Triggered at: Position {attempt.position.toFixed(1)} with {attempt.impressions} impressions
+                                </div>
+                              )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Previous Wait Extensions - show history from "Wait Another 45 Days" clicks */}
+                {selectedItemHistory.waitExtensionHistory && selectedItemHistory.waitExtensionHistory.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-amber-200 dark:border-amber-800">
+                    <button
+                      onClick={() => setWaitExtensionHistoryExpanded(!waitExtensionHistoryExpanded)}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-amber-200 dark:border-amber-700 bg-amber-50 dark:bg-amber-900/20 hover:bg-amber-100 dark:hover:bg-amber-900/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-amber-600 dark:text-amber-400" />
+                        <span className="text-sm font-medium text-amber-700 dark:text-amber-300">
+                          Previous Wait Extensions ({selectedItemHistory.waitExtensionHistory.length})
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-amber-600 dark:text-amber-400 transition-transform duration-300 ${waitExtensionHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div
+                      className="overflow-hidden"
+                      style={{
+                        maxHeight: waitExtensionHistoryExpanded ? "2000px" : "0px",
+                        opacity: waitExtensionHistoryExpanded ? 1 : 0,
+                        marginTop: waitExtensionHistoryExpanded ? "0.75rem" : "0px",
+                        pointerEvents: waitExtensionHistoryExpanded ? "auto" : "none",
+                        transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                      }}
+                    >
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These stats are from before you chose to wait another 45 days for more data.
+                      </p>
+                      <div className="space-y-4">
+                        {selectedItemHistory.waitExtensionHistory
+                          .slice()
+                          .sort((a, b) => new Date(b.waitStartedAt) - new Date(a.waitStartedAt))
+                          .map((attempt, idx) => {
+                          const finalStats = attempt.postStats || attempt.preStats;
+                          const hasProgress = attempt.postStats && attempt.preStats;
+                          const impressionsDelta = hasProgress ? attempt.postStats.impressions - attempt.preStats.impressions : 0;
+                          const clicksDelta = hasProgress ? attempt.postStats.clicks - attempt.preStats.clicks : 0;
+                          const positionDelta = hasProgress ? attempt.postStats.position - attempt.preStats.position : 0;
+                          
+                          return (
+                            <div 
+                              key={idx} 
+                              className="rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50/50 dark:bg-amber-900/10 p-3"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs px-2 py-0.5 rounded bg-amber-100 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300">
+                                    Wait Extension #{attempt.extensionNumber || idx + 1}
+                                  </span>
+                                  {attempt.keyword && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Keyword: &quot;{attempt.keyword}&quot;
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {attempt.daysTracked} days tracked
+                                </span>
+                              </div>
+                              
+                              {/* Show reason if available */}
+                              {attempt.reason && (
+                                <div className="text-xs text-muted-foreground mb-2 italic">
+                                  {attempt.reason}
+                                </div>
+                              )}
+                              
+                              <div className="text-xs text-muted-foreground mb-3">
+                                Wait extension started: {new Date(attempt.waitStartedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </div>
+                              
+                              {/* Stats at time of wait extension */}
+                              <div className="bg-white/50 dark:bg-gray-800/30 rounded p-3 mb-2">
+                                <h6 className="text-xs font-medium text-muted-foreground mb-2">Stats Before Wait Extension</h6>
+                                <div className="grid grid-cols-4 gap-3 text-xs">
+                                  <div>
+                                    <span className="text-muted-foreground">Impressions</span>
+                                    <p className="font-semibold text-sm">{attempt.impressions || finalStats?.impressions || 0}</p>
+                                    {hasProgress && impressionsDelta !== 0 && (
+                                      <span className={`text-xs ${impressionsDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {impressionsDelta > 0 ? '+' : ''}{impressionsDelta}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Clicks</span>
+                                    <p className="font-semibold text-sm">{attempt.clicks || finalStats?.clicks || 0}</p>
+                                    {hasProgress && clicksDelta !== 0 && (
+                                      <span className={`text-xs ${clicksDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {clicksDelta > 0 ? '+' : ''}{clicksDelta}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">CTR</span>
+                                    <p className="font-semibold text-sm">{((attempt.preStats?.ctr || finalStats?.ctr || 0) * 100).toFixed(2)}%</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Position</span>
+                                    <p className="font-semibold text-sm">{(attempt.position || attempt.preStats?.position || finalStats?.position || 0).toFixed(1)}</p>
+                                    {hasProgress && positionDelta !== 0 && (
+                                      <span className={`text-xs ${positionDelta < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {positionDelta > 0 ? '+' : ''}{positionDelta.toFixed(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
+                              
+                              {/* Show metrics at extension time */}
+                              {attempt.impressions && attempt.position && (
+                                <div className="text-xs text-amber-600 dark:text-amber-400 bg-amber-100/80 dark:bg-amber-900/30 rounded px-2 py-1">
+                                  At extension: Position {attempt.position.toFixed(1)} with {attempt.impressions} impressions, {attempt.clicks || 0} clicks
                                 </div>
                               )}
                             </div>

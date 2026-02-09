@@ -10,11 +10,16 @@ import {
   AlertCircle, 
   Loader2,
   ChevronDown,
-  ChevronUp,
+  ChevronRight,
   Check,
   RefreshCw,
-  Zap
+  Zap,
+  ExternalLink,
+  CheckCircle2,
+  Lightbulb,
+  ArrowRight
 } from "lucide-react";
+// ChevronUp removed - now using ChevronRight/ChevronDown to match Content Audit Card
 import { toast } from "sonner";
 import { db } from "../../lib/firebaseConfig";
 import { doc, setDoc, getDoc, deleteField } from "firebase/firestore";
@@ -24,6 +29,17 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
+import { ScrollArea } from "@/components/ui/scroll-area";
+import { Badge } from "@/components/ui/badge";
+import { BarChart3, Search, MousePointerClick, ArrowUp, ArrowDown, Minus } from "lucide-react";
 
 // Helper function to create safe document IDs
 const createSafeDocId = (userId, pageUrl) => {
@@ -61,27 +77,51 @@ const isPageSuccessful = (position, impressions, clicks) => {
   return actualCTR >= expectedCTR;
 };
 
-// Check for low impressions (possible indexing issue)
-const getLowImpressionsGuidance = (impressions, daysSince) => {
+// Check for low impressions (possible indexing issue) - Now with position context for B1/B2
+const getLowImpressionsGuidance = (impressions, daysSince, position) => {
   if (impressions >= 50) return null;
   
+  // B1: Very low impressions (0-19)
   if (impressions < 20) {
+    // B1 with position 40+: Deep position + very low visibility = strong pivot signal
+    if (position >= 40) {
+      return {
+        type: "pivot-recommended",
+        severity: "warning",
+        message: `Very low visibility (only ${impressions} impressions) at a deep position (${Math.round(position)}). This keyword may be too competitive.`,
+        action: "Consider pivoting to a less competitive keyword. Your page is indexed but buried too deep to gain traction.",
+        icon: "🎯"
+      };
+    }
+    // B1 with position <40: Could be indexing issue
     return {
       type: "indexing-check",
       severity: "warning",
       message: `Very low visibility (only ${impressions} impressions in ${daysSince || 45}+ days). Your page may not be properly indexed in Google.`,
       action: "Check if your page is indexed in Google Search Console. If not, request indexing.",
-      icon: ""
+      icon: "🔍"
     };
   }
   
-  // 20-49 impressions
+  // B2: Low impressions (20-49)
+  // B2 with position 40+: Deep position + minimal visibility = consider pivot
+  if (position >= 40) {
+    return {
+      type: "pivot-recommended",
+      severity: "info",
+      message: `Minimal visibility (${impressions} impressions) despite being tracked for ${daysSince || 45}+ days, and your page is at position ${Math.round(position)}.`,
+      action: "This keyword may be too competitive for your current domain authority. Consider pivoting to a less competitive, longer-tail keyword.",
+      icon: "🎯"
+    };
+  }
+  
+  // B2 with position <40: Just needs more time
   return {
     type: "wait-for-data",
     severity: "info",
     message: `Only ${impressions} impressions so far. This isn't enough data to evaluate CTR performance accurately.`,
     action: "Wait for more impressions before making changes. SEO takes time!",
-    icon: ""
+    icon: "⏳"
   };
 };
 
@@ -146,6 +186,7 @@ const PivotOptionsPanel = ({
   implementationData,
   focusKeyword = "",
   keywordSource = "gsc-existing",
+  snapshot,
 }) => {
   const { user } = useAuth();
   const [isExpanded, setIsExpanded] = useState(true);
@@ -162,8 +203,39 @@ const PivotOptionsPanel = ({
   const [pendingKeywordSource, setPendingKeywordSource] = useState(null); // Source of pending keyword
   const [isSaving, setIsSaving] = useState(false);
   const [isOptimizingMeta, setIsOptimizingMeta] = useState(false); // For "Optimize Meta Only" action
+  
+  // Optimize Meta Only - 2-step flow state (matching E1 Content Audit behavior)
+  const [optimizeMetaNewTitle, setOptimizeMetaNewTitle] = useState(null);
+  const [optimizeMetaNewDescription, setOptimizeMetaNewDescription] = useState(null);
+  const [showOptimizeMetaSuggestions, setShowOptimizeMetaSuggestions] = useState(false);
+  const [isMarkingOptimizeMetaImplemented, setIsMarkingOptimizeMetaImplemented] = useState(false);
+  const [showOptimizeMetaConfirmModal, setShowOptimizeMetaConfirmModal] = useState(false);
+  
+  // Pivot to New Keyword - 2-step flow state (matching Content Audit E3 behavior)
+  const [showPivotMetaSuggestions, setShowPivotMetaSuggestions] = useState(false);
+  const [pivotNewMetaTitle, setPivotNewMetaTitle] = useState(null);
+  const [pivotNewMetaDescription, setPivotNewMetaDescription] = useState(null);
+  const [pivotNewKeyword, setPivotNewKeyword] = useState(null);
+  const [pivotNewKeywordSource, setPivotNewKeywordSource] = useState(null);
+  const [pivotOldKeyword, setPivotOldKeyword] = useState(null);
+  const [isMarkingPivotImplemented, setIsMarkingPivotImplemented] = useState(false);
+  const [showPivotConfirmModal, setShowPivotConfirmModal] = useState(false);
+  
   const contentRef = useRef(null);
   const [contentMaxHeight, setContentMaxHeight] = useState("0px");
+  
+  // Keyword Insights Modal state
+  const [isInsightsOpen, setIsInsightsOpen] = useState(false);
+  const [keywordInsightsData, setKeywordInsightsData] = useState(null);
+  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
+  
+  // Keyword Comparison state - for smart recommendations (similar to E3 in Content Audit)
+  const [keywordComparisonData, setKeywordComparisonData] = useState(null);
+  const [keywordComparisonLoaded, setKeywordComparisonLoaded] = useState(false);
+  const [isLoadingKeywordComparison, setIsLoadingKeywordComparison] = useState(false);
+  
+  // Wait Extension Confirmation Modal state
+  const [showWaitConfirmModal, setShowWaitConfirmModal] = useState(false);
 
   // Get current metrics for checks
   const currentPosition = implementationData?.currentPosition || 100;
@@ -178,10 +250,11 @@ const PivotOptionsPanel = ({
     currentClicks
   ) : false;
 
-  // Check for low impressions guidance
+  // Check for low impressions guidance (now with position context for B1/B2)
   const lowImpressionsGuidance = implementationData ? getLowImpressionsGuidance(
     currentImpressions,
-    daysSinceImpl
+    daysSinceImpl,
+    currentPosition
   ) : null;
 
   // Check CTR Benchmark fail (only if not successful and has enough impressions)
@@ -233,11 +306,23 @@ const PivotOptionsPanel = ({
       };
     }
 
-    // LOW IMPRESSIONS - Not enough data
+    // LOW IMPRESSIONS - Now with position-aware recommendations (B1/B2)
     if (lowImpressionsGuidance) {
+      // Determine action based on guidance type
+      let action = "wait";
+      let confidence = "medium";
+      
+      if (lowImpressionsGuidance.type === "indexing-check") {
+        action = "check-indexing";
+        confidence = "high";
+      } else if (lowImpressionsGuidance.type === "pivot-recommended") {
+        action = "pivot";
+        confidence = "high";
+      }
+      
       return {
-        action: lowImpressionsGuidance.type === "indexing-check" ? "check-indexing" : "wait",
-        confidence: lowImpressionsGuidance.type === "indexing-check" ? "high" : "medium",
+        action,
+        confidence,
         reason: `${lowImpressionsGuidance.icon} ${lowImpressionsGuidance.message} ${lowImpressionsGuidance.action}`,
         icon: lowImpressionsGuidance.icon
       };
@@ -341,8 +426,33 @@ const PivotOptionsPanel = ({
       };
     }
 
-    // Strong indicators to PIVOT
+    // KEYWORD COMPARISON DATA - Use for smarter pivot recommendations
+    const isFocusKeywordBest = keywordComparisonData?.isFocusKeywordBest;
+    const bestAlternative = keywordComparisonData?.bestAlternative;
+    const focusPosition = keywordComparisonData?.focusKeywordData?.position;
+    const bestPosition = bestAlternative?.position;
+
+    // Strong indicators to PIVOT - Now with keyword comparison intelligence
     if (position >= 40 && impressions >= 50 && clicks === 0) {
+      // Check if there's a better keyword to suggest
+      if (isFocusKeywordBest) {
+        return {
+          action: "optimize-meta",
+          confidence: "medium",
+          reason: `Position ${Math.round(position)} with ${impressions} impressions but 0 clicks. However, your focus keyword "${focusKeyword}" is already your best performer. Consider optimizing your meta title/description instead of pivoting.`,
+          icon: "",
+          keywordInsight: `Your focus keyword is outperforming ${keywordComparisonData?.allKeywordsCount - 1 || 0} other keywords for this page.`
+        };
+      } else if (bestAlternative) {
+        return {
+          action: "pivot",
+          confidence: "high",
+          reason: `Position ${Math.round(position)} with ${impressions} impressions but 0 clicks. We found a better keyword! "${bestAlternative.keyword}" is ranking at position ${bestPosition?.toFixed(1)} — consider pivoting to capitalize on this.`,
+          icon: "",
+          keywordInsight: `"${bestAlternative.keyword}" is ranking ${(focusPosition - bestPosition)?.toFixed(1) || "better"} positions higher than your focus keyword.`,
+          suggestedPivotKeyword: bestAlternative.keyword
+        };
+      }
       return {
         action: "pivot",
         confidence: "high",
@@ -361,6 +471,25 @@ const PivotOptionsPanel = ({
     }
 
     if (position >= 30 && impressions >= 100 && clicks === 0) {
+      // Check for better alternative keyword
+      if (isFocusKeywordBest) {
+        return {
+          action: "optimize-meta",
+          confidence: "medium",
+          reason: `High impressions (${impressions}) but no clicks at position ${Math.round(position)}. Your focus keyword "${focusKeyword}" is your strongest — try optimizing your meta title instead of pivoting.`,
+          icon: "",
+          keywordInsight: `Your focus keyword is already your best performer.`
+        };
+      } else if (bestAlternative) {
+        return {
+          action: "pivot",
+          confidence: "high",
+          reason: `High impressions (${impressions}) but no clicks at position ${Math.round(position)}. We noticed "${bestAlternative.keyword}" (Position ${bestPosition?.toFixed(1)}) is outperforming your focus keyword. Consider pivoting!`,
+          icon: "",
+          keywordInsight: `"${bestAlternative.keyword}" is ranking better than "${focusKeyword}".`,
+          suggestedPivotKeyword: bestAlternative.keyword
+        };
+      }
       return {
         action: "pivot",
         confidence: "medium",
@@ -369,8 +498,26 @@ const PivotOptionsPanel = ({
       };
     }
 
-    // Moderate case - could go either way
+    // Moderate case - could go either way - Now with keyword insight
     if (position >= 20 && position < 40) {
+      if (bestAlternative) {
+        return {
+          action: "pivot",
+          confidence: "medium",
+          reason: `Position ${Math.round(position)} with ${impressions} impressions is in the "watch zone". We noticed "${bestAlternative.keyword}" (Position ${bestPosition?.toFixed(1)}) is ranking higher than your focus keyword. Consider pivoting to that keyword.`,
+          icon: "",
+          keywordInsight: `"${bestAlternative.keyword}" might be a better fit for this page.`,
+          suggestedPivotKeyword: bestAlternative.keyword
+        };
+      } else if (isFocusKeywordBest) {
+        return {
+          action: "wait",
+          confidence: "medium",
+          reason: `Position ${Math.round(position)} with ${impressions} impressions is in the "watch zone". Your focus keyword "${focusKeyword}" is your best performer — give it more time to climb.`,
+          icon: "",
+          keywordInsight: `Your focus keyword is already outperforming other keywords.`
+        };
+      }
       return {
         action: "either",
         confidence: "low",
@@ -379,7 +526,18 @@ const PivotOptionsPanel = ({
       };
     }
 
-    // Default fallback
+    // Default fallback - with keyword insight if available
+    if (bestAlternative) {
+      return {
+        action: "pivot",
+        confidence: "low",
+        reason: `Your metrics are mixed. We noticed "${bestAlternative.keyword}" (Position ${bestPosition?.toFixed(1)}) might be a better keyword fit for this page.`,
+        icon: "",
+        keywordInsight: `Consider pivoting to "${bestAlternative.keyword}".`,
+        suggestedPivotKeyword: bestAlternative.keyword
+      };
+    }
+    
     return {
       action: "either",
       confidence: "low",
@@ -414,6 +572,13 @@ const PivotOptionsPanel = ({
 
     loadSavedData();
   }, [user?.id, pageUrl]);
+
+  // Fetch keyword comparison data on mount for smart recommendations
+  useEffect(() => {
+    if (user?.id && pageUrl && focusKeyword && !keywordComparisonLoaded) {
+      fetchKeywordComparison();
+    }
+  }, [user?.id, pageUrl, focusKeyword, keywordComparisonLoaded]);
 
   // Fetch current ranking keywords when keyword selection is opened
   const fetchRankingKeywords = async () => {
@@ -521,14 +686,143 @@ const PivotOptionsPanel = ({
     setPendingKeywordSource(source);
   };
 
-  // Handle saving the pending keyword
+  // Handle saving the pending keyword - Now generates AI meta suggestions (2-step flow matching Content Audit E3)
+  // The actual pivot/reset happens when user clicks "I've Updated This On My Site" after reviewing new metas
   const handleSavePendingKeyword = async () => {
     if (!user?.id || !pageUrl || !pendingKeyword) return;
 
     setIsSaving(true);
     
     try {
+      // Re-crawl the page to get fresh content for new AI suggestions
+      toast.info("Generating new meta suggestions for your new keyword...");
+      try {
+        const recrawlRes = await fetch("/api/recrawl-page", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            pageUrl,
+          }),
+        });
+        
+        if (recrawlRes.ok) {
+          console.log("✅ Page re-crawled for pivot");
+        }
+      } catch (recrawlError) {
+        console.warn("⚠️ Could not re-crawl page:", recrawlError);
+      }
+
+      // Fetch previous meta optimization attempts for AI learning
+      let previousAttempts = [];
+      try {
+        const docId = createSafeDocId(user.id, pageUrl);
+        const currentDoc = await getDoc(doc(db, "implementedSeoTips", docId));
+        if (currentDoc.exists()) {
+          const data = currentDoc.data();
+          previousAttempts = data.metaOptimizationHistory || [];
+        }
+      } catch (historyError) {
+        console.warn("Could not fetch meta history:", historyError);
+      }
+
+      // Build the payload for AI meta generation - using the NEW keyword
+      const payload = {
+        pageUrl,
+        userId: user.id,
+        context: {
+          source: "pivot-card-keyword-change",
+        },
+        focusKeywords: [pendingKeyword], // Use the NEW keyword for meta generation
+      };
+
+      // If we have previous attempts, include them for AI learning (with full stats)
+      if (previousAttempts.length > 0) {
+        payload.previousAttempts = previousAttempts.slice(-3).map(attempt => ({
+          title: attempt.title,
+          description: attempt.description,
+          outcome: attempt.outcome || "unknown",
+          // Include full stats for smarter AI recommendations
+          preStats: attempt.preStats || null,
+          postStats: attempt.postStats || attempt.finalStats || null,
+          daysTracked: attempt.daysTracked || 0,
+          keyword: attempt.keyword || attempt.previousKeyword || null,
+          type: attempt.type || "meta-optimization",
+        }));
+        console.log(`🧠 Passing ${payload.previousAttempts.length} previous attempt(s) with full stats to AI`);
+      }
+
+      // Generate new AI metas
+      const [titleRes, descRes] = await Promise.all([
+        fetch("/api/seo-assistant/meta-title", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, _nocache: Date.now() }),
+        }),
+        fetch("/api/seo-assistant/meta-description", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, _nocache: Date.now() }),
+        }),
+      ]);
+
+      const [titleData, descData] = await Promise.all([titleRes.json(), descRes.json()]);
+
+      if (titleData.title && descData.description) {
+        // Store the new suggestions and keyword info in state
+        setPivotNewMetaTitle(titleData.title);
+        setPivotNewMetaDescription(descData.description);
+        setPivotNewKeyword(pendingKeyword);
+        setPivotNewKeywordSource(pendingKeywordSource === "hybrid" ? "ai-generated" : pendingKeywordSource);
+        setPivotOldKeyword(focusKeyword);
+        setShowPivotMetaSuggestions(true);
+        setShowKeywordSelection(false);
+        
+        toast.success("New meta suggestions ready! Review them below.", {
+          duration: 3000
+        });
+      } else {
+        throw new Error("Failed to generate meta suggestions");
+      }
+    } catch (error) {
+      console.error("Error generating pivot meta suggestions:", error);
+      toast.error("Failed to generate meta suggestions. Please try again.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // Handle canceling the pending selection
+  const handleCancelPendingKeyword = () => {
+    setPendingKeyword(null);
+    setPendingKeywordSource(null);
+  };
+
+  // Handle canceling the pivot meta suggestions
+  const handleCancelPivotSuggestions = () => {
+    setShowPivotMetaSuggestions(false);
+    setPivotNewMetaTitle(null);
+    setPivotNewMetaDescription(null);
+    setPivotNewKeyword(null);
+    setPivotNewKeywordSource(null);
+    setPivotOldKeyword(null);
+    setPendingKeyword(null);
+    setPendingKeywordSource(null);
+  };
+
+  // Handle marking pivot as implemented - Called when user clicks "I've Updated This On My Site"
+  // This performs the actual tracking reset after user confirms they've updated their metas
+  const handleMarkPivotImplemented = async () => {
+    if (!user?.id || !pageUrl || !pivotNewKeyword) return;
+    
+    setIsMarkingPivotImplemented(true);
+    
+    try {
       const docId = createSafeDocId(user.id, pageUrl);
+      
+      // First, fetch the current document to preserve old stats
+      const currentDoc = await getDoc(doc(db, "implementedSeoTips", docId));
+      const currentData = currentDoc.exists() ? currentDoc.data() : {};
       
       // Add current focus keyword to history
       const updatedHistory = [...keywordHistory];
@@ -539,10 +833,6 @@ const PivotOptionsPanel = ({
           source: keywordSource,
         });
       }
-
-      // First, fetch the current document to preserve old stats
-      const currentDoc = await getDoc(doc(db, "implementedSeoTips", docId));
-      const currentData = currentDoc.exists() ? currentDoc.data() : {};
       
       // Build the keyword stats history - preserve metrics from previous keyword attempts
       const keywordStatsHistory = currentData.keywordStatsHistory || [];
@@ -557,38 +847,82 @@ const PivotOptionsPanel = ({
           preStats: currentData.preStats,
           postStats: currentData.postStats || null,
           postStatsHistory: currentData.postStatsHistory || [],
-          // Calculate days tracked
           daysTracked: currentData.implementedAt 
             ? Math.floor((Date.now() - new Date(currentData.implementedAt).getTime()) / (1000 * 60 * 60 * 24))
             : 0,
-          // Track where the pivot was triggered from
-          pivotSource: "pivot-card",
+          pivotSource: "pivot-card-keyword-change",
         });
       }
+      
+      // Save the new metas to metaOptimizationHistory for future AI learning (with full stats)
+      const metaOptimizationHistory = currentData.metaOptimizationHistory || [];
+      metaOptimizationHistory.push({
+        title: pivotNewMetaTitle,
+        description: pivotNewMetaDescription,
+        generatedAt: new Date().toISOString(),
+        type: "pivot-keyword-change", // Track this as a keyword pivot
+        previousKeyword: pivotOldKeyword,
+        newKeyword: pivotNewKeyword,
+        // Include full stats for AI learning on next iteration
+        keyword: pivotOldKeyword,
+        implementedAt: currentData.implementedAt,
+        preStats: currentData.preStats || null,
+        finalStats: currentData.postStats || null,
+        postStatsHistory: currentData.postStatsHistory || [],
+        daysTracked: currentData.implementedAt 
+          ? Math.floor((Date.now() - new Date(currentData.implementedAt).getTime()) / (1000 * 60 * 60 * 24))
+          : 0,
+        optimizationSource: "pivot-card-keyword-change",
+      });
 
-      // RESET: Clear implementation status but PRESERVE old stats in history
-      // This allows the user to start fresh with the new keyword while keeping historical data
+      // Get current stats for preStats baseline (for the NEW keyword tracking)
+      // This captures the current metrics as the starting point for the new 45-day cycle
+      const currentPosition = currentData.postStats?.position || currentData.preStats?.position || 0;
+      const currentImpressions = currentData.postStats?.impressions || currentData.preStats?.impressions || 0;
+      const currentClicks = currentData.postStats?.clicks || currentData.preStats?.clicks || 0;
+      const currentCtr = currentData.postStats?.ctr || currentData.preStats?.ctr || 0;
+      
+      const newPreStats = {
+        position: currentPosition,
+        impressions: currentImpressions,
+        clicks: currentClicks,
+        ctr: currentCtr,
+      };
+
+      // RESET tracking - Set new implementedAt and preStats (matching Content Audit E3 flow)
+      // This keeps the page "implemented" but resets the progress to Day 0
       await setDoc(
         doc(db, "implementedSeoTips", docId),
         {
           keywordHistory: updatedHistory,
-          keywordStatsHistory: keywordStatsHistory, // Preserved history of previous keyword stats
+          keywordStatsHistory: keywordStatsHistory,
+          metaOptimizationHistory: metaOptimizationHistory,
           pivotedAt: new Date().toISOString(),
-          // Reset the implementation - change status and DELETE current stats fields
-          status: "pivoted", // Changed from "implemented" to "pivoted"
-          preStats: deleteField(), // DELETE current pre-implementation stats (will be set when re-implemented)
-          postStats: deleteField(), // DELETE current post-implementation stats
-          postStatsHistory: deleteField(), // DELETE current stats history (preserved in keywordStatsHistory)
-          implementedAt: deleteField(), // DELETE implementation date
-          nextUpdateDue: deleteField(), // DELETE next update schedule
-          // Keep reference to what keyword we're pivoting to
-          pivotedToKeyword: pendingKeyword,
-          pivotedFromKeyword: focusKeyword,
+          // Set status to "implemented" so it stays in AI-Powered SEO Suggestions with reset progress
+          status: "implemented",
+          implementationType: "pivot-keyword-change", // Identifies this as a pivot for tracking label
+          // Set new tracking dates - Day 0 starts NOW
+          implementedAt: new Date().toISOString(),
+          nextUpdateDue: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          // Set baseline stats for the NEW keyword
+          preStats: newPreStats,
+          // Clear old post stats (will be populated by cron job after 7 days)
+          postStats: deleteField(),
+          postStatsHistory: deleteField(),
+          // Clear 45-day snapshot since we're starting fresh
+          dayFortyFiveSnapshot: deleteField(),
+          // Update keywords
+          currentKeyword: pivotNewKeyword,
+          pivotedToKeyword: pivotNewKeyword,
+          pivotedFromKeyword: pivotOldKeyword,
+          // Store the implemented meta title/description
+          implementedMetaTitle: pivotNewMetaTitle,
+          implementedMetaDescription: pivotNewMetaDescription,
         },
         { merge: true }
       );
 
-      // IMPORTANT: First fetch existing focus keywords to preserve them
+      // Update focus keywords - fetch existing and update
       const existingResponse = await fetch(`/api/focus-keywords?userId=${user.id}`);
       let existingKeywords = [];
       
@@ -597,7 +931,7 @@ const PivotOptionsPanel = ({
         existingKeywords = existingData.keywords || [];
       }
 
-      // Normalize the page URL for comparison
+      // Normalize URL for comparison
       const normalizeUrl = (url) => {
         if (!url) return "";
         try {
@@ -609,25 +943,20 @@ const PivotOptionsPanel = ({
       };
 
       const normalizedPageUrl = normalizeUrl(pageUrl);
-
-      // Remove any existing keyword for this specific page URL
       const filteredKeywords = existingKeywords.filter(kw => {
         const kwPageUrl = normalizeUrl(kw.pageUrl);
         return kwPageUrl !== normalizedPageUrl;
       });
 
-      // Add the new keyword for this page
-      const finalSource = pendingKeywordSource === "hybrid" ? "ai-generated" : pendingKeywordSource;
       const updatedKeywords = [
         ...filteredKeywords,
         {
-          keyword: pendingKeyword,
+          keyword: pivotNewKeyword,
           pageUrl,
-          source: finalSource,
+          source: pivotNewKeywordSource,
         }
       ];
 
-      // Save all keywords (existing + updated)
       await fetch("/api/focus-keywords", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -637,9 +966,76 @@ const PivotOptionsPanel = ({
         }),
       });
 
+      // Update meta cache with new metas
+      try {
+        await fetch("/api/pages/update-cache", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            userId: user.id,
+            pageUrl,
+            updates: {
+              metaTitle: pivotNewMetaTitle,
+              metaDescription: pivotNewMetaDescription,
+            },
+          }),
+        });
+      } catch (cacheError) {
+        console.warn("Failed to update meta cache:", cacheError);
+      }
+
+      // Log AI training event
+      try {
+        await fetch("/api/training/log-event", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            event_type: "meta_recommendation",
+            status: "implemented",
+            metadata: {
+              newTitle: pivotNewMetaTitle,
+              newDescription: pivotNewMetaDescription,
+              source: "pivot-card-keyword-change",
+              previousKeyword: pivotOldKeyword,
+              newKeyword: pivotNewKeyword,
+              pageUrl,
+              userId: user.id,
+            },
+          }),
+        });
+      } catch (logError) {
+        console.warn("Failed to log training event:", logError);
+      }
+
+      setKeywordHistory(updatedHistory);
+      setShowPivotConfirmModal(false);
+      toast.success(`Pivoted to "${pivotNewKeyword}"! Your 45-day tracking has been reset.`, {
+        duration: 4000
+      });
+      
+      // Reload to show the page in AI-Powered SEO Suggestions (ready for re-implementation)
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (error) {
+      console.error("Error marking pivot as implemented:", error);
+      toast.error("Failed to complete pivot. Please try again.");
+    } finally {
+      setIsMarkingPivotImplemented(false);
+    }
+  };
+
+  // Handle "Optimize Meta Only" - For CTR Benchmark Fail cases
+  // NEW: 2-step flow - generates and displays metas WITHOUT resetting tracking
+  // User reviews suggestions, then clicks "I've Updated This" to confirm and reset
+  const handleOptimizeMetaOnly = async () => {
+    if (!user?.id || !pageUrl) return;
+
+    setIsOptimizingMeta(true);
+    
+    try {
       // Re-crawl the page to get fresh content for new AI suggestions
-      // This ensures the AI uses the current H1, content, etc. when generating new title/meta
-      toast.info("Re-crawling page for fresh content...");
+      toast.info("Generating new meta suggestions...");
       try {
         const recrawlRes = await fetch("/api/recrawl-page", {
           method: "POST",
@@ -652,52 +1048,137 @@ const PivotOptionsPanel = ({
         
         if (recrawlRes.ok) {
           const recrawlData = await recrawlRes.json();
-          console.log("✅ Page re-crawled:", recrawlData);
+          console.log("Page re-crawled:", recrawlData);
         } else {
-          console.warn("⚠️ Page re-crawl failed, but continuing with pivot");
+          console.warn("Page re-crawl failed, but continuing with meta generation");
         }
       } catch (recrawlError) {
-        console.warn("⚠️ Could not re-crawl page:", recrawlError);
-        // Don't fail the whole pivot if re-crawl fails
+        console.warn("Could not re-crawl page:", recrawlError);
       }
 
-      setKeywordHistory(updatedHistory);
-      setSelectedKeyword(pendingKeyword);
-      setPendingKeyword(null);
-      setPendingKeywordSource(null);
-      toast.success(`Keyword pivoted to "${pendingKeyword}"! Page content refreshed - new suggestions will be generated. Refreshing...`);
+      // Fetch previous meta optimization attempts for AI learning
+      let previousAttempts = [];
+      try {
+        const docId = createSafeDocId(user.id, pageUrl);
+        const seoTipDoc = await getDoc(doc(db, "implementedSeoTips", docId));
+        if (seoTipDoc.exists()) {
+          const data = seoTipDoc.data();
+          previousAttempts = data.metaOptimizationHistory || [];
+          if (previousAttempts.length > 0) {
+            console.log(`Found ${previousAttempts.length} previous meta attempt(s) for AI learning`);
+          }
+        }
+      } catch (historyError) {
+        console.warn("Could not fetch meta optimization history:", historyError);
+      }
+
+      // Build payload for AI meta generation
+      // Map previous attempts to include full stats for smarter AI recommendations
+      const mappedPreviousAttempts = previousAttempts.slice(-3).map(attempt => ({
+        title: attempt.title,
+        description: attempt.description,
+        outcome: attempt.outcome || "unknown",
+        // Include full stats for smarter AI recommendations
+        preStats: attempt.preStats || null,
+        postStats: attempt.postStats || attempt.finalStats || null,
+        daysTracked: attempt.daysTracked || 0,
+        keyword: attempt.keyword || null,
+        type: attempt.type || "meta-optimization",
+      }));
       
-      // Auto-refresh the page after a short delay so user sees the new suggestions
-      setTimeout(() => {
-        window.location.reload();
-      }, 2000);
+      if (mappedPreviousAttempts.length > 0) {
+        console.log(`🧠 Passing ${mappedPreviousAttempts.length} previous attempt(s) with full stats to AI`);
+      }
+      
+      const payload = {
+        pageUrl,
+        userId: user.id,
+        context: {
+          source: "pivot-card-ctr-benchmark",
+          ...(focusKeyword ? { focusKeyword: focusKeyword } : {}),
+        },
+        ...(focusKeyword ? { focusKeywords: [focusKeyword] } : {}),
+        // Include previous attempts for AI learning (with full stats)
+        ...(mappedPreviousAttempts.length > 0 ? { previousAttempts: mappedPreviousAttempts } : {}),
+      };
+
+      // Fetch NEW AI meta title and description (bypass cache by adding timestamp)
+      const [titleRes, descRes] = await Promise.all([
+        fetch("/api/seo-assistant/meta-title", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, _nocache: Date.now() }),
+        }),
+        fetch("/api/seo-assistant/meta-description", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ ...payload, _nocache: Date.now() }),
+        }),
+      ]);
+
+      const [titleData, descData] = await Promise.all([
+        titleRes.json(),
+        descRes.json(),
+      ]);
+
+      if (titleData.title && descData.description) {
+        // Store the new suggestions in state - display in card
+        setOptimizeMetaNewTitle(titleData.title);
+        setOptimizeMetaNewDescription(descData.description);
+        setShowOptimizeMetaSuggestions(true);
+        
+        toast.success("New meta suggestions ready! Review them below.", {
+          duration: 3000
+        });
+      } else {
+        throw new Error("Failed to generate meta suggestions");
+      }
     } catch (error) {
-      console.error("Error saving new focus keyword:", error);
-      toast.error("Failed to update focus keyword. Please try again.");
+      console.error("Error generating meta suggestions:", error);
+      toast.error("Failed to generate meta suggestions. Please try again.");
     } finally {
-      setIsSaving(false);
+      setIsOptimizingMeta(false);
     }
   };
 
-  // Handle canceling the pending selection
-  const handleCancelPendingKeyword = () => {
-    setPendingKeyword(null);
-    setPendingKeywordSource(null);
-  };
+  // Handle "I've Updated This On My Site" - Called after user reviews new metas
+  // This saves old stats to history, resets tracking, and starts a new 45-day cycle
+  const handleMarkOptimizeMetaImplemented = async () => {
+    if (!user?.id || !pageUrl || !optimizeMetaNewTitle || !optimizeMetaNewDescription) return;
 
-  // Handle "Optimize Meta Only" - For CTR Benchmark Fail cases
-  // Same keyword, just new title/description
-  const handleOptimizeMetaOnly = async () => {
-    if (!user?.id || !pageUrl) return;
-
-    setIsOptimizingMeta(true);
+    setIsMarkingOptimizeMetaImplemented(true);
     
     try {
       const docId = createSafeDocId(user.id, pageUrl);
       
-      // First, fetch the current document to preserve old stats
+      // Fetch the current document to preserve old stats
       const currentDoc = await getDoc(doc(db, "implementedSeoTips", docId));
       const currentData = currentDoc.exists() ? currentDoc.data() : {};
+      
+      // Fetch the current cached meta title/description BEFORE we update
+      // This allows AI to learn from what didn't work
+      let previousTitle = null;
+      let previousDescription = null;
+      try {
+        const cacheKey = focusKeyword 
+          ? `${pageUrl}::${focusKeyword.toLowerCase()}`
+          : pageUrl;
+        const encodedCacheKey = encodeURIComponent(cacheKey);
+        
+        const [titleDoc, descDoc] = await Promise.all([
+          getDoc(doc(db, "seoMetaTitles", encodedCacheKey)),
+          getDoc(doc(db, "seoMetaDescriptions", encodedCacheKey))
+        ]);
+        
+        if (titleDoc.exists()) {
+          previousTitle = titleDoc.data()?.title || null;
+        }
+        if (descDoc.exists()) {
+          previousDescription = descDoc.data()?.description || null;
+        }
+      } catch (cacheReadError) {
+        console.warn("Could not fetch previous meta cache:", cacheReadError);
+      }
       
       // Build the meta optimization history - preserve metrics from previous meta attempts
       const metaOptimizationHistory = currentData.metaOptimizationHistory || [];
@@ -709,116 +1190,354 @@ const PivotOptionsPanel = ({
           optimizedAt: new Date().toISOString(),
           reason: ctrBenchmarkFail 
             ? `CTR Benchmark Fail: Position ${ctrBenchmarkFail.position} with ${ctrBenchmarkFail.impressions} impressions, ${ctrBenchmarkFail.actualClicks} clicks (expected ~${ctrBenchmarkFail.expectedClicks})`
-            : "Meta optimization triggered",
+            : "Meta optimization triggered from Pivot card",
           keyword: focusKeyword,
           implementedAt: currentData.implementedAt,
           preStats: currentData.preStats,
           finalStats: currentData.postStats || null,
           postStatsHistory: currentData.postStatsHistory || [],
-          // Calculate days tracked
           daysTracked: currentData.implementedAt 
             ? Math.floor((Date.now() - new Date(currentData.implementedAt).getTime()) / (1000 * 60 * 60 * 24))
             : 0,
-          // Track where the optimization was triggered from
           optimizationSource: "pivot-card",
+          title: previousTitle,
+          description: previousDescription,
         });
       }
 
-      // RESET: Clear implementation status but PRESERVE old stats in metaOptimizationHistory
-      // This allows the user to start fresh with new meta while keeping historical data
+      // Get current metrics for new preStats baseline
+      const preStats = {
+        position: currentPosition,
+        impressions: currentImpressions,
+        clicks: currentClicks,
+        ctr: currentImpressions > 0 ? currentClicks / currentImpressions : 0,
+      };
+
+      // Update the document with new tracking status
       await setDoc(
         doc(db, "implementedSeoTips", docId),
         {
-          metaOptimizationHistory: metaOptimizationHistory, // Preserved history of previous meta stats
-          metaOptimizedAt: new Date().toISOString(),
-          // Reset the implementation - change status and DELETE current stats fields
-          status: "meta-optimizing", // Special status for meta-only optimization
-          preStats: deleteField(), // DELETE current pre-implementation stats (will be set when re-implemented)
-          postStats: deleteField(), // DELETE current post-implementation stats
-          postStatsHistory: deleteField(), // DELETE current stats history (preserved in metaOptimizationHistory)
-          implementedAt: deleteField(), // DELETE implementation date
-          nextUpdateDue: deleteField(), // DELETE next update schedule
-          // Keep the same keyword - don't add to keywordHistory since we're keeping it
+          metaOptimizationHistory: metaOptimizationHistory,
+          // Set status to "implemented" so SEO Progress can find it after 7 days
+          status: "implemented",
+          implementationType: "ctr-benchmark-meta",
+          // Set new tracking dates
+          implementedAt: new Date().toISOString(),
+          nextUpdateDue: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+          // Set baseline stats
+          preStats: preStats,
+          // Clear old post stats (will be populated by cron job)
+          postStats: deleteField(),
+          postStatsHistory: deleteField(),
+          extendedTotalDays: deleteField(),
+          // Clear the 45-day snapshot since we're starting fresh
+          dayFortyFiveSnapshot: deleteField(),
+          // Keep the same keyword
           currentKeyword: focusKeyword,
-          metaOptimizationReason: ctrBenchmarkFail 
-            ? `CTR Benchmark Fail: Position ${ctrBenchmarkFail.position}`
-            : "Meta optimization",
+          // Store the implemented meta title/description
+          implementedMetaTitle: optimizeMetaNewTitle,
+          implementedMetaDescription: optimizeMetaNewDescription,
+          ctrBenchmarkMetaImplementedAt: new Date().toISOString(),
         },
         { merge: true }
       );
 
-      // Re-crawl the page to get fresh content for new AI suggestions
-      toast.info("Re-crawling page for fresh meta suggestions...");
+      // Update the cached meta suggestions with the new ones
       try {
-        const recrawlRes = await fetch("/api/recrawl-page", {
+        const cacheKey = focusKeyword 
+          ? `${pageUrl}::${focusKeyword.toLowerCase()}`
+          : pageUrl;
+        const encodedCacheKey = encodeURIComponent(cacheKey);
+        
+        await Promise.all([
+          setDoc(doc(db, "seoMetaTitles", encodedCacheKey), {
+            title: optimizeMetaNewTitle,
+            createdAt: new Date().toISOString(),
+            focusKeywords: focusKeyword ? [focusKeyword] : [],
+            pageUrl,
+          }),
+          setDoc(doc(db, "seoMetaDescriptions", encodedCacheKey), {
+            description: optimizeMetaNewDescription,
+            createdAt: new Date().toISOString(),
+            focusKeywords: focusKeyword ? [focusKeyword] : [],
+            pageUrl,
+          }),
+        ]);
+      } catch (cacheError) {
+        console.warn("Could not update meta cache:", cacheError);
+      }
+
+      // Log training event for AI learning
+      try {
+        await fetch("/api/training/log-event", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             userId: user.id,
-            pageUrl,
+            eventType: "meta_optimization_outcome",
+            payload: {
+              pageUrl,
+              outcome: "ctr_benchmark_fail",
+              focusKeyword: focusKeyword,
+              previousTitle: previousTitle,
+              previousDescription: previousDescription,
+              newTitle: optimizeMetaNewTitle,
+              newDescription: optimizeMetaNewDescription,
+              performanceMetrics: {
+                impressions: currentImpressions,
+                clicks: currentClicks,
+                position: currentPosition,
+                ctr: currentImpressions > 0 ? currentClicks / currentImpressions : 0,
+                daysTracked: daysSinceImpl,
+              },
+              source: "pivot-card",
+              triggerReason: ctrBenchmarkFail 
+                ? `CTR Benchmark Fail: Position ${ctrBenchmarkFail.position} - user implemented new meta suggestions`
+                : "Meta optimization from Pivot card",
+            }
           }),
         });
-        
-        if (recrawlRes.ok) {
-          const recrawlData = await recrawlRes.json();
-          console.log("✅ Page re-crawled:", recrawlData);
-        } else {
-          console.warn("⚠️ Page re-crawl failed, but continuing with meta optimization");
-        }
-      } catch (recrawlError) {
-        console.warn("⚠️ Could not re-crawl page:", recrawlError);
+      } catch (trainingError) {
+        console.warn("Could not log training event:", trainingError);
       }
 
-      toast.success(`⚡ Meta optimization started! Your page will appear in AI-Powered SEO Suggestions with new title/description recommendations. Refreshing...`);
+      toast.success("Meta tags updated! Your new 45-day tracking cycle has started. Refreshing...", {
+        duration: 3000
+      });
       
-      // Auto-refresh the page after a short delay so user sees the new suggestions
+      // Refresh the page so user sees the change
       setTimeout(() => {
         window.location.reload();
       }, 2000);
     } catch (error) {
-      console.error("Error starting meta optimization:", error);
-      toast.error("Failed to start meta optimization. Please try again.");
+      console.error("Error marking meta optimization as implemented:", error);
+      toast.error("Failed to complete meta optimization. Please try again.");
     } finally {
-      setIsOptimizingMeta(false);
+      setIsMarkingOptimizeMetaImplemented(false);
+      setShowOptimizeMetaConfirmModal(false);
     }
   };
 
-  // Handle waiting another 45 days
+  // Handle waiting another 45 days - Now saves stats to history and resets tracking (matching Content Audit flow)
   const handleWaitAnotherCycle = async () => {
     if (!user?.id || !pageUrl) return;
 
     try {
       const docId = createSafeDocId(user.id, pageUrl);
       
-      // First, fetch current document to get existing extendedTotalDays
+      // Fetch current document to get existing data
       const currentDoc = await getDoc(doc(db, "implementedSeoTips", docId));
       const currentData = currentDoc.exists() ? currentDoc.data() : {};
       
-      // Calculate new extended total days (add 45 to existing, or start at 90 if first extension)
-      const currentTotalDays = currentData.extendedTotalDays || 45;
-      const newExtendedTotalDays = currentTotalDays + 45;
+      // Get or create waitExtensionHistory array
+      const waitExtensionHistory = currentData.waitExtensionHistory || [];
       
-      const newDeadline = new Date();
-      newDeadline.setDate(newDeadline.getDate() + 45);
+      // Save current stats to history before resetting
+      if (currentData.preStats || currentData.postStats) {
+        waitExtensionHistory.push({
+          preStats: currentData.preStats || null,
+          postStats: currentData.postStats || null,
+          keyword: focusKeyword || currentData.focusKeyword || "Unknown",
+          waitStartedAt: new Date().toISOString(),
+          extensionNumber: waitExtensionHistory.length + 1,
+          daysTracked: daysSinceImpl || 45,
+          reason: "User chose to wait for more data",
+          position: currentPosition || currentData.postStats?.position || null,
+          impressions: currentImpressions || currentData.postStats?.impressions || 0,
+          clicks: currentClicks || currentData.postStats?.clicks || 0,
+        });
+      }
 
+      // Reset tracking and start fresh 45-day cycle
       await setDoc(
         doc(db, "implementedSeoTips", docId),
         {
-          extendedDeadline: newDeadline.toISOString(),
-          extendedTotalDays: newExtendedTotalDays, // Track total days target (90, 135, 180, etc.)
-          waitingForMoreData: true,
-          lastExtendedAt: new Date().toISOString(), // Track when user last clicked "Wait"
+          // Set new implementation type for tracking
+          status: "implemented",
+          implementationType: "wait-extension",
+          implementedAt: new Date().toISOString(),
+          
+          // Preserve history
+          waitExtensionHistory: waitExtensionHistory,
+          
+          // DELETE fields to reset tracking
+          preStats: deleteField(),
+          postStats: deleteField(),
+          postStatsHistory: deleteField(),
+          nextUpdateDue: deleteField(),
+          extendedDeadline: deleteField(),
+          waitingForMoreData: deleteField(),
+          extendedTotalDays: deleteField(),
+          lastExtendedAt: deleteField(),
         },
         { merge: true }
       );
 
-      setExtendedDeadline(newDeadline);
-      setWaitAnotherCycle(true);
-      toast.success(`Extended tracking to ${newExtendedTotalDays} total days. We'll gather more data!`);
+      toast.success("Starting fresh 45-day tracking! Check AI-Powered SEO Suggestions to monitor progress.");
+      
+      // Refresh page after short delay to show updated state
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
     } catch (error) {
-      console.error("Error extending deadline:", error);
-      toast.error("Failed to extend deadline. Please try again.");
+      console.error("Error starting wait extension:", error);
+      toast.error("Failed to start wait extension. Please try again.");
     }
+  };
+
+  // Fetch keyword comparison data for smart recommendations
+  // This compares the focus keyword against other ranking keywords to suggest better alternatives
+  const fetchKeywordComparison = async () => {
+    if (!user?.id || !pageUrl || !focusKeyword || keywordComparisonLoaded) return;
+    
+    setIsLoadingKeywordComparison(true);
+    try {
+      const { createGSCTokenManager } = await import("../../lib/gscTokenManager");
+      const tokenManager = createGSCTokenManager(user.id);
+      const gscData = await tokenManager.getStoredGSCData();
+      
+      if (!gscData?.accessToken || !gscData?.siteUrl) {
+        console.log("GSC not connected for keyword comparison");
+        setKeywordComparisonLoaded(true);
+        return;
+      }
+
+      const validToken = await tokenManager.getValidAccessToken();
+      if (!validToken) {
+        console.log("Could not get valid GSC token for comparison");
+        setKeywordComparisonLoaded(true);
+        return;
+      }
+
+      const response = await fetch("/api/gsc/page-keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          pageUrl,
+          dateRange: "28",
+          token: validToken,
+          siteUrl: gscData.siteUrl
+        })
+      });
+
+      if (!response.ok) {
+        console.log("Failed to fetch keywords for comparison");
+        setKeywordComparisonLoaded(true);
+        return;
+      }
+
+      const data = await response.json();
+      if (data.success && data.keywords?.topPerformers?.length > 0) {
+        const allKeywords = data.keywords.topPerformers;
+        
+        // Find focus keyword in the list
+        const focusKeywordData = allKeywords.find(
+          kw => kw.keyword.toLowerCase() === focusKeyword.toLowerCase()
+        );
+        
+        // Find the best performing keyword (by position - lowest is best)
+        const bestByPosition = [...allKeywords].sort((a, b) => a.position - b.position)[0];
+        
+        // Find keywords that outperform the focus keyword
+        const focusPosition = focusKeywordData?.position || 999;
+        const betterKeywords = allKeywords
+          .filter(kw => kw.keyword.toLowerCase() !== focusKeyword.toLowerCase())
+          .filter(kw => kw.position < focusPosition)
+          .sort((a, b) => a.position - b.position);
+        
+        // Determine if focus keyword is the best
+        const isFocusKeywordBest = focusKeywordData && 
+          (!bestByPosition || focusKeywordData.position <= bestByPosition.position);
+        
+        // Get the best alternative keyword to recommend for pivot
+        const bestAlternative = betterKeywords.length > 0 ? betterKeywords[0] : null;
+        
+        setKeywordComparisonData({
+          isFocusKeywordBest,
+          focusKeywordData,
+          bestByPosition,
+          bestAlternative,
+          betterKeywordsCount: betterKeywords.length,
+          allKeywordsCount: allKeywords.length,
+        });
+        
+        console.log("Pivot Card Keyword Comparison:", {
+          isFocusKeywordBest,
+          focusKeyword,
+          focusPosition,
+          bestKeyword: bestByPosition?.keyword,
+          bestPosition: bestByPosition?.position,
+          bestAlternative: bestAlternative?.keyword,
+        });
+      }
+      
+      setKeywordComparisonLoaded(true);
+    } catch (error) {
+      console.error("Error fetching keyword comparison:", error);
+      setKeywordComparisonLoaded(true);
+    } finally {
+      setIsLoadingKeywordComparison(false);
+    }
+  };
+
+  // Fetch keyword insights for the modal
+  const fetchKeywordInsights = async () => {
+    if (!user?.id || keywordInsightsData) return; // Don't refetch if already loaded
+    
+    setIsLoadingInsights(true);
+    try {
+      // Get GSC token and siteUrl using the token manager
+      const { createGSCTokenManager } = await import("../../lib/gscTokenManager");
+      
+      const tokenManager = createGSCTokenManager(user.id);
+      const gscData = await tokenManager.getStoredGSCData();
+      
+      if (!gscData?.accessToken || !gscData?.siteUrl) {
+        throw new Error("GSC not connected");
+      }
+
+      // Get valid access token (refreshes if needed)
+      const validToken = await tokenManager.getValidAccessToken();
+      if (!validToken) {
+        throw new Error("Could not get valid GSC token");
+      }
+
+      const response = await fetch("/api/gsc/page-keywords", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: user.id,
+          pageUrl,
+          dateRange: "28",
+          token: validToken,
+          siteUrl: gscData.siteUrl
+        })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.details || "Failed to fetch keywords");
+      }
+
+      const data = await response.json();
+      if (data.success) {
+        setKeywordInsightsData(data.keywords);
+      }
+    } catch (error) {
+      console.error("Error fetching keyword insights:", error);
+      toast.error("Failed to load keyword insights", {
+        description: error.message
+      });
+    } finally {
+      setIsLoadingInsights(false);
+    }
+  };
+
+  // Helper to check if a keyword matches the focus keyword
+  const isFocusKeyword = (keyword) => {
+    if (!focusKeyword || !keyword) return false;
+    return keyword.toLowerCase().trim() === focusKeyword.toLowerCase().trim();
   };
 
   const cleanUrl = pageUrl?.replace(/^https?:\/\//, "").replace(/\/$/, "") || "";
@@ -846,28 +1565,360 @@ const PivotOptionsPanel = ({
     isOptimizingMeta,
   ]);
 
+  // Format snapshot date for display
+  const snapshotDate = snapshot?.capturedAt 
+    ? new Date(snapshot.capturedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
+  
+  // Calculate next refresh date (7 days from snapshot)
+  const nextRefreshDate = snapshot?.capturedAt
+    ? new Date(new Date(snapshot.capturedAt).getTime() + 7 * 24 * 60 * 60 * 1000).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+    : null;
+
+  // Check if this is a resurfaced page (decline detected)
+  const isResurfaced = snapshot?.declineDetected === true;
+
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
       <div className="rounded-lg border-2 border-amber-300 dark:border-amber-700 bg-gradient-to-br from-amber-50 to-orange-50 dark:from-amber-950/30 dark:to-orange-950/30 overflow-hidden">
-        {/* Header */}
-        <CollapsibleTrigger className="w-full p-4 flex items-center justify-between hover:bg-amber-100/50 dark:hover:bg-amber-900/20 transition-colors">
-          <div className="flex items-center gap-3">
-            <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0" />
-            <div className="text-left">
-              <h4 className="font-semibold text-amber-900 dark:text-amber-100">
-                Time to Pivot: {cleanUrl}
-              </h4>
-              <p className="text-xs text-amber-700 dark:text-amber-300">
-                {focusKeyword ? `Current keyword: "${focusKeyword}"` : "No focus keyword set"}
-              </p>
+        {/* Decline Warning Banner - shown when resurfaced from passive monitoring */}
+        {isResurfaced && snapshot?.declineDetails && (
+          <div className="p-3 bg-red-100 dark:bg-red-900/30 border-b border-red-300 dark:border-red-700">
+            <div className="flex items-center gap-2 text-red-800 dark:text-red-200 font-medium">
+              <AlertCircle className="h-4 w-4" />
+              Performance Declined
             </div>
+            <p className="text-sm text-red-700 dark:text-red-300 mt-1">
+              {snapshot.declineReason === "ctr-drop" 
+                ? `CTR dropped from ${(snapshot.declineDetails.previousCtr * 100).toFixed(1)}% to ${(snapshot.ctr * 100).toFixed(1)}%`
+                : `Position dropped from ${snapshot.declineDetails.previousPosition.toFixed(0)} to ${snapshot.position.toFixed(0)}`
+              } since you dismissed it. Here are your options:
+            </p>
           </div>
-          {isExpanded ? (
-            <ChevronUp className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
-          )}
-        </CollapsibleTrigger>
+        )}
+        
+        {/* Header - Unified layout matching Content Audit Card */}
+        <div className="p-4 pb-3">
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div className="flex items-start gap-3 min-w-0 flex-1">
+              <AlertCircle className="h-5 w-5 text-amber-600 dark:text-amber-400 flex-shrink-0 mt-0.5" />
+              <div className="min-w-0 flex-1">
+                <h4 className="font-semibold text-base sm:text-lg text-amber-900 dark:text-amber-100 flex items-center gap-2 flex-wrap">
+                  <span className="break-all">{cleanUrl}</span>
+                  <a 
+                    href={pageUrl} 
+                    target="_blank" 
+                    rel="noopener noreferrer"
+                    onClick={(e) => e.stopPropagation()}
+                    className="text-amber-600 hover:text-amber-800 dark:text-amber-400 dark:hover:text-amber-200 transition-colors flex-shrink-0"
+                    title="Open page in new tab"
+                  >
+                    <ExternalLink className="h-4 w-4" />
+                  </a>
+                </h4>
+                <p className="text-sm text-amber-700 dark:text-amber-300">
+                  {focusKeyword ? `Current keyword: "${focusKeyword}"` : "Consider trying a different keyword strategy"}
+                </p>
+                {/* Snapshot info display */}
+                {snapshotDate && (
+                  <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400 mt-1">
+                    <Clock className="h-3 w-3" />
+                    <span>Based on metrics as of {snapshotDate}. Next refresh: {nextRefreshDate}.</span>
+                  </div>
+                )}
+                {/* Keyword Insights Link - Inline with header like Content Audit */}
+                <Dialog open={isInsightsOpen} onOpenChange={(open) => {
+                  setIsInsightsOpen(open);
+                  if (open) fetchKeywordInsights();
+                }}>
+                  <DialogTrigger asChild>
+                    <button className="text-sm text-[#00BF63] hover:text-[#00a855] underline underline-offset-2 mt-1 flex items-center gap-1">
+                      <BarChart3 className="w-3 h-3" />
+                      Keyword Insights
+                    </button>
+                  </DialogTrigger>
+                  <DialogContent className="sm:max-w-2xl max-h-[85vh]">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2">
+                  <BarChart3 className="w-5 h-5 text-[#00BF63]" />
+                  Keyword Insights
+                </DialogTitle>
+                <DialogDescription>
+                  {cleanUrl}
+                </DialogDescription>
+              </DialogHeader>
+              
+              <ScrollArea className="max-h-[65vh] pr-4">
+                {/* Explanatory message at top - matching Content Audit style */}
+                <div className="mb-4 p-3 bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-800 rounded-lg">
+                  <p className="text-xs text-amber-800 dark:text-amber-200">
+                    <strong>💡 Why are there so many keywords?</strong><br />
+                    Google may show your page for many related searches (keywords) based on your page content and location. The keywords below explain why your impressions and rankings moved. <strong>You don&apos;t need to optimize for all of them.</strong> Continuing to improve your <strong>Focus Keyword</strong> helps Google naturally narrow results over time.<br /><br />
+                    <strong>We just wanted to give you a quick look behind the curtain so you can see what&apos;s happening in the background (:</strong>
+                  </p>
+                </div>
+
+                {/* Current Stats Section - matching Content Audit style */}
+                {implementationData?.postStats && (
+                  <div className="mb-6">
+                    <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                      <TrendingUp className="w-4 h-4 text-blue-600" />
+                      Current Performance (Last 28 Days)
+                    </h4>
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-muted-foreground mb-1">Impressions</p>
+                        <p className="text-lg font-bold">{implementationData.postStats.impressions?.toLocaleString() || currentImpressions?.toLocaleString() || 0}</p>
+                        {implementationData.preStats && (
+                          <div className="text-xs mt-1 flex items-center gap-1">
+                            {(implementationData.postStats.impressions - implementationData.preStats.impressions) > 0 ? (
+                              <span className="text-green-600 flex items-center"><ArrowUp className="w-3 h-3" />+{implementationData.postStats.impressions - implementationData.preStats.impressions}</span>
+                            ) : (implementationData.postStats.impressions - implementationData.preStats.impressions) < 0 ? (
+                              <span className="text-red-600 flex items-center"><ArrowDown className="w-3 h-3" />{implementationData.postStats.impressions - implementationData.preStats.impressions}</span>
+                            ) : (
+                              <span className="text-gray-500 flex items-center"><Minus className="w-3 h-3" />0</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-muted-foreground mb-1">Clicks</p>
+                        <p className="text-lg font-bold">{implementationData.postStats.clicks || currentClicks || 0}</p>
+                        {implementationData.preStats && (
+                          <div className="text-xs mt-1 flex items-center gap-1">
+                            {(implementationData.postStats.clicks - implementationData.preStats.clicks) > 0 ? (
+                              <span className="text-green-600 flex items-center"><ArrowUp className="w-3 h-3" />+{implementationData.postStats.clicks - implementationData.preStats.clicks}</span>
+                            ) : (implementationData.postStats.clicks - implementationData.preStats.clicks) < 0 ? (
+                              <span className="text-red-600 flex items-center"><ArrowDown className="w-3 h-3" />{implementationData.postStats.clicks - implementationData.preStats.clicks}</span>
+                            ) : (
+                              <span className="text-gray-500 flex items-center"><Minus className="w-3 h-3" />0</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-muted-foreground mb-1">CTR</p>
+                        <p className="text-lg font-bold">{((implementationData.postStats.ctr || 0) * 100).toFixed(1)}%</p>
+                        {implementationData.preStats && (
+                          <div className="text-xs mt-1 flex items-center gap-1">
+                            {((implementationData.postStats.ctr - implementationData.preStats.ctr) * 100) > 0 ? (
+                              <span className="text-green-600 flex items-center"><ArrowUp className="w-3 h-3" />+{((implementationData.postStats.ctr - implementationData.preStats.ctr) * 100).toFixed(1)}</span>
+                            ) : ((implementationData.postStats.ctr - implementationData.preStats.ctr) * 100) < 0 ? (
+                              <span className="text-red-600 flex items-center"><ArrowDown className="w-3 h-3" />{((implementationData.postStats.ctr - implementationData.preStats.ctr) * 100).toFixed(1)}</span>
+                            ) : (
+                              <span className="text-gray-500 flex items-center"><Minus className="w-3 h-3" />0</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                      <div className="bg-gray-50 dark:bg-gray-800 rounded-lg p-3 border border-gray-200 dark:border-gray-700">
+                        <p className="text-xs text-muted-foreground mb-1">Avg. Position</p>
+                        <p className="text-lg font-bold">{implementationData.postStats.position?.toFixed(1) || currentPosition?.toFixed(1) || "—"}</p>
+                        {implementationData.preStats && (
+                          <div className="text-xs mt-1 flex items-center gap-1">
+                            {/* For position, lower is better, so we invert the color logic */}
+                            {(implementationData.postStats.position - implementationData.preStats.position) < 0 ? (
+                              <span className="text-green-600 flex items-center"><ArrowUp className="w-3 h-3" />{(implementationData.postStats.position - implementationData.preStats.position).toFixed(1)}</span>
+                            ) : (implementationData.postStats.position - implementationData.preStats.position) > 0 ? (
+                              <span className="text-red-600 flex items-center"><ArrowDown className="w-3 h-3" />+{(implementationData.postStats.position - implementationData.preStats.position).toFixed(1)}</span>
+                            ) : (
+                              <span className="text-gray-500 flex items-center"><Minus className="w-3 h-3" />0</span>
+                            )}
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Keywords Section */}
+                <div className="space-y-4">
+                  {isLoadingInsights ? (
+                    <div className="text-center py-8">
+                      <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2 text-muted-foreground" />
+                      <p className="text-sm text-muted-foreground">Loading keyword data...</p>
+                    </div>
+                  ) : keywordInsightsData ? (
+                    <>
+                      {/* Focus Keyword Highlight */}
+                      {focusKeyword && (
+                        <div className={`mb-4 p-3 rounded-lg ${
+                          keywordSource === "ai-generated"
+                            ? "bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-950/30 dark:to-pink-950/30 border border-purple-200 dark:border-purple-800"
+                            : "bg-gradient-to-r from-blue-50 to-cyan-50 dark:from-blue-950/30 dark:to-cyan-950/30 border border-blue-200 dark:border-blue-800"
+                        }`}>
+                          <div className="flex items-center gap-2 mb-1">
+                            {keywordSource === "ai-generated" ? (
+                              <>
+                                <Sparkles className="w-4 h-4 text-purple-600" />
+                                <span className="text-xs font-semibold text-purple-700 dark:text-purple-300 uppercase tracking-wide">AI-Generated Focus Keyword</span>
+                              </>
+                            ) : (
+                              <>
+                                <Search className="w-4 h-4 text-blue-600" />
+                                <span className="text-xs font-semibold text-blue-700 dark:text-blue-300 uppercase tracking-wide">Focus Keyword</span>
+                              </>
+                            )}
+                          </div>
+                          <p className={`font-bold ${
+                            keywordSource === "ai-generated"
+                              ? "text-purple-900 dark:text-purple-100"
+                              : "text-blue-900 dark:text-blue-100"
+                          }`}>{focusKeyword}</p>
+                        </div>
+                      )}
+
+                      {/* Top Performing Keywords - matching Content Audit style */}
+                      {keywordInsightsData.topPerformers?.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                            <Search className="w-4 h-4 text-[#00BF63]" />
+                            Search Queries Google Tested
+                            <Badge variant="secondary" className="text-xs">{keywordInsightsData.topPerformers.length}</Badge>
+                          </h4>
+                          <div className="space-y-2">
+                            {keywordInsightsData.topPerformers.slice(0, 10).map((kw, idx) => {
+                              const isMatch = isFocusKeyword(kw.keyword);
+                              const isAiGenerated = keywordSource === "ai-generated";
+                              return (
+                                <div 
+                                  key={idx} 
+                                  className={`flex items-center justify-between p-3 rounded-lg ${
+                                    isMatch 
+                                      ? isAiGenerated
+                                        ? "bg-gradient-to-r from-purple-100 to-pink-100 dark:from-purple-950/40 dark:to-pink-950/40 border-2 border-purple-400 dark:border-purple-600 ring-2 ring-purple-200 dark:ring-purple-800"
+                                        : "bg-gradient-to-r from-blue-100 to-cyan-100 dark:from-blue-950/40 dark:to-cyan-950/40 border-2 border-blue-400 dark:border-blue-600 ring-2 ring-blue-200 dark:ring-blue-800"
+                                      : "bg-green-50 dark:bg-green-950/20 border border-green-200 dark:border-green-800"
+                                  }`}
+                                >
+                                  <div className="flex-1 min-w-0">
+                                    <div className="flex items-center gap-2">
+                                      <p className={`font-medium text-sm truncate ${
+                                        isMatch 
+                                          ? isAiGenerated 
+                                            ? "text-purple-900 dark:text-purple-100" 
+                                            : "text-blue-900 dark:text-blue-100"
+                                          : ""
+                                      }`}>
+                                        {kw.keyword}
+                                      </p>
+                                      {isMatch && (
+                                        <Badge className={`text-white text-[10px] px-1.5 py-0 h-4 flex-shrink-0 ${
+                                          isAiGenerated ? "bg-purple-600" : "bg-blue-600"
+                                        }`}>
+                                          {isAiGenerated && <Sparkles className="w-2.5 h-2.5 mr-0.5" />}
+                                          FOCUS
+                                        </Badge>
+                                      )}
+                                    </div>
+                                    <p className="text-xs text-muted-foreground">Position: {kw.position}</p>
+                                  </div>
+                                  <div className="flex items-center gap-4 text-xs">
+                                    <div className="text-center">
+                                      <p className="font-semibold">{kw.impressions}</p>
+                                      <p className="text-muted-foreground">impr.</p>
+                                    </div>
+                                    <div className="text-center">
+                                      <p className="font-semibold">{kw.clicks}</p>
+                                      <p className="text-muted-foreground">clicks</p>
+                                    </div>
+                                    <div className="text-center">
+                                      <p className="font-semibold">{kw.ctr}</p>
+                                      <p className="text-muted-foreground">CTR</p>
+                                    </div>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {keywordInsightsData.topPerformers.length > 10 && (
+                              <p className="text-xs text-muted-foreground text-center py-1">
+                                + {keywordInsightsData.topPerformers.length - 10} more top keywords
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Other Keywords (Testing) */}
+                      {keywordInsightsData.otherKeywords?.length > 0 && (
+                        <div>
+                          <h4 className="font-semibold text-sm mb-3 flex items-center gap-2">
+                            <MousePointerClick className="w-4 h-4 text-gray-500" />
+                            Other Queries
+                            <Badge variant="outline" className="text-xs">{keywordInsightsData.otherKeywords.length}</Badge>
+                          </h4>
+
+                          <div className="space-y-1.5">
+                            {keywordInsightsData.otherKeywords.slice(0, 15).map((kw, idx) => {
+                              const isMatch = isFocusKeyword(kw.keyword);
+                              const isAiGenerated = keywordSource === "ai-generated";
+                              return (
+                                <div 
+                                  key={idx} 
+                                  className={`flex items-center justify-between p-2 rounded text-xs ${
+                                    isMatch
+                                      ? isAiGenerated
+                                        ? "bg-purple-100 dark:bg-purple-950/40 border-2 border-purple-400 dark:border-purple-600"
+                                        : "bg-blue-100 dark:bg-blue-950/40 border-2 border-blue-400 dark:border-blue-600"
+                                      : "bg-gray-50/50 dark:bg-gray-800/30"
+                                  }`}
+                                >
+                                  <div className="flex items-center gap-2 flex-1 min-w-0">
+                                    <span className="truncate">{kw.keyword}</span>
+                                    {isMatch && (
+                                      <Badge className={`text-[9px] ${isAiGenerated ? "bg-purple-500" : "bg-blue-500"}`}>
+                                        {isAiGenerated ? "AI" : "Focus"}
+                                      </Badge>
+                                    )}
+                                  </div>
+                                  <div className="flex items-center gap-3 text-muted-foreground ml-2">
+                                    <span>{kw.impressions?.toLocaleString() || 0} imp</span>
+                                    <span>{kw.clicks?.toLocaleString() || 0} clicks</span>
+                                    <span className="font-medium">{kw.ctr}</span>
+                                  </div>
+                                </div>
+                              );
+                            })}
+                            {keywordInsightsData.otherKeywords.length > 15 && (
+                              <p className="text-xs text-muted-foreground text-center py-1">
+                                + {keywordInsightsData.otherKeywords.length - 15} more testing keywords
+                              </p>
+                            )}
+                          </div>
+                        </div>
+                      )}
+
+                      {/* Summary */}
+                      {keywordInsightsData.totals && (
+                        <div className="mt-4 pt-4 border-t border-gray-200 dark:border-gray-700">
+                          <div className="flex items-center justify-between text-sm">
+                            <span className="text-muted-foreground">Total Keywords Ranking:</span>
+                            <span className="font-semibold">{keywordInsightsData.totals.totalKeywords}</span>
+                          </div>
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    <div className="text-center py-8">
+                      <p className="text-sm text-muted-foreground">No keyword data available yet.</p>
+                    </div>
+                  )}
+                </div>
+              </ScrollArea>
+            </DialogContent>
+          </Dialog>
+              </div>
+            </div>
+            {/* Expand/Collapse Trigger - ChevronRight when closed, ChevronDown when open (matching Content Audit) */}
+            <CollapsibleTrigger className="p-2 hover:bg-amber-200/50 dark:hover:bg-amber-800/30 rounded-lg transition-colors flex-shrink-0 self-start sm:self-center">
+              {isExpanded ? (
+                <ChevronDown className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              ) : (
+                <ChevronRight className="h-5 w-5 text-amber-600 dark:text-amber-400" />
+              )}
+            </CollapsibleTrigger>
+          </div>
+        </div>
 
         <CollapsibleContent
           forceMount
@@ -951,51 +2002,276 @@ const PivotOptionsPanel = ({
                   }`}>
                     {recommendation.reason}
                   </p>
+                  
+                  {/* Keyword Insight Callout - Shows when keyword comparison data informs the recommendation */}
+                  {recommendation.keywordInsight && (
+                    <div className="mt-3 p-3 bg-gradient-to-r from-indigo-50 to-blue-50 dark:from-indigo-900/20 dark:to-blue-900/20 rounded-lg border border-indigo-200 dark:border-indigo-700">
+                      <div className="flex items-start gap-2">
+                        <Lightbulb className="w-4 h-4 text-indigo-600 dark:text-indigo-400 flex-shrink-0 mt-0.5" />
+                        <div>
+                          <p className="text-xs font-semibold text-indigo-800 dark:text-indigo-200 uppercase tracking-wide mb-1">Keyword Insight</p>
+                          <p className="text-sm text-indigo-700 dark:text-indigo-300">{recommendation.keywordInsight}</p>
+                          {recommendation.suggestedPivotKeyword && (
+                            <p className="text-xs text-indigo-600 dark:text-indigo-400 mt-1">
+                              Suggested keyword: <span className="font-medium">&quot;{recommendation.suggestedPivotKeyword}&quot;</span>
+                            </p>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                  
+                  {/* Loading indicator for keyword comparison */}
+                  {isLoadingKeywordComparison && !keywordComparisonLoaded && (
+                    <div className="mt-2 flex items-center gap-2 text-xs text-gray-500 dark:text-gray-400">
+                      <div className="w-3 h-3 border-2 border-gray-300 dark:border-gray-600 border-t-indigo-500 rounded-full animate-spin" />
+                      Analyzing keyword performance...
+                    </div>
+                  )}
                 </div>
             </div>
 
-            {/* Action Buttons - Initial State */}
-            {!showKeywordSelection && (
-              <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
-                {/* CTR Benchmark Fail - Show "Optimize Meta Only" button prominently */}
-                {ctrBenchmarkFail && (
-                  <Button
-                    onClick={handleOptimizeMetaOnly}
-                    disabled={isOptimizingMeta}
-                    className="flex items-center gap-2 bg-gradient-to-r from-red-500 to-orange-500 hover:from-red-600 hover:to-orange-600 text-white"
-                  >
-                    {isOptimizingMeta ? (
-                      <Loader2 className="h-4 w-4 animate-spin" />
-                    ) : (
-                      <Zap className="h-4 w-4" />
+            {/* Pivot to New Keyword - Meta Suggestions UI (2-step flow) */}
+            {showPivotMetaSuggestions && pivotNewMetaTitle && pivotNewMetaDescription ? (
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 p-4 rounded-lg border border-emerald-200 dark:border-emerald-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                    <h4 className="font-semibold text-emerald-900 dark:text-emerald-100">New Keyword Meta Suggestions</h4>
+                  </div>
+                  
+                  {/* Keyword Change Info */}
+                  <div className="mb-4 p-3 bg-white dark:bg-gray-800/50 rounded-lg border border-emerald-200 dark:border-emerald-700">
+                    <p className="text-xs text-muted-foreground mb-2">Keyword change:</p>
+                    <div className="flex items-center gap-2 text-sm">
+                      <span className="text-gray-500 dark:text-gray-400 line-through">{pivotOldKeyword || "No previous keyword"}</span>
+                      <ArrowRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                      <span className="font-medium text-emerald-700 dark:text-emerald-300">{pivotNewKeyword}</span>
+                    </div>
+                  </div>
+                  
+                  <p className="text-sm text-emerald-700 dark:text-emerald-300 mb-4">
+                    We&apos;ve generated new meta tags optimized for your new keyword. Review them below and update your site.
+                  </p>
+                  
+                  {/* Page URL Link */}
+                  <div className="mb-4 pl-3 border-l-2 border-[#00BF63]">
+                    <p className="text-xs text-muted-foreground mb-1">Update meta tags on:</p>
+                    <a 
+                      href={pageUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-base text-[#00BF63] hover:text-[#00a855] hover:underline flex items-center gap-2 break-all font-medium"
+                    >
+                      <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                      {cleanUrl}
+                    </a>
+                  </div>
+                  
+                  {/* New Meta Title */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-emerald-800 dark:text-emerald-200 mb-2">
+                      New Meta Title
+                    </label>
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-emerald-300 dark:border-emerald-600">
+                      <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{pivotNewMetaTitle}</p>
+                    </div>
+                  </div>
+                  
+                  {/* New Meta Description */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-emerald-800 dark:text-emerald-200 mb-2">
+                      New Meta Description
+                    </label>
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-emerald-300 dark:border-emerald-600">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">{pivotNewMetaDescription}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Instructions */}
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-700 mb-4">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      <strong>Next Steps:</strong> Copy these meta tags and update them on your website. Once done, click the button below to save your new keyword and start fresh 45-day tracking.
+                    </p>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button 
+                      onClick={() => setShowPivotConfirmModal(true)}
+                      disabled={isMarkingPivotImplemented}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {isMarkingPivotImplemented ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          I&apos;ve Updated This On My Site
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={handleCancelPivotSuggestions}
+                      className="border-gray-300 dark:border-gray-600"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : showOptimizeMetaSuggestions && optimizeMetaNewTitle && optimizeMetaNewDescription ? (
+              /* Optimize Meta Only - New Meta Suggestions UI */
+              <div className="space-y-4">
+                <div className="bg-gradient-to-r from-purple-50 to-pink-50 dark:from-purple-900/20 dark:to-pink-900/20 p-4 rounded-lg border border-purple-200 dark:border-purple-700">
+                  <div className="flex items-center gap-2 mb-3">
+                    <Zap className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                    <h4 className="font-semibold text-purple-900 dark:text-purple-100">New AI Meta Suggestions</h4>
+                  </div>
+                  <p className="text-sm text-purple-700 dark:text-purple-300 mb-4">
+                    We&apos;ve generated new meta tags to improve your click-through rate. Review them below and update your site.
+                  </p>
+                  
+                  {/* Page URL Link */}
+                  <div className="mb-4 pl-3 border-l-2 border-[#00BF63]">
+                    <p className="text-xs text-muted-foreground mb-1">Update meta tags on:</p>
+                    <a 
+                      href={pageUrl} 
+                      target="_blank" 
+                      rel="noopener noreferrer"
+                      className="text-base text-[#00BF63] hover:text-[#00a855] hover:underline flex items-center gap-2 break-all font-medium"
+                    >
+                      <ExternalLink className="h-4 w-4 flex-shrink-0" />
+                      {cleanUrl}
+                    </a>
+                  </div>
+                  
+                  {/* New Meta Title */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
+                      New Meta Title
+                    </label>
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-purple-300 dark:border-purple-600">
+                      <p className="text-sm text-gray-900 dark:text-gray-100 font-medium">{optimizeMetaNewTitle}</p>
+                    </div>
+                  </div>
+                  
+                  {/* New Meta Description */}
+                  <div className="mb-4">
+                    <label className="block text-sm font-medium text-purple-800 dark:text-purple-200 mb-2">
+                      New Meta Description
+                    </label>
+                    <div className="bg-white dark:bg-gray-800 p-3 rounded-lg border border-purple-300 dark:border-purple-600">
+                      <p className="text-sm text-gray-900 dark:text-gray-100">{optimizeMetaNewDescription}</p>
+                    </div>
+                  </div>
+                  
+                  {/* Instructions */}
+                  <div className="bg-amber-50 dark:bg-amber-900/20 p-3 rounded-lg border border-amber-200 dark:border-amber-700 mb-4">
+                    <p className="text-sm text-amber-800 dark:text-amber-200">
+                      <strong>Next Steps:</strong> Copy these meta tags and update them on your website. Once done, click the button below to start tracking your new performance.
+                    </p>
+                  </div>
+                  
+                  {/* Action Buttons */}
+                  <div className="flex flex-col sm:flex-row gap-3">
+                    <Button 
+                      onClick={() => setShowOptimizeMetaConfirmModal(true)}
+                      disabled={isMarkingOptimizeMetaImplemented}
+                      className="flex-1 bg-green-600 hover:bg-green-700 text-white"
+                    >
+                      {isMarkingOptimizeMetaImplemented ? (
+                        <>
+                          <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                          Updating...
+                        </>
+                      ) : (
+                        <>
+                          <CheckCircle2 className="w-4 h-4 mr-2" />
+                          I&apos;ve Updated This On My Site
+                        </>
+                      )}
+                    </Button>
+                    <Button 
+                      variant="outline"
+                      onClick={() => {
+                        setShowOptimizeMetaSuggestions(false);
+                        setOptimizeMetaNewTitle(null);
+                        setOptimizeMetaNewDescription(null);
+                      }}
+                      className="border-gray-300 dark:border-gray-600"
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <>
+                {/* Action Buttons - Initial State */}
+                {/* Button styling is dynamic based on recommendation.action to highlight the recommended action */}
+                {/* Recommended button = green, non-recommended = transparent/ghost */}
+                {!showKeywordSelection && (
+                  <div className="flex flex-col sm:flex-row gap-3 flex-wrap">
+                    {/* CTR Benchmark Fail - Show "Optimize Meta Only" button prominently */}
+                    {ctrBenchmarkFail && (
+                      <Button
+                        onClick={handleOptimizeMetaOnly}
+                        disabled={isOptimizingMeta}
+                        variant={recommendation.action === "optimize-meta" ? "default" : "ghost"}
+                        className={`flex items-center gap-2 ${
+                          recommendation.action === "optimize-meta"
+                            ? "bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-300 dark:ring-green-700"
+                            : "bg-transparent border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                      >
+                        {isOptimizingMeta ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Zap className="h-4 w-4" />
+                        )}
+                        {isOptimizingMeta ? "Generating..." : "Optimize Meta Only"}
+                      </Button>
                     )}
-                    {isOptimizingMeta ? "Optimizing..." : "Optimize Meta Only"}
-                  </Button>
-                )}
-                
-                {!waitAnotherCycle ? (
-                  <Button
-                    variant="outline"
-                    onClick={handleWaitAnotherCycle}
-                    className="flex items-center gap-2 border-amber-400 hover:bg-amber-100 dark:hover:bg-amber-900/30"
-                  >
-                    <Clock className="h-4 w-4" />
-                    Wait Another 45 Days
-                  </Button>
-                ) : (
-                  <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 px-3 py-2 rounded-md">
-                    <Clock className="h-4 w-4" />
-                    Extended until {extendedDeadline?.toLocaleDateString()}
+                    
+                    {!waitAnotherCycle ? (
+                      <Button
+                        variant={recommendation.action === "wait" ? "default" : "ghost"}
+                        onClick={() => setShowWaitConfirmModal(true)}
+                        className={`flex items-center gap-2 ${
+                          recommendation.action === "wait"
+                            ? "bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-300 dark:ring-green-700"
+                            : "bg-transparent border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                        }`}
+                      >
+                        <Clock className="h-4 w-4" />
+                        Wait Another 45 Days
+                      </Button>
+                    ) : (
+                      <div className="flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 px-3 py-2 rounded-md">
+                        <Clock className="h-4 w-4" />
+                        Extended until {extendedDeadline?.toLocaleDateString()}
+                      </div>
+                    )}
+                    <Button
+                      variant={recommendation.action === "pivot" ? "default" : "ghost"}
+                      onClick={handleOpenKeywordSelection}
+                      className={`flex items-center gap-2 ${
+                        recommendation.action === "pivot"
+                          ? "bg-green-600 hover:bg-green-700 text-white ring-2 ring-green-300 dark:ring-green-700"
+                          : "bg-transparent border border-gray-300 dark:border-gray-600 text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-800"
+                      }`}
+                    >
+                      <RefreshCw className="h-4 w-4" />
+                      Select New Focus Keyword
+                    </Button>
                   </div>
                 )}
-                <Button
-                  onClick={handleOpenKeywordSelection}
-                  className="flex items-center gap-2"
-                >
-                  <RefreshCw className="h-4 w-4" />
-                  Select New Focus Keyword
-                </Button>
-              </div>
+              </>
             )}
 
             {/* Keyword History */}
@@ -1052,6 +2328,22 @@ const PivotOptionsPanel = ({
                     </div>
                   ) : currentRankingKeywords.length > 0 ? (
                     <>
+                      {/* Smart Pivot Suggestion Message */}
+                      {keywordComparisonData?.bestAlternative && (
+                        <div className="mb-3 p-3 bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 rounded-lg border border-emerald-200 dark:border-emerald-700">
+                          <div className="flex items-start gap-2">
+                            <Lightbulb className="w-4 h-4 text-emerald-600 dark:text-emerald-400 flex-shrink-0 mt-0.5" />
+                            <div>
+                              <p className="text-sm font-medium text-emerald-800 dark:text-emerald-200">
+                                Consider pivoting to &quot;{keywordComparisonData.bestAlternative.keyword}&quot;
+                              </p>
+                              <p className="text-xs text-emerald-700 dark:text-emerald-300 mt-1">
+                                This keyword has {keywordComparisonData.bestAlternative.clicks} clicks and {keywordComparisonData.bestAlternative.impressions} impressions — {keywordComparisonData.bestAlternative.clicks > 0 ? "it's already getting traffic!" : "better visibility than your focus keyword."}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      )}
                       <p className="text-xs text-amber-700 dark:text-amber-300 mb-2">
                         Select one of these keywords your page is currently ranking for:
                       </p>
@@ -1059,6 +2351,7 @@ const PivotOptionsPanel = ({
                         {currentRankingKeywords.slice(0, 10).map((kw, idx) => {
                           const isPending = pendingKeyword === kw.keyword;
                           const isSaved = selectedKeyword === kw.keyword;
+                          const isRecommended = keywordComparisonData?.bestAlternative?.keyword?.toLowerCase() === kw.keyword.toLowerCase();
                           return (
                             <div
                               key={idx}
@@ -1067,12 +2360,21 @@ const PivotOptionsPanel = ({
                                   ? "bg-green-100 dark:bg-green-900/30 border-green-400 dark:border-green-600"
                                   : isPending 
                                     ? "bg-blue-100 dark:bg-blue-900/30 border-blue-400 dark:border-blue-600 ring-2 ring-blue-400"
-                                    : "bg-white dark:bg-gray-800/50 border-amber-200 dark:border-amber-800 hover:border-blue-400 dark:hover:border-blue-600"
+                                    : isRecommended
+                                      ? "bg-gradient-to-r from-emerald-50 to-green-50 dark:from-emerald-900/20 dark:to-green-900/20 border-emerald-400 dark:border-emerald-600 ring-1 ring-emerald-300 dark:ring-emerald-600"
+                                      : "bg-white dark:bg-gray-800/50 border-amber-200 dark:border-amber-800 hover:border-blue-400 dark:hover:border-blue-600"
                               }`}
                               onClick={() => !isSaved && handleSelectKeyword(kw.keyword, "gsc-existing")}
                             >
                               <div className="flex-1 min-w-0">
-                                <p className="text-sm font-medium truncate">{kw.keyword}</p>
+                                <div className="flex items-center gap-2">
+                                  <p className="text-sm font-medium truncate">{kw.keyword}</p>
+                                  {isRecommended && (
+                                    <Badge className="bg-emerald-100 text-emerald-800 dark:bg-emerald-900/50 dark:text-emerald-300 text-[10px] px-1.5 py-0">
+                                      Recommended
+                                    </Badge>
+                                  )}
+                                </div>
                                 <p className="text-xs text-muted-foreground">
                                   {kw.impressions} impressions • {kw.clicks} clicks • Pos. {Math.round(kw.position || 0)}
                                 </p>
@@ -1224,6 +2526,142 @@ const PivotOptionsPanel = ({
           </div>
         </CollapsibleContent>
       </div>
+
+      {/* Wait Extension Confirmation Modal */}
+      {showWaitConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-background p-6 shadow-lg transition-colors">
+            <h2 className="mb-2 text-lg font-semibold text-foreground">Start Fresh 45-Day Tracking?</h2>
+            <p className="mb-4 text-sm text-muted-foreground">
+              This will save your current performance data to history and start a fresh 45-day tracking cycle. 
+              Your page will appear in AI-Powered SEO Suggestions while we gather new metrics.
+            </p>
+            <div className="flex justify-end gap-2">
+              <Button
+                variant="outline"
+                onClick={() => setShowWaitConfirmModal(false)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={() => {
+                  setShowWaitConfirmModal(false);
+                  handleWaitAnotherCycle();
+                }}
+              >
+                Yes, Start Fresh Tracking
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Pivot to New Keyword Confirmation Modal */}
+      {showPivotConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-lg transition-colors">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="h-5 w-5 text-emerald-600" />
+              <h2 className="text-lg font-semibold text-foreground">Confirm Keyword Pivot</h2>
+            </div>
+            <div className="space-y-3 mb-4">
+              <p className="text-sm text-muted-foreground">
+                Please confirm you have updated your website with the new meta tags for your new keyword.
+              </p>
+              <div className="bg-emerald-50 dark:bg-emerald-900/20 rounded-md p-3 mb-3">
+                <p className="text-xs font-medium text-emerald-700 dark:text-emerald-300 mb-1">Keyword change:</p>
+                <div className="flex items-center gap-2 text-sm">
+                  <span className="text-gray-500 dark:text-gray-400 line-through">{pivotOldKeyword || "None"}</span>
+                  <ArrowRight className="w-4 h-4 text-emerald-600 dark:text-emerald-400" />
+                  <span className="font-medium text-emerald-700 dark:text-emerald-300">{pivotNewKeyword}</span>
+                </div>
+              </div>
+              <div className="bg-zinc-100 dark:bg-zinc-800 rounded-md p-3">
+                <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-2">What happens next:</p>
+                <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 ml-4 list-disc">
+                  <li>Your focus keyword will change to &quot;{pivotNewKeyword}&quot;</li>
+                  <li>Current performance data will be saved to keyword history</li>
+                  <li>A new 45-day tracking cycle will begin</li>
+                  <li>The page will move to &quot;AI-Powered SEO Suggestions&quot; for re-implementation</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowPivotConfirmModal(false)}
+                disabled={isMarkingPivotImplemented}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-emerald-600 hover:bg-emerald-700 text-white"
+                onClick={handleMarkPivotImplemented}
+                disabled={isMarkingPivotImplemented}
+              >
+                {isMarkingPivotImplemented ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Confirming...
+                  </>
+                ) : (
+                  "Yes, I've Updated My Site"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Optimize Meta Confirmation Modal */}
+      {showOptimizeMetaConfirmModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 backdrop-blur-sm">
+          <div className="w-full max-w-md rounded-lg border border-border bg-background p-6 shadow-lg transition-colors">
+            <div className="flex items-center gap-2 mb-2">
+              <CheckCircle2 className="h-5 w-5 text-green-600" />
+              <h2 className="text-lg font-semibold text-foreground">Confirm Meta Update</h2>
+            </div>
+            <div className="space-y-3 mb-4">
+              <p className="text-sm text-muted-foreground">
+                Please confirm you have updated your website with the new meta tags.
+              </p>
+              <div className="bg-zinc-100 dark:bg-zinc-800 rounded-md p-3">
+                <p className="text-xs font-medium text-zinc-600 dark:text-zinc-400 mb-2">What happens next:</p>
+                <ul className="text-xs text-zinc-500 dark:text-zinc-400 space-y-1 ml-4 list-disc">
+                  <li>Your current performance data will be saved to history</li>
+                  <li>A new 45-day tracking cycle will begin</li>
+                  <li>First update will appear in SEO Progress after 7 days</li>
+                  <li>You can view old stats in &quot;View Full History&quot;</li>
+                </ul>
+              </div>
+            </div>
+            <div className="flex justify-end gap-3">
+              <Button
+                variant="outline"
+                onClick={() => setShowOptimizeMetaConfirmModal(false)}
+                disabled={isMarkingOptimizeMetaImplemented}
+              >
+                Cancel
+              </Button>
+              <Button
+                className="bg-green-600 hover:bg-green-700 text-white"
+                onClick={handleMarkOptimizeMetaImplemented}
+                disabled={isMarkingOptimizeMetaImplemented}
+              >
+                {isMarkingOptimizeMetaImplemented ? (
+                  <>
+                    <Loader2 className="h-4 w-4 animate-spin mr-2" />
+                    Confirming...
+                  </>
+                ) : (
+                  "Yes, I've Updated My Site"
+                )}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
     </Collapsible>
   );
 };

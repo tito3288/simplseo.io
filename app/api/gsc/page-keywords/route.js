@@ -122,15 +122,42 @@ export async function POST(req) {
     console.log(`🔍 [PAGE-KEYWORDS] GSC response:`, { rowCount: data.rows?.length || 0 });
 
     if (data.rows && data.rows.length > 0) {
-      // Sort by impressions descending to identify top performers
-      const sortedKeywords = data.rows
-        .map((row) => ({
-          keyword: row.keys[0].replace(/^\[|\]$/g, ""),
-          clicks: row.clicks,
-          impressions: row.impressions,
-          position: Math.round(row.position * 10) / 10, // Round to 1 decimal
-          ctr: `${(row.ctr * 100).toFixed(1)}%`,
-          ctrRaw: row.ctr * 100,
+      // First, map all rows to keyword objects
+      const allKeywords = data.rows.map((row) => ({
+        keyword: row.keys[0].replace(/^\[|\]$/g, ""),
+        clicks: row.clicks,
+        impressions: row.impressions,
+        position: row.position,
+        ctrRaw: row.ctr * 100,
+      }));
+
+      // DEDUPLICATE: Group by keyword (case-insensitive), combine metrics
+      const keywordMap = new Map();
+      for (const kw of allKeywords) {
+        const key = kw.keyword.toLowerCase().trim();
+        if (keywordMap.has(key)) {
+          const existing = keywordMap.get(key);
+          // Sum impressions and clicks
+          existing.impressions += kw.impressions;
+          existing.clicks += kw.clicks;
+          // Take the best (lowest) position
+          existing.position = Math.min(existing.position, kw.position);
+          // Recalculate CTR based on combined metrics
+          existing.ctrRaw = existing.impressions > 0 
+            ? (existing.clicks / existing.impressions) * 100 
+            : 0;
+        } else {
+          // Use the original casing from the first occurrence
+          keywordMap.set(key, { ...kw });
+        }
+      }
+
+      // Convert back to array and format
+      const sortedKeywords = Array.from(keywordMap.values())
+        .map((kw) => ({
+          ...kw,
+          position: Math.round(kw.position * 10) / 10, // Round to 1 decimal
+          ctr: `${kw.ctrRaw.toFixed(1)}%`,
         }))
         .sort((a, b) => b.impressions - a.impressions);
 
@@ -148,7 +175,7 @@ export async function POST(req) {
       const totalImpressions = sortedKeywords.reduce((sum, k) => sum + k.impressions, 0);
       const totalClicks = sortedKeywords.reduce((sum, k) => sum + k.clicks, 0);
 
-      console.log(`✅ [PAGE-KEYWORDS] Fetched ${sortedKeywords.length} keywords for page (${topPerformers.length} top, ${otherKeywords.length} other)`);
+      console.log(`✅ [PAGE-KEYWORDS] Fetched ${allKeywords.length} raw keywords, deduplicated to ${sortedKeywords.length} unique keywords (${topPerformers.length} top, ${otherKeywords.length} other)`);
       
       return NextResponse.json({ 
         success: true, 

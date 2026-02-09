@@ -7,7 +7,8 @@ export async function POST(req) {
       title, 
       metaDescription, 
       headings,
-      relatedKeywords // GSC keywords the page ranks for
+      relatedKeywords, // GSC keywords the page ranks for
+      previousAttempts = [] // Array of previous content gap attempts for AI learning
     } = await req.json();
 
     if (!pageUrl) {
@@ -17,9 +18,10 @@ export async function POST(req) {
     console.log(`Generating E2 Content Gap Analysis for: ${pageUrl}`);
     console.log(`Focus Keyword: ${focusKeyword || 'Not provided'}`);
     console.log(`Related Keywords: ${relatedKeywords?.length || 0} keywords`);
+    console.log(`Previous Attempts: ${previousAttempts?.length || 0} attempts for AI learning`);
 
     // Prepare the prompt for content gap analysis
-    const prompt = createContentGapPrompt(pageUrl, focusKeyword, pageContent, title, metaDescription, headings, relatedKeywords);
+    const prompt = createContentGapPrompt(pageUrl, focusKeyword, pageContent, title, metaDescription, headings, relatedKeywords, previousAttempts);
 
     // Call OpenAI API
     const openaiResponse = await fetch("https://api.openai.com/v1/chat/completions", {
@@ -81,7 +83,7 @@ Focus on actionable suggestions that will help the page move from page 3-4 to pa
   }
 }
 
-function createContentGapPrompt(pageUrl, focusKeyword, pageContent, title, metaDescription, headings, relatedKeywords) {
+function createContentGapPrompt(pageUrl, focusKeyword, pageContent, title, metaDescription, headings, relatedKeywords, previousAttempts = []) {
   const safePageContent = pageContent || "";
   const safeTitle = title || "";
   const safeMetaDescription = metaDescription || "";
@@ -102,6 +104,34 @@ function createContentGapPrompt(pageUrl, focusKeyword, pageContent, title, metaD
     .map(k => `- "${k.keyword}" (Position: ${Math.round(k.position || 0)}, Impressions: ${k.impressions || 0})`)
     .join('\n');
 
+  // Build previous attempts section for AI learning
+  let previousAttemptsSection = "";
+  if (previousAttempts && previousAttempts.length > 0) {
+    previousAttemptsSection = `\n\n**PREVIOUS CONTENT GAP IMPROVEMENTS - LEARN FROM WHAT DIDN'T WORK:**
+The user has already tried improving this page ${previousAttempts.length} time(s) but the page still hasn't reached page 1. Here's what was tried:
+
+`;
+    previousAttempts.forEach((attempt, index) => {
+      const impressionsBefore = attempt.preStats?.impressions || 0;
+      const impressionsAfter = attempt.postStats?.impressions || attempt.finalStats?.impressions || 0;
+      const positionBefore = Math.round(attempt.preStats?.position || 0);
+      const positionAfter = Math.round(attempt.postStats?.position || attempt.finalStats?.position || 0);
+      const daysTracked = attempt.daysTracked || 0;
+      
+      previousAttemptsSection += `**Attempt #${index + 1} (${attempt.type || 'content-gap'}):**
+- Tracked for: ${daysTracked} days
+- Position: ${positionBefore} → ${positionAfter} (${positionAfter < positionBefore ? '✅ improved' : positionAfter > positionBefore ? '❌ declined' : '→ no change'})
+- Impressions: ${impressionsBefore} → ${impressionsAfter}
+- Keyword: "${attempt.keyword || 'unknown'}"
+${attempt.reason ? `- Reason: ${attempt.reason}` : ''}
+
+`;
+    });
+    
+    previousAttemptsSection += `**IMPORTANT:** Since previous improvements didn't get this page to page 1, suggest DIFFERENT and MORE COMPREHENSIVE content additions. Don't repeat what was likely already tried. Focus on what's STILL MISSING.
+`;
+  }
+
   return `Analyze this page that is currently ranking on page 3-4 (positions 26-40) for "${focusKeyword || 'unknown keyword'}".
 
 PAGE INFORMATION:
@@ -120,7 +150,7 @@ CURRENT CONTENT (excerpt):
 ${safePageContent.substring(0, 3000)}${safePageContent.length > 3000 ? '...' : ''}
 
 TASK: Identify content gaps that are likely causing this page to rank on page 3-4 instead of page 1.
-
+${previousAttemptsSection}
 Analyze and provide:
 1. MISSING CONTENT SECTIONS - What sections do top-ranking pages typically have that this page lacks?
 2. UNANSWERED QUESTIONS - What questions would users searching "${focusKeyword}" want answered?

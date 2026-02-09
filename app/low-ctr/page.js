@@ -9,6 +9,7 @@ import SeoRecommendationPanel from "../components/dashboard/SeoRecommendationPan
 import MainLayout from "../components/MainLayout";
 import SeoPerformanceCard from "../components/dashboard/SeoPerformanceCard";
 import SeoImpactLeaderboard from "../components/dashboard/SeoImpactLeaderboard";
+import SuccessPanel from "../components/dashboard/SuccessPanel";
 import { Button } from "@/components/ui/button";
 import { fetchWpPages } from "../lib/fetchWpPages";
 import {
@@ -309,7 +310,9 @@ export default function LowCtrPage() {
             preStats: data.preStats,
             postStats: data.postStats,
             keywordHistory: data.keywordHistory || [],
-            keywordStatsHistory: data.keywordStatsHistory || []
+            keywordStatsHistory: data.keywordStatsHistory || [],
+            // 45-Day Snapshot System
+            dayFortyFiveSnapshot: data.dayFortyFiveSnapshot || null,
           };
 
           // Content Audit eligibility: 45+ days AND 0 clicks AND 50+ new impressions AND position >= 15
@@ -689,16 +692,28 @@ export default function LowCtrPage() {
       console.log(`🔍 [LOW-CTR requestAiMeta] pageUrl: ${pageUrl}`);
       console.log(`🔍 [LOW-CTR requestAiMeta] focusKeywordArg: ${focusKeywordArg || 'NULL'}`);
       
-      // Fetch previous meta optimization attempts for AI learning
+      // Fetch previous meta optimization attempts for AI learning (with full stats)
       let previousAttempts = [];
       try {
         const docId = createSafeDocId(user.id, pageUrl);
         const seoTipDoc = await getDoc(doc(db, "implementedSeoTips", docId));
         if (seoTipDoc.exists()) {
           const data = seoTipDoc.data();
-          previousAttempts = data.metaOptimizationHistory || [];
+          const rawHistory = data.metaOptimizationHistory || [];
+          // Map to include full stats for smarter AI recommendations
+          previousAttempts = rawHistory.slice(-3).map(attempt => ({
+            title: attempt.title,
+            description: attempt.description,
+            outcome: attempt.outcome || "unknown",
+            // Include full stats for AI learning
+            preStats: attempt.preStats || null,
+            postStats: attempt.postStats || attempt.finalStats || null,
+            daysTracked: attempt.daysTracked || 0,
+            keyword: attempt.keyword || attempt.previousKeyword || null,
+            type: attempt.type || "meta-optimization",
+          }));
           if (previousAttempts.length > 0) {
-            console.log(`🧠 [LOW-CTR requestAiMeta] Found ${previousAttempts.length} previous meta attempt(s) for AI learning`);
+            console.log(`🧠 [LOW-CTR requestAiMeta] Found ${previousAttempts.length} previous meta attempt(s) with full stats for AI learning`);
           }
         }
       } catch (historyError) {
@@ -713,7 +728,7 @@ export default function LowCtrPage() {
           ...(focusKeywordArg ? { focusKeyword: focusKeywordArg } : {}),
         },
         ...(focusKeywordArg ? { focusKeywords: [focusKeywordArg] } : {}),
-        // Include previous attempts for AI learning (if any exist)
+        // Include previous attempts for AI learning (with full stats)
         ...(previousAttempts.length > 0 ? { previousAttempts } : {}),
       };
       
@@ -811,14 +826,19 @@ export default function LowCtrPage() {
 
 
   // Helper function to check if a page is eligible for Content Quality Audit
-  // Criteria: 45+ days AND 0 clicks AND 50+ new impressions AND position >= 15 (page 2+)
+  // Uses snapshot cardType if available (45+ days), otherwise falls back to real-time metrics
   const isPageEligibleForContentAudit = (pageUrl) => {
     const pageData = pageImplementationDates[pageUrl];
     if (!pageData) return false;
     
-    const { daysSince, hasZeroClicks, newImpressions, currentPosition } = pageData;
+    const { daysSince, hasZeroClicks, newImpressions, currentPosition, dayFortyFiveSnapshot } = pageData;
     
-    // All conditions must be true:
+    // If snapshot exists with cardType, use that for stable card display
+    if (dayFortyFiveSnapshot?.cardType) {
+      return dayFortyFiveSnapshot.cardType === "content-audit";
+    }
+    
+    // Fallback to real-time criteria for pages without snapshot:
     // 1. 45+ days since implementation (Google had time to react)
     // 2. 0 clicks (CTR fixes didn't work)
     // 3. 50+ new impressions (enough exposure to evaluate)
@@ -850,7 +870,7 @@ export default function LowCtrPage() {
   };
 
   // Helper function to check if a page needs Pivot Options
-  // Criteria: 45+ days BUT doesn't meet Content Audit criteria AND not already pivoted AND not successful
+  // Uses snapshot cardType if available (45+ days), otherwise falls back to real-time metrics
   const isPageEligibleForPivotOptions = (pageUrl) => {
     // Check if the page has already been pivoted - if so, don't show pivot card
     const normalizedUrl = normalizeUrlForComparison(pageUrl);
@@ -881,8 +901,14 @@ export default function LowCtrPage() {
     
     if (!pageData) return false;
     
-    const { daysSince, hasZeroClicks, newImpressions, currentPosition, postStats } = pageData;
+    const { daysSince, hasZeroClicks, newImpressions, currentPosition, postStats, dayFortyFiveSnapshot } = pageData;
     
+    // If snapshot exists with cardType, use that for stable card display
+    if (dayFortyFiveSnapshot?.cardType) {
+      return dayFortyFiveSnapshot.cardType === "pivot";
+    }
+    
+    // Fallback to real-time criteria for pages without snapshot:
     // Must have 45+ days
     if (daysSince < 45) return false;
     
@@ -904,6 +930,29 @@ export default function LowCtrPage() {
       (currentPosition || 0) >= 15;
     
     return !meetsContentAuditCriteria;
+  };
+
+  // Helper function to check if a page should show Success Card
+  // Uses snapshot cardType - only shows for pages with healthy CTR at 45+ days
+  const isPageEligibleForSuccess = (pageUrl) => {
+    const pageData = pageImplementationDates[pageUrl];
+    if (!pageData) return false;
+    
+    const { dayFortyFiveSnapshot, daysSince, postStats, currentPosition } = pageData;
+    
+    // If snapshot exists with cardType, use that for stable card display
+    if (dayFortyFiveSnapshot?.cardType) {
+      return dayFortyFiveSnapshot.cardType === "success";
+    }
+    
+    // Fallback to real-time criteria for pages without snapshot:
+    if (daysSince < 45) return false;
+    
+    const clicks = postStats?.clicks || 0;
+    const impressions = postStats?.impressions || 0;
+    const position = currentPosition || 100;
+    
+    return isPageSuccessful(position, impressions, clicks);
   };
 
   const fetchLowCtrPages = async (siteUrl, token) => {
@@ -1558,6 +1607,7 @@ export default function LowCtrPage() {
                         implementationData={implData}
                         focusKeyword={pageFocusKeyword}
                         keywordSource={pageKeywordSource}
+                        snapshot={implData?.dayFortyFiveSnapshot}
                       />
                     </div>
                   );
@@ -1568,6 +1618,61 @@ export default function LowCtrPage() {
 
         </>
       )}
+
+      {/* Success Card - For pages performing well at 45+ days */}
+      {(() => {
+        // Find pages eligible for success card
+        const successEligiblePages = lowCtrPages.filter((page) => isPageEligibleForSuccess(page.page));
+        
+        // Also check pageImplementationDates for pages not in lowCtrPages
+        Object.entries(pageImplementationDates).forEach(([pageUrl, data]) => {
+          if (data.dayFortyFiveSnapshot?.cardType === "success") {
+            const alreadyInList = successEligiblePages.some(p => 
+              normalizeUrlForComparison(p.page) === normalizeUrlForComparison(pageUrl)
+            );
+            if (!alreadyInList) {
+              successEligiblePages.push({
+                page: pageUrl,
+                impressions: data.postStats?.impressions || 0,
+                clicks: data.postStats?.clicks || 0,
+                ctr: "0%",
+                keywords: [],
+              });
+            }
+          }
+        });
+        
+        if (successEligiblePages.length === 0) return null;
+        
+        return (
+          <Card className="mb-6 border-emerald-200 dark:border-emerald-800">
+            <CardHeader>
+              <CardTitle className="text-emerald-700 dark:text-emerald-300">Pages Performing Well</CardTitle>
+              <CardDescription>
+                These pages are meeting or exceeding expected click-through rates for their positions.
+              </CardDescription>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {successEligiblePages.map((page) => {
+                const implData = pageImplementationDates[page.page];
+                const normalizedPageUrl = normalizeUrlForComparison(page.page);
+                const pageFocusKeyword = focusKeywordByPage.get(normalizedPageUrl) || null;
+                
+                return (
+                  <SuccessPanel
+                    key={page.page}
+                    pageUrl={page.page}
+                    focusKeyword={pageFocusKeyword}
+                    snapshot={implData?.dayFortyFiveSnapshot}
+                    implementationData={implData}
+                    preStats={implData?.preStats}
+                  />
+                );
+              })}
+            </CardContent>
+          </Card>
+        );
+      })()}
 
       {/* Pivot Options Card - For pages that reached 45 days but don't meet Content Audit criteria */}
       {/* This is outside the implementedPages condition so it can show independently for testing */}
@@ -1641,6 +1746,7 @@ export default function LowCtrPage() {
                       implementationData={implData}
                       focusKeyword={pageFocusKeyword}
                       keywordSource={pageKeywordSource}
+                      snapshot={implData?.dayFortyFiveSnapshot}
                     />
                   </div>
                 );
