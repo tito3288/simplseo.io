@@ -911,6 +911,7 @@ const PivotOptionsPanel = ({
           postStatsHistory: deleteField(),
           // Clear 45-day snapshot since we're starting fresh
           dayFortyFiveSnapshot: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           // Update keywords
           currentKeyword: pivotNewKeyword,
           pivotedToKeyword: pivotNewKeyword,
@@ -1232,6 +1233,7 @@ const PivotOptionsPanel = ({
           extendedTotalDays: deleteField(),
           // Clear the 45-day snapshot since we're starting fresh
           dayFortyFiveSnapshot: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           // Keep the same keyword
           currentKeyword: focusKeyword,
           // Store the implemented meta title/description
@@ -1337,7 +1339,8 @@ const PivotOptionsPanel = ({
         waitExtensionHistory.push({
           preStats: currentData.preStats || null,
           postStats: currentData.postStats || null,
-          keyword: focusKeyword || currentData.focusKeyword || "Unknown",
+          postStatsHistory: currentData.postStatsHistory || [],
+          keyword: focusKeyword || currentData.currentKeyword || "Unknown",
           waitStartedAt: new Date().toISOString(),
           extensionNumber: waitExtensionHistory.length + 1,
           daysTracked: daysSinceImpl || 45,
@@ -1348,6 +1351,15 @@ const PivotOptionsPanel = ({
         });
       }
 
+      // Capture fresh preStats from current postStats (or keep preStats if no postStats)
+      // This ensures the new 45-day cycle has a baseline to compare against
+      const freshPreStats = {
+        position: currentData.postStats?.position || currentData.preStats?.position || 0,
+        impressions: currentData.postStats?.impressions || currentData.preStats?.impressions || 0,
+        clicks: currentData.postStats?.clicks || currentData.preStats?.clicks || 0,
+        ctr: currentData.postStats?.ctr || currentData.preStats?.ctr || 0,
+      };
+
       // Reset tracking and start fresh 45-day cycle
       await setDoc(
         doc(db, "implementedSeoTips", docId),
@@ -1356,19 +1368,23 @@ const PivotOptionsPanel = ({
           status: "implemented",
           implementationType: "wait-extension",
           implementedAt: new Date().toISOString(),
-          
+          nextUpdateDue: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
+
           // Preserve history
           waitExtensionHistory: waitExtensionHistory,
-          
-          // DELETE fields to reset tracking
-          preStats: deleteField(),
+
+          // Set fresh baseline for new cycle
+          preStats: freshPreStats,
+
+          // DELETE old tracking fields
           postStats: deleteField(),
           postStatsHistory: deleteField(),
-          nextUpdateDue: deleteField(),
           extendedDeadline: deleteField(),
           waitingForMoreData: deleteField(),
           extendedTotalDays: deleteField(),
           lastExtendedAt: deleteField(),
+          dayFortyFiveSnapshot: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
         },
         { merge: true }
       );

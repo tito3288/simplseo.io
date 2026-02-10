@@ -998,7 +998,9 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData, focusKeyword
           // Clear old post stats (will be populated by cron job)
           postStats: deleteField(),
           postStatsHistory: deleteField(),
+          dayFortyFiveSnapshot: deleteField(),
           extendedTotalDays: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           // Update keywords
           currentKeyword: e3PivotNewKeyword,
           pivotedToKeyword: e3PivotNewKeyword,
@@ -1253,9 +1255,11 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData, focusKeyword
           // Clear old post stats (will be populated by cron job)
           postStats: deleteField(),
           postStatsHistory: deleteField(),
+          dayFortyFiveSnapshot: deleteField(),
           implementedAt: new Date().toISOString(),
           nextUpdateDue: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           extendedTotalDays: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           // Keep the same keyword
           currentKeyword: propFocusKeyword,
         },
@@ -1337,9 +1341,11 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData, focusKeyword
           // Clear old post stats (will be populated by cron job)
           postStats: deleteField(),
           postStatsHistory: deleteField(),
+          dayFortyFiveSnapshot: deleteField(),
           implementedAt: new Date().toISOString(),
           nextUpdateDue: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           extendedTotalDays: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           // Keep the same keyword
           currentKeyword: propFocusKeyword,
         },
@@ -1551,7 +1557,9 @@ const ContentAuditPanel = ({ pageUrl, pageData, implementationData, focusKeyword
           // Clear old post stats (will be populated by cron job)
           postStats: deleteField(),
           postStatsHistory: deleteField(),
+          dayFortyFiveSnapshot: deleteField(),
           extendedTotalDays: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           // Keep the same keyword
           currentKeyword: propFocusKeyword,
           // Store the implemented meta title/description

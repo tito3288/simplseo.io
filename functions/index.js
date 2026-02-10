@@ -763,7 +763,8 @@ exports.checkSeoTipProgress = pubsub
                 cardType: cardType,
                 previousCardType: existingSnapshot?.cardType || null,
                 declineDetected: false,
-              }
+              },
+              allowReImplementation: true,  // Signals ready for new 45-day cycle
             };
             
             if (existingSnapshot) {

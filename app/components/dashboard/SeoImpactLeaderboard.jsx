@@ -71,6 +71,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
   const [metaHistoryExpanded, setMetaHistoryExpanded] = useState(false);
   const [contentHistoryExpanded, setContentHistoryExpanded] = useState(false);
   const [waitExtensionHistoryExpanded, setWaitExtensionHistoryExpanded] = useState(false);
+  const [successRestartHistoryExpanded, setSuccessRestartHistoryExpanded] = useState(false);
 
   // Reset expand states when modal closes or item changes
   useEffect(() => {
@@ -79,6 +80,7 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       setMetaHistoryExpanded(false);
       setContentHistoryExpanded(false);
       setWaitExtensionHistoryExpanded(false);
+      setSuccessRestartHistoryExpanded(false);
     }
   }, [historyModalOpen]);
 
@@ -1618,6 +1620,133 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
                                   At extension: Position {attempt.position.toFixed(1)} with {attempt.impressions} impressions, {attempt.clicks || 0} clicks
                                 </div>
                               )}
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Previous Success Restarts - show history from "Start Fresh 45-Day Tracking" clicks on Success Card */}
+                {selectedItemHistory.successRestartHistory && selectedItemHistory.successRestartHistory.length > 0 && (
+                  <div className="mt-6 pt-4 border-t border-green-200 dark:border-green-800">
+                    <button
+                      onClick={() => setSuccessRestartHistoryExpanded(!successRestartHistoryExpanded)}
+                      className="w-full flex items-center justify-between p-3 rounded-lg border border-green-200 dark:border-green-700 bg-green-50 dark:bg-green-900/20 hover:bg-green-100 dark:hover:bg-green-900/30 transition-colors"
+                    >
+                      <div className="flex items-center gap-2">
+                        <History className="h-4 w-4 text-green-600 dark:text-green-400" />
+                        <span className="text-sm font-medium text-green-700 dark:text-green-300">
+                          Previous Success Restarts ({selectedItemHistory.successRestartHistory.length})
+                        </span>
+                      </div>
+                      <ChevronDown className={`h-4 w-4 text-green-600 dark:text-green-400 transition-transform duration-300 ${successRestartHistoryExpanded ? 'rotate-180' : ''}`} />
+                    </button>
+                    <div
+                      className="overflow-hidden"
+                      style={{
+                        maxHeight: successRestartHistoryExpanded ? "2000px" : "0px",
+                        opacity: successRestartHistoryExpanded ? 1 : 0,
+                        marginTop: successRestartHistoryExpanded ? "0.75rem" : "0px",
+                        pointerEvents: successRestartHistoryExpanded ? "auto" : "none",
+                        transition: "max-height 300ms ease, opacity 300ms ease, margin 300ms ease",
+                      }}
+                    >
+                      <p className="text-xs text-muted-foreground mb-4">
+                        These are successful cycles where you chose to start fresh 45-day tracking.
+                      </p>
+                      <div className="space-y-4">
+                        {selectedItemHistory.successRestartHistory
+                          .slice()
+                          .sort((a, b) => new Date(b.restartedAt) - new Date(a.restartedAt))
+                          .map((attempt, idx) => {
+                          const finalStats = attempt.postStats || attempt.preStats;
+                          const hasProgress = attempt.postStats && attempt.preStats;
+                          const impressionsDelta = hasProgress ? attempt.postStats.impressions - attempt.preStats.impressions : 0;
+                          const clicksDelta = hasProgress ? attempt.postStats.clicks - attempt.preStats.clicks : 0;
+                          const positionDelta = hasProgress ? attempt.postStats.position - attempt.preStats.position : 0;
+
+                          return (
+                            <div
+                              key={idx}
+                              className="rounded-lg border border-green-200 dark:border-green-800 bg-green-50/50 dark:bg-green-900/10 p-3"
+                            >
+                              <div className="flex items-center justify-between mb-2">
+                                <div className="flex items-center gap-2">
+                                  <span className="text-xs px-2 py-0.5 rounded bg-green-100 dark:bg-green-900/30 text-green-700 dark:text-green-300 font-medium">
+                                    ✓ Success #{idx + 1}
+                                  </span>
+                                  {attempt.keyword && (
+                                    <span className="text-xs text-muted-foreground">
+                                      Keyword: &quot;{attempt.keyword}&quot;
+                                    </span>
+                                  )}
+                                </div>
+                                <span className="text-xs text-muted-foreground">
+                                  {attempt.daysTracked} days tracked
+                                </span>
+                              </div>
+
+                              {/* Show reason and card type */}
+                              <div className="flex items-center gap-2 mb-2">
+                                {attempt.cardType && (
+                                  <span className="text-xs px-2 py-0.5 rounded bg-green-100/80 dark:bg-green-900/40 text-green-600 dark:text-green-400">
+                                    {attempt.cardType === 'success' ? '🎉 Success' : attempt.cardType}
+                                  </span>
+                                )}
+                                {attempt.implementationType && (
+                                  <span className="text-xs text-muted-foreground">
+                                    Type: {attempt.implementationType}
+                                  </span>
+                                )}
+                              </div>
+
+                              <div className="text-xs text-muted-foreground mb-3">
+                                Restarted: {new Date(attempt.restartedAt).toLocaleDateString('en-US', {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric'
+                                })}
+                              </div>
+
+                              {/* Stats at time of success restart */}
+                              <div className="bg-white/50 dark:bg-gray-800/30 rounded p-3">
+                                <h6 className="text-xs font-medium text-muted-foreground mb-2">Success Metrics</h6>
+                                <div className="grid grid-cols-4 gap-3 text-xs">
+                                  <div>
+                                    <span className="text-muted-foreground">Impressions</span>
+                                    <p className="font-semibold text-sm">{finalStats?.impressions || 0}</p>
+                                    {hasProgress && impressionsDelta !== 0 && (
+                                      <span className={`text-xs ${impressionsDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {impressionsDelta > 0 ? '+' : ''}{impressionsDelta}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Clicks</span>
+                                    <p className="font-semibold text-sm">{finalStats?.clicks || 0}</p>
+                                    {hasProgress && clicksDelta !== 0 && (
+                                      <span className={`text-xs ${clicksDelta > 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {clicksDelta > 0 ? '+' : ''}{clicksDelta}
+                                      </span>
+                                    )}
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">CTR</span>
+                                    <p className="font-semibold text-sm">{((finalStats?.ctr || 0) * 100).toFixed(2)}%</p>
+                                  </div>
+                                  <div>
+                                    <span className="text-muted-foreground">Position</span>
+                                    <p className="font-semibold text-sm">{(finalStats?.position || 0).toFixed(1)}</p>
+                                    {hasProgress && positionDelta !== 0 && (
+                                      <span className={`text-xs ${positionDelta < 0 ? 'text-green-600' : 'text-red-600'}`}>
+                                        {positionDelta > 0 ? '+' : ''}{positionDelta.toFixed(1)}
+                                      </span>
+                                    )}
+                                  </div>
+                                </div>
+                              </div>
                             </div>
                           );
                         })}

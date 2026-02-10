@@ -18,7 +18,7 @@ import {
 } from "lucide-react";
 import { toast } from "sonner";
 import { db } from "../../lib/firebaseConfig";
-import { doc, setDoc, deleteField } from "firebase/firestore";
+import { doc, setDoc, deleteField, getDoc } from "firebase/firestore";
 import { useAuth } from "../../contexts/AuthContext";
 import {
   Collapsible,
@@ -118,13 +118,41 @@ export default function SuccessPanel({
     try {
       const docId = createSafeDocId(user.id, pageUrl);
 
+      // Fetch current document to preserve successful cycle's data
+      const currentDoc = await getDoc(doc(db, "implementedSeoTips", docId));
+      const currentData = currentDoc.exists() ? currentDoc.data() : {};
+
+      // Get or create successRestartHistory array
+      const successRestartHistory = currentData.successRestartHistory || [];
+
+      // Save the successful cycle to history before resetting
+      if (currentData.preStats || currentData.postStats || snapshot) {
+        successRestartHistory.push({
+          preStats: currentData.preStats || null,
+          postStats: currentData.postStats || snapshot || null,
+          postStatsHistory: currentData.postStatsHistory || [],
+          keyword: currentData.currentKeyword || focusKeyword || "Unknown",
+          restartedAt: new Date().toISOString(),
+          daysTracked: currentData.implementedAt
+            ? Math.floor((Date.now() - new Date(currentData.implementedAt).getTime()) / (1000 * 60 * 60 * 24))
+            : 0,
+          reason: "Success - User chose to start fresh tracking",
+          cardType: snapshot?.cardType || "success",
+          implementationType: currentData.implementationType || "unknown",
+        });
+      }
+
       // Save current stats to history and reset tracking
       await setDoc(
         doc(db, "implementedSeoTips", docId),
         {
+          // Preserve success history
+          successRestartHistory: successRestartHistory,
+
           status: "implemented",
           implementationType: "success-restart",
           implementedAt: new Date().toISOString(),
+          nextUpdateDue: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000).toISOString(),
           preStats: {
             impressions: impressions,
             clicks: clicks,
@@ -135,10 +163,10 @@ export default function SuccessPanel({
           dayFortyFiveSnapshot: deleteField(),
           postStats: deleteField(),
           postStatsHistory: deleteField(),
-          nextUpdateDue: deleteField(),
           passiveMonitoring: deleteField(),
           dismissedAt: deleteField(),
           dismissedMetrics: deleteField(),
+          allowReImplementation: false,  // Reset flag - starting new cycle
           updatedAt: new Date().toISOString(),
         },
         { merge: true }
