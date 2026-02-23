@@ -228,7 +228,12 @@ const ChatAssistant = ({
     }
     return false; // No corner conversation loaded
   };
-  const [input, setInput] = useState("");
+  const [input, setInput] = useState(() => {
+    if (typeof window !== "undefined") {
+      return localStorage.getItem("chatAssistantDraft") || "";
+    }
+    return "";
+  });
   const [isThinking, setIsThinking] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [isResizing, setIsResizing] = useState(false);
@@ -578,6 +583,7 @@ const ChatAssistant = ({
     setMessages((prev) => [...prev, userMessage]);
     const userInput = input;
     setInput("");
+    localStorage.removeItem("chatAssistantDraft");
     setIsThinking(true);
 
     try {
@@ -690,6 +696,7 @@ const ChatAssistant = ({
     // Clear all conversation state
     localStorage.removeItem("seoChatMessages");
     localStorage.removeItem("chatContext"); // Also clear any stored context
+    localStorage.removeItem("chatAssistantDraft");
     setCurrentConversationId(null);
     setMessages([]); // Clear messages
     setCompletedTypingMessages(new Set()); // Clear completed typing messages
@@ -850,7 +857,10 @@ const ChatAssistant = ({
           <Textarea
             ref={inputRef}
             value={input}
-            onChange={(e) => setInput(e.target.value)}
+            onChange={(e) => {
+              setInput(e.target.value);
+              localStorage.setItem("chatAssistantDraft", e.target.value);
+            }}
             onKeyDown={handleKeyDown}
             placeholder="Ask me anything about SEO..."
             className="min-h-[40px] max-h-[100px] resize-none text-base md:text-sm px-4 py-2"

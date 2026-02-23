@@ -6,6 +6,12 @@ import {
   summarizeSeoContext,
 } from "../../../lib/trainingLogger";
 import { db } from "../../../lib/firebaseAdmin";
+import {
+  getImplementationSummary,
+  getPageEnrichmentData,
+  matchMessageToTrackedPages,
+  formatEnrichmentForPrompt,
+} from "../../../lib/chatEnrichmentHelper";
 
 // Create the OpenAI instance
 const openai = new OpenAI({
@@ -283,7 +289,10 @@ const selectRelevantPages = (sortedPages, message, limit = 15) => {
   return result;
 };
 
-const buildPageSummary = (page) => {
+const buildPageSummary = (page, expanded = false) => {
+  const summaryLength = expanded ? 2000 : 200;
+  const headingsLimit = expanded ? 20 : 5;
+
   const cleanText = (text = "", length = 320) => {
     if (!text) return "";
     const trimmed = text.replace(/\s+/g, " ").trim();
@@ -298,14 +307,14 @@ const buildPageSummary = (page) => {
             : heading?.text || heading?.value || ""
         )
         .filter(Boolean)
-        .slice(0, 5)
+        .slice(0, headingsLimit)
     : [];
 
   return {
     pageUrl: page.pageUrl,
     title: cleanText(page.title || ""),
     metaDescription: cleanText(page.metaDescription || ""),
-    summary: cleanText(page.textContent || "", 200),
+    summary: cleanText(page.textContent || "", summaryLength),
     headings: keyHeadings,
   };
 };
@@ -313,12 +322,25 @@ const buildPageSummary = (page) => {
 export async function POST(req) {
   const { message, conversationHistory = [], context, userId } = await req.json();
 
-  // Get all cached pages (increase limit to get more pages for better indexing)
-  const cachedPages = await getCachedSitePages(userId, 25);
+  // Get cached pages and implementation summary in parallel
+  const [cachedPages, implementationSummary] = await Promise.all([
+    getCachedSitePages(userId, 25),
+    getImplementationSummary(userId),
+  ]);
 
   // Select relevant pages based on the message
   const selectedPages = selectRelevantPages(cachedPages, message, 15);
-  const pageSummaries = selectedPages.map(buildPageSummary);
+
+  // Match message to tracked pages and fetch deep enrichment
+  const trackedPageUrls = matchMessageToTrackedPages(message, implementationSummary, cachedPages);
+  const enrichedPages = await Promise.all(
+    trackedPageUrls.map(async (pageUrl) => ({
+      pageUrl,
+      data: await getPageEnrichmentData(userId, pageUrl),
+    }))
+  );
+  const enrichmentString = formatEnrichmentForPrompt(implementationSummary, enrichedPages.filter((p) => p.data));
+  const pageSummaries = selectedPages.map((page) => buildPageSummary(page, true));
   
   // Build full page index for reference
   const pageIndex = buildPageIndex(cachedPages);
@@ -495,6 +517,17 @@ ${headingsFormatted || "      • (none)"}`;
   ${context.currentPage === '/dashboard' ? 'Focus on overall SEO strategy and next steps.' : ''}
 ${focusKeywordSection}
 
+${enrichmentString ? `  **Implementation Tracking & Content Audit Data:**
+${enrichmentString}
+
+  **When users ask about tracked pages or implementations:**
+  - Reference the implementation tier and how many days into tracking they are
+  - Compare pre vs post metrics if available (impressions, clicks, position changes)
+  - Reference specific content audit recommendations and AI suggestions when relevant
+  - Mention keyword history if they've pivoted keywords before
+  - Help them act on the specific AI suggestions that were generated for their page
+  - Be encouraging about progress and specific about next steps
+` : ''}
   **Complete Website Page Index:**
   When users ask about pages without providing URLs, use this index to find the right pages:
 ${pageIndex || '  (No pages indexed yet)'}

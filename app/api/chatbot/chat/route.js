@@ -2,6 +2,12 @@
 import { NextResponse } from "next/server";
 import OpenAI from "openai";
 import { db } from "../../../lib/firebaseAdmin";
+import {
+  getImplementationSummary,
+  getPageEnrichmentData,
+  matchMessageToTrackedPages,
+  formatEnrichmentForPrompt,
+} from "../../../lib/chatEnrichmentHelper";
 
 // Create the OpenAI instance
 const openai = new OpenAI({
@@ -100,7 +106,7 @@ const buildPageIndex = (pages) => {
   return sections.join('\n\n');
 };
 
-const buildPageSummaries = (pages) => {
+const buildPageSummaries = (pages, expandedUrls = new Set()) => {
   const cleanText = (text = "", length = 200) => {
     if (!text) return "";
     const trimmed = text.replace(/\s+/g, " ").trim();
@@ -108,19 +114,23 @@ const buildPageSummaries = (pages) => {
   };
 
   return pages.map((page, idx) => {
+    const isExpanded = expandedUrls.has(page.pageUrl);
+    const summaryLength = isExpanded ? 2000 : 200;
+    const headingsLimit = isExpanded ? 20 : 5;
+
     const headings = Array.isArray(page.headings)
       ? page.headings
           .map((h) => (typeof h === "string" ? h : h?.text || h?.value || ""))
           .filter(Boolean)
-          .slice(0, 5)
+          .slice(0, headingsLimit)
       : [];
 
     const headingsFormatted = headings.map((h) => `      • ${h}`).join("\n");
-    
+
     return `    ${idx + 1}. URL: ${page.pageUrl}
        Title: ${page.title || "N/A"}
        Description: ${page.metaDescription || "N/A"}
-       Summary: ${cleanText(page.textContent || "", 200)}
+       Summary: ${cleanText(page.textContent || "", summaryLength)}
        Headings:
 ${headingsFormatted || "      • (none)"}`;
   }).join("\n\n");
@@ -170,11 +180,38 @@ export async function POST(req) {
       return NextResponse.json({ error: "OpenAI API key not configured" }, { status: 500 });
     }
 
-    // Get cached pages for this user
+    // Get cached pages and implementation summary in parallel
     const userId = userData?.userId || null;
-    const cachedPages = userId ? await getCachedSitePages(userId, 25) : [];
+    const [cachedPages, implementationSummary] = await Promise.all([
+      userId ? getCachedSitePages(userId, 25) : Promise.resolve([]),
+      userId ? getImplementationSummary(userId) : Promise.resolve([]),
+    ]);
     const pageIndex = cachedPages.length > 0 ? buildPageIndex(cachedPages) : null;
-    const pageSummaries = cachedPages.length > 0 ? buildPageSummaries(cachedPages.slice(0, 15)) : null;
+
+    // Match message to tracked pages and fetch deep enrichment
+    const trackedPageUrls = matchMessageToTrackedPages(message, implementationSummary, cachedPages);
+
+    // Also expand summaries for any cached page whose URL path matches the message
+    const messageLower = message.toLowerCase();
+    const expandedUrlSet = new Set(trackedPageUrls);
+    for (const page of cachedPages.slice(0, 15)) {
+      if (expandedUrlSet.has(page.pageUrl)) continue;
+      try {
+        const path = new URL(page.pageUrl).pathname;
+        const segments = path.split("/").filter((s) => s.length > 2).map((s) => s.replace(/-/g, " ").toLowerCase());
+        if (segments.some((seg) => messageLower.includes(seg))) {
+          expandedUrlSet.add(page.pageUrl);
+        }
+      } catch { /* skip invalid URLs */ }
+    }
+    const pageSummaries = cachedPages.length > 0 ? buildPageSummaries(cachedPages.slice(0, 15), expandedUrlSet) : null;
+    const enrichedPages = await Promise.all(
+      trackedPageUrls.map(async (pageUrl) => ({
+        pageUrl,
+        data: await getPageEnrichmentData(userId, pageUrl),
+      }))
+    );
+    const enrichmentString = formatEnrichmentForPrompt(implementationSummary, enrichedPages.filter((p) => p.data));
 
     // Create a comprehensive system prompt with all user data
     const systemPrompt = `You are an expert SEO coach and mentor for ${userData?.userFirstName || 'the user'}.
@@ -227,6 +264,17 @@ ${userData?.focusKeywords && userData.focusKeywords.length > 0
     }).join('\n')
   : 'No focus keywords selected yet. Users can select focus keywords in the Focus Keywords card on the dashboard to prioritize optimization efforts.'}
 
+${enrichmentString ? `**Implementation Tracking & Content Audit Data:**
+${enrichmentString}
+
+**When users ask about tracked pages or implementations:**
+- Reference the implementation tier and how many days into tracking they are
+- Compare pre vs post metrics if available (impressions, clicks, position changes)
+- Reference specific content audit recommendations and AI suggestions when relevant
+- Mention keyword history if they've pivoted keywords before
+- Help them act on the specific AI suggestions that were generated for their page
+- Be encouraging about progress and specific about next steps
+` : ''}
 **Time Period Flexibility:**
 - When users ask about "this month" or "last 30 days", use the full 28-day dataset
 - When users ask about "this week" or "last 7 days", focus on the most recent 7 days of trend data
