@@ -709,7 +709,7 @@ export default function RevampPage() {
                           <p className="text-sm text-blue-800 dark:text-blue-200">
                             Open your browser and go to{" "}
                             <a
-                              href={`${(data?.websiteUrl || "").replace(/\/$/, "")}/sitemap.xml`}
+                              href={`${/^https?:\/\//i.test(data?.websiteUrl || "") ? data.websiteUrl.replace(/\/$/, "") : `https://${(data?.websiteUrl || "").replace(/\/$/, "")}`}/sitemap.xml`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="font-medium underline hover:text-blue-600 dark:hover:text-blue-300"
