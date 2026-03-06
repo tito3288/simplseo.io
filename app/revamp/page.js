@@ -813,10 +813,15 @@ export default function RevampPage() {
                 </div>
 
                 {!allDiscovered && pages.length > 0 && (
-                  <p className="text-xs text-muted-foreground text-center">
-                    All {pages.length} pages must be discovered by Google (10+
-                    impressions each) before you can proceed.
-                  </p>
+                  <div className="text-center space-y-2">
+                    <p className="text-xs text-muted-foreground">
+                      All {pages.length} pages must be discovered by Google (10+
+                      impressions each) before you can proceed.
+                    </p>
+                    <p className="text-xs text-muted-foreground">
+                      No need to keep checking — we&apos;ll send you an email as pages get discovered, and again when they&apos;re all ready.
+                    </p>
+                  </div>
                 )}
               </CardContent>
             </Card>
