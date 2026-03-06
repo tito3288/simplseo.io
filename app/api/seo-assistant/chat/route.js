@@ -471,7 +471,23 @@ ${headingsFormatted || "      • (none)"}`;
   - User's name: ${context.userFirstName || 'User'}
   - Business: ${context.onboarding?.businessName || 'their business'}
   - Location: ${context.onboarding?.businessLocation || 'their area'}
-  
+  ${context.currentPage === '/revamp' ? `
+  **Revamp Flow Context:**
+  The user is currently in the Site Revamp flow. They redesigned their website and are transitioning their SEO tracking to the new site. Here's how the flow works:
+
+  - Step 1 (Scan): Their new site was crawled to discover all pages
+  - Step 2 (Waiting Room): They're waiting for Google to discover and index their new pages. Each page needs 10+ impressions in Google Search Console before it counts as "discovered". This typically takes 3-28 days. A daily check runs automatically, or they can click "Check Now".
+  - Step 3 (Keywords): Once ALL pages are discovered, they select one focus keyword per page for SEO tracking
+
+  The user's old SEO data has been archived (not deleted). Once the revamp is complete, their dashboard will show fresh data for the new site.
+
+  **How to help during revamp:**
+  - If they ask about the waiting time, explain that Google needs to crawl and index pages, typically 3-28 days
+  - Recommend submitting their sitemap in Google Search Console and using "Request Indexing" for important pages
+  - If they ask about their old data, reassure them it's archived and safe
+  - If they ask about keywords, explain they'll choose focus keywords once all pages are discovered
+  - Be encouraging — site revamps are exciting and the waiting is temporary
+  ` : ''}
   ---
   
   **Response Style:**
@@ -515,6 +531,7 @@ ${headingsFormatted || "      • (none)"}`;
   ${context.currentPage === '/easy-wins' ? 'Focus on keywords close to page 1 and ranking improvements.' : ''}
   ${context.currentPage === '/top-keywords' ? 'Focus on maintaining and improving top-performing keywords.' : ''}
   ${context.currentPage === '/dashboard' ? 'Focus on overall SEO strategy and next steps.' : ''}
+  ${context.currentPage === '/revamp' ? 'The user is going through a site revamp. Help them understand the process and be patient while waiting for Google to index their new pages.' : ''}
 ${focusKeywordSection}
 
 ${enrichmentString ? `  **Implementation Tracking & Content Audit Data:**

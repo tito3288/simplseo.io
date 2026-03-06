@@ -8,8 +8,8 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
   Rocket,
-  MessageCircle,
   Loader2,
+  LogOut,
   CheckCircle2,
   Clock,
   Search,
@@ -26,6 +26,7 @@ import {
   CollapsibleContent,
 } from "@/components/ui/collapsible";
 import FocusKeywordSelector from "../components/dashboard/FocusKeywordSelector";
+import ChatAssistant from "../components/ChatAssistant";
 
 // Normalize page URL for consistent matching
 const normalizePageKey = (page) => {
@@ -42,7 +43,7 @@ const normalizePageKey = (page) => {
 
 export default function RevampPage() {
   const router = useRouter();
-  const { user, isLoading: authLoading } = useAuth();
+  const { user, isLoading: authLoading, logout } = useAuth();
   const { data, updateData } = useOnboarding();
 
   // Local UI state
@@ -373,15 +374,13 @@ export default function RevampPage() {
           <Rocket className="w-5 h-5 text-green-500" />
           <span className="font-semibold text-lg">Site Revamp</span>
         </div>
-        <a
-          href="/chatbot"
-          target="_blank"
-          rel="noopener noreferrer"
+        <button
+          onClick={logout}
           className="text-sm text-muted-foreground hover:text-foreground flex items-center gap-1 transition-colors"
         >
-          <MessageCircle className="w-4 h-4" />
-          Need Help?
-        </a>
+          <LogOut className="w-4 h-4" />
+          Log Out
+        </button>
       </header>
 
       {/* Step Indicator */}
@@ -876,6 +875,9 @@ export default function RevampPage() {
           )}
         </div>
       </div>
+
+      {/* Bubble Chat */}
+      <ChatAssistant onClose={() => {}} />
     </div>
   );
 }
