@@ -65,11 +65,11 @@ export async function GET(req) {
       .where("status", "==", "implemented")
       .get();
 
-    // Get unique user IDs
+    // Get unique user IDs (excluding archived revamp data)
     const userIds = new Set();
     snapshot.forEach((doc) => {
       const data = doc.data();
-      if (data.userId) {
+      if (data.userId && !data.preRevampArchived) {
         userIds.add(data.userId);
       }
     });

@@ -33,7 +33,7 @@ export async function getImplementationSummary(userId) {
 
     if (snapshot.empty) return [];
 
-    return snapshot.docs.map((doc) => {
+    return snapshot.docs.filter((doc) => !doc.data().preRevampArchived).map((doc) => {
       const data = doc.data();
       const daysSince = data.implementedAt
         ? Math.floor((Date.now() - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24))

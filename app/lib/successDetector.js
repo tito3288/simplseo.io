@@ -45,7 +45,9 @@ export async function detectAndSaveSuccessfulStrategies(userId) {
 
     const successfulStrategies = [];
 
-    for (const doc of snapshot.docs) {
+    const activeDocs = snapshot.docs.filter((doc) => !doc.data().preRevampArchived);
+
+    for (const doc of activeDocs) {
       const data = doc.data();
       const {
         preStats,

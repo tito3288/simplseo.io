@@ -169,7 +169,9 @@ const SeoImpactLeaderboard = ({ totalRecommendations }) => {
       );
 
       const snapshot = await getDocs(q);
-      const docs = snapshot.docs.map((doc) => doc.data());
+      const docs = snapshot.docs
+        .filter((doc) => !doc.data().preRevampArchived)
+        .map((doc) => doc.data());
       setImplementedCount(docs.length);
 
       // Items with both preStats and postStats (have results)

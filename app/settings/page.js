@@ -44,7 +44,8 @@ import {
   FileText,
   X,
   Loader2,
-  Clock
+  Clock,
+  Rocket
 } from "lucide-react";
 import { toast } from "sonner";
 import { 
@@ -75,6 +76,7 @@ import {
   EmailAuthProvider,
   signInWithEmailAndPassword 
 } from "firebase/auth";
+import RevampModal from "../components/settings/RevampModal";
 
 export default function Settings() {
   const { user, isLoading: authLoading } = useAuth();
@@ -124,6 +126,7 @@ export default function Settings() {
   const [isSaving, setIsSaving] = useState(false);
   const [activeTab, setActiveTab] = useState("profile");
   const [isDeleting, setIsDeleting] = useState(false);
+  const [showRevampModal, setShowRevampModal] = useState(false);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [deletePassword, setDeletePassword] = useState("");
@@ -1987,6 +1990,32 @@ export default function Settings() {
                   </div>
                   */}
 
+                  {/* Revamp My Site */}
+                  <div className="space-y-4 sm:space-y-6">
+                    <h3 className="text-lg font-semibold flex items-center gap-2">
+                      <Rocket className="w-5 h-5 text-amber-600" />
+                      Revamp My Site
+                    </h3>
+                    <div className="p-4 border border-amber-200 dark:border-amber-800 rounded-lg bg-amber-50 dark:bg-amber-950/20">
+                      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                        <div className="space-y-2">
+                          <div className="font-medium">Planning a site revamp?</div>
+                          <div className="text-sm text-muted-foreground">
+                            Redesigned your whole website with new content and pages? Use this to reset your SEO tracking, re-crawl your updated site, and start fresh with new focus keywords for your new content.
+                          </div>
+                        </div>
+                        <Button
+                          variant="outline"
+                          className="w-full sm:w-auto flex-shrink-0 border-amber-300 dark:border-amber-700 hover:bg-amber-100 dark:hover:bg-amber-900/30"
+                          onClick={() => setShowRevampModal(true)}
+                        >
+                          <Rocket className="w-4 h-4 mr-2" />
+                          Start Site Revamp
+                        </Button>
+                      </div>
+                    </div>
+                  </div>
+
                   {/* Danger Zone */}
                   <div className="space-y-4 sm:space-y-6">
                     <h3 className="text-lg font-semibold text-red-600">Danger Zone</h3>
@@ -2102,6 +2131,7 @@ export default function Settings() {
           </div>
         </div>
       </div>
+      <RevampModal open={showRevampModal} onClose={() => setShowRevampModal(false)} />
     </MainLayout>
   );
 }

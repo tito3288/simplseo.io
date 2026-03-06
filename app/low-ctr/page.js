@@ -290,11 +290,11 @@ export default function LowCtrPage() {
       const eligiblePages = [];
       const pivotedData = {};
 
-      // Process implemented pages
-      implementedSnapshot.docs.forEach(doc => {
+      // Process implemented pages (exclude archived revamp data)
+      implementedSnapshot.docs.filter(doc => !doc.data().preRevampArchived).forEach(doc => {
         const data = doc.data();
         if (data.postStats && data.implementedAt && data.preStats) {
-          const daysSince = (now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24);
+          const daysSince = Math.floor((now - new Date(data.implementedAt).getTime()) / (1000 * 60 * 60 * 24));
           
           // Calculate new impressions since implementation
           const newImpressions = (data.postStats.impressions || 0) - (data.preStats.impressions || 0);
@@ -328,7 +328,7 @@ export default function LowCtrPage() {
       });
 
       // Process pivoted pages - store their keyword history so we can show it in the SEO panel
-      pivotedSnapshot.docs.forEach(doc => {
+      pivotedSnapshot.docs.filter(doc => !doc.data().preRevampArchived).forEach(doc => {
         const data = doc.data();
         pivotedData[data.pageUrl] = {
           isPivoted: true,

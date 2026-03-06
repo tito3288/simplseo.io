@@ -3,6 +3,10 @@
     {
       "path": "/api/cron/check-success-stories",
       "schedule": "0 2 * * *"
+    },
+    {
+      "path": "/api/cron/check-revamp-gsc",
+      "schedule": "0 3 * * *"
     }
   ]
 }

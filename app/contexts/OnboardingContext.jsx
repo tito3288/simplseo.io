@@ -20,6 +20,12 @@ const initialData = {
   privacyPolicyAccepted: false,
   postOnboardingStep: null, // 'pages' | 'keywords' | 'complete' | null
   pagesStepCompleted: false, // Track if pages step is completed
+  revampStatus: "idle", // 'idle' | 'in-progress' | 'complete'
+  revampDate: null,
+  revampReminderDate: null,
+  revampInitiatedAt: null,
+  revampPages: [],
+  revampStep: null, // 'crawl' | 'waiting' | 'keywords' | 'complete' | null
 };
 
 const OnboardingContext = createContext(undefined);
