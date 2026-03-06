@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { db } from "../../../../lib/firebaseAdmin";
+import { db } from "../../../lib/firebaseAdmin";
 
 const DISCOVERY_THRESHOLD = 10; // Minimum impressions to count as "discovered"
 
