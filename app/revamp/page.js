@@ -1,15 +1,21 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "../contexts/AuthContext";
 import { useOnboarding } from "../contexts/OnboardingContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import {
   Rocket,
   Loader2,
   LogOut,
+  MessageSquare,
   CheckCircle2,
   Clock,
   Search,
@@ -19,6 +25,7 @@ import {
   Plus,
   AlertCircle,
   ChevronDown,
+  ArrowLeft,
 } from "lucide-react";
 import {
   Collapsible,
@@ -58,6 +65,8 @@ export default function RevampPage() {
   const [addUrlLoading, setAddUrlLoading] = useState(false);
   const [addUrlError, setAddUrlError] = useState(null);
   const [speedUpOpen, setSpeedUpOpen] = useState(false);
+  const [isChatOpen, setIsChatOpen] = useState(false);
+  const hasCrawledRef = useRef(false);
 
   // Keywords step state
   const [gscKeywordsRaw, setGscKeywordsRaw] = useState([]);
@@ -104,6 +113,7 @@ export default function RevampPage() {
 
       // Store pages locally for review (don't advance to waiting yet)
       setCrawledPages(result.pages || []);
+      hasCrawledRef.current = true;
     } catch (error) {
       console.error("Crawl failed:", error);
       setCrawlError(error.message);
@@ -118,7 +128,8 @@ export default function RevampPage() {
       user &&
       data &&
       data.revampStatus === "in-progress" &&
-      (!revampStep || revampStep === "crawl")
+      (!revampStep || revampStep === "crawl") &&
+      !hasCrawledRef.current
     ) {
       triggerCrawl();
     }
@@ -155,6 +166,7 @@ export default function RevampPage() {
         body: JSON.stringify({
           url: urlToAdd,
           websiteUrl: data?.websiteUrl || "",
+          userId: user?.id,
         }),
       });
 
@@ -594,8 +606,22 @@ export default function RevampPage() {
           {/* Step 2: Waiting Room */}
           {revampStep === "waiting" && (
             <Card className="border-blue-200 dark:border-blue-800">
-              <CardContent className="pt-6 space-y-6">
+              <CardContent className="pt-4 space-y-6">
                 <div className="text-center space-y-2">
+                  <div className="flex justify-start -mb-2">
+                    <Button
+                      variant="ghost"
+                      size="sm"
+                      className="text-xs text-muted-foreground h-7 px-2"
+                      onClick={async () => {
+                        setCrawledPages(pages.map((p) => ({ ...p })));
+                        hasCrawledRef.current = true;
+                        await updateData({ revampStep: "crawl" });
+                      }}
+                    >
+                      <ArrowLeft className="w-3 h-3 mr-1" /> Back
+                    </Button>
+                  </div>
                   <div className="bg-blue-100 dark:bg-blue-900/20 inline-flex items-center justify-center w-16 h-16 rounded-full mb-2">
                     <Search className="w-8 h-8 text-blue-600" />
                   </div>
@@ -758,7 +784,7 @@ export default function RevampPage() {
                   </p>
                 )}
 
-                <div className="flex flex-col sm:flex-row gap-3 justify-center">
+                <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
                   <Button
                     variant="outline"
                     onClick={checkGscDiscovery}
@@ -876,8 +902,31 @@ export default function RevampPage() {
         </div>
       </div>
 
-      {/* Bubble Chat */}
-      <ChatAssistant onClose={() => {}} />
+      {/* Floating Chat Bubble */}
+      <Popover open={isChatOpen} onOpenChange={setIsChatOpen}>
+        <PopoverTrigger asChild>
+          <div className="fixed bottom-6 right-6">
+            <Button
+              className="rounded-full w-14 h-14 shadow-lg flex items-center justify-center z-50 bg-[#00BF63] hover:bg-[#00BF63]/90"
+              size="icon"
+              onClick={() => setIsChatOpen(!isChatOpen)}
+            >
+              <MessageSquare className="w-6 h-6 text-white" />
+            </Button>
+          </div>
+        </PopoverTrigger>
+        <PopoverContent
+          side="top"
+          align="end"
+          className="p-0 rounded-xl shadow-xl backdrop-blur-md bg-white/1 border border-white/10 ring-1 ring-white/20 mr-2 mb-2 z-[60]"
+          sideOffset={16}
+          style={{ width: "auto", minWidth: "320px", maxWidth: "100vw" }}
+        >
+          <div className="max-h-[500px] md:max-h-none overflow-hidden rounded-xl">
+            <ChatAssistant onClose={() => setIsChatOpen(false)} />
+          </div>
+        </PopoverContent>
+      </Popover>
     </div>
   );
 }
